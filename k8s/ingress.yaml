@@ -7,40 +7,21 @@ metadata:
     kubernetes.io/ingress.class: alb
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/group.name: harness-demo
+    alb.ingress.kubernetes.io/group.name: {{.Values.ingressGroupName | default "harness-demo"}}
     alb.ingress.kubernetes.io/group.order: "{{.Values.ingressGroupOrder | default 100}}"
     alb.ingress.kubernetes.io/healthcheck-path: /actuator/health
     alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
     alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
     alb.ingress.kubernetes.io/healthy-threshold-count: "2"
     alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
-    # Route ?env={{.Values.env_identifier}}&stage=true to stage service (blue/green validation or canary direct)
-    alb.ingress.kubernetes.io/conditions.env-stage-service: >
-      [{"field":"query-string","queryStringConfig":{"values":[{"key":"env","value":"{{.Values.env_identifier}}"},{"key":"stage","value":"true"}]}}]
-    alb.ingress.kubernetes.io/actions.env-stage-service: >
-      {"type":"forward","forwardConfig":{"targetGroups":[{"serviceName":"{{.Values.name}}-service-stage","servicePort":80}]}}
-    # Route ?env={{.Values.env_identifier}} to primary service
-    alb.ingress.kubernetes.io/conditions.env-primary-service: >
-      [{"field":"query-string","queryStringConfig":{"values":[{"key":"env","value":"{{.Values.env_identifier}}"}]}}]
-    alb.ingress.kubernetes.io/actions.env-primary-service: >
-      {"type":"forward","forwardConfig":{"targetGroups":[{"serviceName":"{{.Values.name}}-service","servicePort":80}]}}
 spec:
   rules:
     - http:
         paths:
-          # Stage service - query string routing (?env=<env>&stage=true)
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: env-stage-service
+                name: {{.Values.name}}-service
                 port:
-                  name: use-annotation
-          # Primary service - query string routing (?env=<env>)
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: env-primary-service
-                port:
-                  name: use-annotation
+                  number: 80
