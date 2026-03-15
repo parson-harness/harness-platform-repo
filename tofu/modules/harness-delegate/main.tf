@@ -68,7 +68,7 @@ resource "kubernetes_namespace" "delegate" {
 ################################################################################
 
 resource "kubernetes_annotations" "delegate_irsa" {
-  count = var.irsa_role_arn != "" && var.create_delegate ? 1 : 0
+  count = var.enable_irsa_annotations && var.create_delegate ? 1 : 0
 
   api_version = "v1"
   kind        = "ServiceAccount"

@@ -301,7 +301,8 @@ module "harness_delegate" {
   fetch_latest_version = var.delegate_version == ""
 
   # IRSA configuration
-  irsa_role_arn = var.enable_irsa && length(module.irsa_delegate_role) > 0 ? module.irsa_delegate_role[0].role_arn : ""
+  enable_irsa_annotations = var.enable_irsa
+  irsa_role_arn           = var.enable_irsa && length(module.irsa_delegate_role) > 0 ? module.irsa_delegate_role[0].role_arn : ""
 
   delegate_tags = [var.owner, var.environment, "eks"]
 

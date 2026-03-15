@@ -151,6 +151,12 @@ variable "enable_irsa" {
   default     = false
 }
 
+variable "enable_irsa_annotations" {
+  description = "Enable IRSA annotations on the delegate service account (set to true when irsa_role_arn is provided)"
+  type        = bool
+  default     = false
+}
+
 variable "irsa_role_arn" {
   description = "ARN of the IAM role for IRSA"
   type        = string
