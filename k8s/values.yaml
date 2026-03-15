@@ -8,10 +8,8 @@ replicas: 2
 containerPort: 8080
 
 # Image pull secret for private registries (HAR)
-# dockercfg uses Harness expression for automatic secret from artifact source
-# imagePullSecretName is fallback for manually created secrets
+# Uses Harness expression to automatically provide pull secret from artifact source
 dockercfg: <+artifact.imagePullSecret>
-imagePullSecretName: har-pull-secret
 
 # Harness-provided values
 image: <+artifact.image>
