@@ -57,9 +57,9 @@ variable "source_provider" {
 }
 
 variable "source_host" {
-  description = "Source Git provider host"
+  description = "Source Git provider host (include https://)"
   type        = string
-  default     = "github.com"
+  default     = "https://github.com"
 }
 
 variable "source_repo" {

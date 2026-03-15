@@ -167,7 +167,7 @@ module "harness_code_repo" {
   repo_description = "POV Demo App for ${var.owner} - imported from GitHub"
 
   source_provider = "github"
-  source_host     = "github.com"
+  source_host     = "https://github.com"
   source_repo     = var.source_github_repo
 
   depends_on = [module.harness_org_project]
@@ -371,8 +371,8 @@ module "harness_connectors" {
   docker_connector_name   = "${title(var.owner)} ECR"
   docker_registry_url     = var.artifact_registry_type == "ecr" && length(module.ecr) > 0 ? module.ecr[0].repository_url : ""
 
-  # GitHub Connector (not needed when using Harness Code)
-  create_github_connector = var.import_to_harness_code ? false : (var.github_token_ref != "")
+  # GitHub Connector (keep for backward compatibility, but service uses Harness Code when enabled)
+  create_github_connector = var.github_token_ref != ""
   github_connector_id     = "${var.owner}_github_reference_architecture"
   github_connector_name   = "${title(var.owner)} GitHub Reference Architecture"
   github_url              = var.github_url
