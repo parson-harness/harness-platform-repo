@@ -7,6 +7,10 @@ namespace: <+infra.namespace>
 replicas: 2
 containerPort: 8080
 
+# Image pull secrets for private registries (HAR)
+imagePullSecrets:
+  - name: har-pull-secret
+
 # Harness-provided values
 image: <+artifact.image>
 service_identifier: <+service.identifier>
