@@ -1,17 +1,3 @@
-{{- if .Values.dockercfg }}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: {{.Values.name}}-dockercfg
-  namespace: {{.Values.namespace}}
-  annotations:
-    harness.io/skip-versioning: "true"
-data:
-  .dockercfg: {{ .Values.dockercfg }}
-type: kubernetes.io/dockercfg
-{{- end }}
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -45,9 +31,9 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/actuator/prometheus"
     spec:
-      {{- if .Values.dockercfg }}
+      {{- if .Values.imagePullSecretName }}
       imagePullSecrets:
-        - name: {{.Values.name}}-dockercfg
+        - name: {{ .Values.imagePullSecretName }}
       {{- end }}
       containers:
         - name: {{.Values.name}}
