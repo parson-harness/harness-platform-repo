@@ -54,9 +54,11 @@ spec:
             - name: VARIANT_COLOR
               value: {{.Values.variantColor}}
             - name: APP_ENVIRONMENT
-              value: <+env.name>
+              value: "{{ .Values.env_identifier }}"
             - name: DEPLOYMENT_TARGET
               value: "kubernetes"
+            - name: DEPLOYMENT_STRATEGY
+              value: "{{ .Values.deploymentStrategy }}"
             - name: NAMESPACE
               valueFrom:
                 fieldRef:

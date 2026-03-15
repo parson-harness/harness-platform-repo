@@ -17,7 +17,8 @@ build_id: <+pipeline.executionId>
 appName: "Harness Demo Application"
 appVersion: <+artifact.tag>
 customerName: "Harness Customer"
-customerLogo: "https://www.harness.io/hubfs/Harness-logo-white.svg"
+customerLogo: "https://app.harness.io/static/harness-logo-white.svg"
+deploymentStrategy: "canary"
 servicePort: 80
 serviceType: ClusterIP
 
