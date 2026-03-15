@@ -7,8 +7,6 @@ metadata:
   labels:
     app: {{.Values.name}}
     release: {{.Values.serviceMonitor.releaseLabel | default "monitoring"}}
-    harness.io/service: <+service.name>
-    harness.io/environment: <+env.name>
 spec:
   selector:
     matchLabels:
