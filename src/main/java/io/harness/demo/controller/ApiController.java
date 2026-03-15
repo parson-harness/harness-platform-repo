@@ -31,7 +31,8 @@ public class ApiController {
         Map<String, Object> info = new HashMap<>();
         info.put("version", appConfig.getVersion());
         info.put("environment", appConfig.getEnvironment());
-        info.put("deploymentVariant", appConfig.getDeploymentVariant());
+        info.put("deploymentVariant", appConfig.getEffectiveVariant());
+        info.put("deploymentTrack", appConfig.getDeploymentTrack());
         info.put("variantColor", appConfig.getVariantColor());
         info.put("hostname", getHostname());
         info.put("podName", appConfig.getPodName());
