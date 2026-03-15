@@ -131,3 +131,20 @@ create_connectors = true
 # github_url       = "https://github.com/your-org"
 # github_token_ref = "account.github_token"
 # github_token_ref = "parson-gh-pat"
+
+#===============================================================================
+# Artifact Registry Configuration
+#===============================================================================
+# Choose where to store Docker images:
+#   "har" = Harness Artifact Registry (default, recommended)
+#   "ecr" = AWS ECR (requires AWS permissions)
+
+artifact_registry_type = "har"  # Default: Harness Artifact Registry
+
+# For ECR:
+# artifact_registry_type = "ecr"
+
+# DockerHub upstream proxy (for HAR - avoids rate limits)
+create_dockerhub_upstream = true
+# dockerhub_username            = "your-dockerhub-username"
+# dockerhub_password_secret_ref = "account.dockerhub_password"

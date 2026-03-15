@@ -17,9 +17,24 @@ output "vpc_id" {
   value       = var.create_eks_cluster ? module.vpc[0].vpc_id : null
 }
 
+output "artifact_registry_type" {
+  description = "Artifact registry type (har or ecr)"
+  value       = var.artifact_registry_type
+}
+
+output "artifact_registry_url" {
+  description = "Artifact registry URL (HAR or ECR)"
+  value       = local.artifact_registry_url
+}
+
 output "ecr_repository_url" {
-  description = "ECR repository URL"
-  value       = module.ecr.repository_url
+  description = "ECR repository URL (only if artifact_registry_type=ecr)"
+  value       = var.artifact_registry_type == "ecr" && length(module.ecr) > 0 ? module.ecr[0].repository_url : null
+}
+
+output "har_registry_id" {
+  description = "Harness Artifact Registry ID (only if artifact_registry_type=har)"
+  value       = var.artifact_registry_type == "har" && length(module.har) > 0 ? module.har[0].registry_id : null
 }
 
 output "delegate_namespace" {

@@ -34,15 +34,26 @@ locals {
     tag          = "<+input>"
   }
 
+  # Artifact spec - Harness Artifact Registry (HAR)
+  har_artifact_spec = {
+    registryRef = var.har_registry_ref
+    image       = var.har_image_path
+    tag         = "<+input>"
+  }
+
+  # Select artifact spec based on registry type
+  artifact_spec = var.artifact_registry_type == "har" ? local.har_artifact_spec : local.ecr_artifact_spec
+  artifact_type = var.artifact_registry_type == "har" ? "ArtifactRegistry" : "Ecr"
+
   # Common artifacts block
-  artifacts_block = var.artifact_source_type != "" ? {
+  artifacts_block = var.artifact_source_type != "" || var.artifact_registry_type != "" ? {
     primary = {
       primaryArtifactRef = "<+input>"
       sources = [
         {
           identifier = "primary"
-          type       = var.artifact_source_type
-          spec       = local.ecr_artifact_spec
+          type       = local.artifact_type
+          spec       = local.artifact_spec
         }
       ]
     }

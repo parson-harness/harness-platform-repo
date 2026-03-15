@@ -393,3 +393,36 @@ variable "ecs_cluster_name" {
   type        = string
   default     = ""
 }
+
+################################################################################
+# Artifact Registry Configuration
+################################################################################
+
+variable "artifact_registry_type" {
+  description = "Artifact registry type: har (Harness Artifact Registry - default) or ecr (AWS ECR)"
+  type        = string
+  default     = "har"
+
+  validation {
+    condition     = contains(["har", "ecr"], var.artifact_registry_type)
+    error_message = "artifact_registry_type must be one of: har, ecr"
+  }
+}
+
+variable "create_dockerhub_upstream" {
+  description = "Create DockerHub upstream proxy at org level (for HAR)"
+  type        = bool
+  default     = true
+}
+
+variable "dockerhub_username" {
+  description = "DockerHub username for authenticated pulls (optional, for rate limit avoidance)"
+  type        = string
+  default     = ""
+}
+
+variable "dockerhub_password_secret_ref" {
+  description = "Secret reference for DockerHub password in Harness"
+  type        = string
+  default     = ""
+}

@@ -192,17 +192,50 @@ module "eks" {
 }
 
 ################################################################################
-# ECR Repository
+# Artifact Registry (HAR or ECR based on artifact_registry_type)
 ################################################################################
 
+# Harness Artifact Registry (default)
+module "har" {
+  source = "../../modules/harness-artifact-registry"
+  count  = var.artifact_registry_type == "har" ? 1 : 0
+
+  account_id = var.harness_account_id
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
+
+  registry_id          = "har-${var.owner}"
+  registry_description = "Docker registry for ${var.owner} demo app"
+
+  # DockerHub upstream proxy (org-level)
+  create_dockerhub_upstream     = var.create_dockerhub_upstream
+  dockerhub_upstream_id         = "org-${local.resolved_org_id}-dockerhub-proxy"
+  dockerhub_username            = var.dockerhub_username
+  dockerhub_password_secret_ref = var.dockerhub_password_secret_ref
+  dockerhub_secret_space_path   = var.harness_account_id
+
+  depends_on = [module.harness_org_project]
+}
+
+# ECR Repository (optional - when artifact_registry_type = "ecr")
 module "ecr" {
   source = "../../modules/ecr"
+  count  = var.artifact_registry_type == "ecr" ? 1 : 0
 
   repository_name         = "harness-demo-app-${var.owner}"
   enable_lifecycle_policy = true
   max_image_count         = 30
 
   tags = local.common_tags
+}
+
+locals {
+  # Artifact registry outputs based on type
+  artifact_registry_url = var.artifact_registry_type == "har" ? (
+    length(module.har) > 0 ? module.har[0].registry_url : ""
+  ) : (
+    length(module.ecr) > 0 ? module.ecr[0].repository_url : ""
+  )
 }
 
 ################################################################################
@@ -219,7 +252,7 @@ module "irsa_delegate_role" {
   delegate_namespace       = "harness-delegate-ng-${var.owner}"
   delegate_service_account = "delegate-${var.owner}"
 
-  ecr_repository_arns     = [module.ecr.repository_arn]
+  ecr_repository_arns     = var.artifact_registry_type == "ecr" && length(module.ecr) > 0 ? [module.ecr[0].repository_arn] : []
   s3_bucket_arns          = var.s3_bucket_arns
   cross_account_role_arns = var.cross_account_role_arns
 
@@ -352,15 +385,25 @@ module "harness_service" {
   ecs_task_definition_paths    = local.enable_ecs ? var.ecs_task_definition_paths : []
   ecs_service_definition_paths = local.enable_ecs ? var.ecs_service_definition_paths : []
 
-  # Artifact configuration
-  artifact_source_type   = "Ecr"
-  artifact_connector_ref = var.create_connectors ? "${var.owner}_aws_reference_architecture" : var.aws_connector_ref
-  ecr_image_path         = module.ecr.repository_name
-  aws_region             = var.aws_region
+  # Artifact configuration - HAR or ECR based on artifact_registry_type
+  artifact_registry_type = var.artifact_registry_type
+
+  # ECR configuration (when artifact_registry_type = "ecr")
+  artifact_connector_ref = var.artifact_registry_type == "ecr" ? (
+    var.create_connectors ? "${var.owner}_aws_reference_architecture" : var.aws_connector_ref
+  ) : ""
+  ecr_image_path = var.artifact_registry_type == "ecr" && length(module.ecr) > 0 ? module.ecr[0].repository_name : ""
+  aws_region     = var.aws_region
+
+  # HAR configuration (when artifact_registry_type = "har")
+  har_registry_ref = var.artifact_registry_type == "har" && length(module.har) > 0 ? (
+    "${var.harness_account_id}/${local.resolved_org_id}/${local.resolved_project_id}/${module.har[0].registry_id}"
+  ) : ""
+  har_image_path = var.artifact_registry_type == "har" ? "harness-demo-app" : ""
 
   tags = ["tofu-managed", var.owner, join("-", var.deployment_targets)]
 
-  depends_on = [module.harness_connectors, module.ecr]
+  depends_on = [module.harness_connectors, module.ecr, module.har]
 }
 
 ################################################################################

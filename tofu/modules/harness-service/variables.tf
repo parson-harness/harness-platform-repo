@@ -127,8 +127,19 @@ variable "ecs_service_definition_paths" {
 # Artifact Configuration
 ################################################################################
 
+variable "artifact_registry_type" {
+  description = "Artifact registry type: har (Harness Artifact Registry) or ecr (AWS ECR)"
+  type        = string
+  default     = "har"
+
+  validation {
+    condition     = contains(["har", "ecr"], var.artifact_registry_type)
+    error_message = "artifact_registry_type must be one of: har, ecr"
+  }
+}
+
 variable "artifact_source_type" {
-  description = "Artifact source type: Ecr, DockerRegistry, or empty for none"
+  description = "Artifact source type: Ecr, DockerRegistry, ArtifactRegistry, or empty for none"
   type        = string
   default     = "Ecr"
 }
@@ -155,6 +166,22 @@ variable "aws_region" {
   description = "AWS region for ECR"
   type        = string
   default     = "us-east-1"
+}
+
+################################################################################
+# Harness Artifact Registry (HAR) Configuration
+################################################################################
+
+variable "har_registry_ref" {
+  description = "Reference to Harness Artifact Registry (format: account.org.project/registry-id)"
+  type        = string
+  default     = ""
+}
+
+variable "har_image_path" {
+  description = "Image path within HAR registry"
+  type        = string
+  default     = ""
 }
 
 ################################################################################
