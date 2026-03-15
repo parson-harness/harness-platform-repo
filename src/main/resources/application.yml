@@ -10,7 +10,6 @@ app:
   version: ${APP_VERSION:1.0.0}
   environment: ${APP_ENVIRONMENT:development}
   deployment-variant: ${DEPLOYMENT_VARIANT:stable}
-  variant-color: ${VARIANT_COLOR:#3B82F6}
   customer-name: ${CUSTOMER_NAME:Customer}
   customer-logo: ${CUSTOMER_LOGO:}
   deployment-target: ${DEPLOYMENT_TARGET:kubernetes}
