@@ -35,15 +35,20 @@ locals {
   }
 
   # Artifact spec - Harness Artifact Registry (HAR)
+  # Structure: type=Har, spec.registryRef, spec.type=docker, spec.spec.imagePath/tag
   har_artifact_spec = {
     registryRef = var.har_registry_ref
-    image       = var.har_image_path
-    tag         = "<+input>"
+    type        = "docker"
+    spec = {
+      imagePath = var.har_image_path
+      tag       = "<+input>"
+      digest    = ""
+    }
   }
 
   # Select artifact spec based on registry type
   artifact_spec = var.artifact_registry_type == "har" ? local.har_artifact_spec : local.ecr_artifact_spec
-  artifact_type = var.artifact_registry_type == "har" ? "ArtifactRegistry" : "Ecr"
+  artifact_type = var.artifact_registry_type == "har" ? "Har" : "Ecr"
 
   # Common artifacts block
   artifacts_block = var.artifact_source_type != "" || var.artifact_registry_type != "" ? {

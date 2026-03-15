@@ -396,8 +396,9 @@ module "harness_service" {
   aws_region     = var.aws_region
 
   # HAR configuration (when artifact_registry_type = "har")
+  # registryRef format: account.<registry-id> for account-level, or project-level ref
   har_registry_ref = var.artifact_registry_type == "har" && length(module.har) > 0 ? (
-    "${var.harness_account_id}/${local.resolved_org_id}/${local.resolved_project_id}/${module.har[0].registry_id}"
+    "project.${module.har[0].registry_id}"
   ) : ""
   har_image_path = var.artifact_registry_type == "har" ? "harness-demo-app" : ""
 
