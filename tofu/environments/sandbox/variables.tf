@@ -258,6 +258,12 @@ variable "create_blue_green_pipeline" {
   default     = false
 }
 
+variable "create_strategy_pipeline" {
+  description = "Create Strategy Choice pipeline (single pipeline with runtime strategy selection)"
+  type        = bool
+  default     = true
+}
+
 ################################################################################
 # IRSA Configuration
 ################################################################################

@@ -131,6 +131,34 @@ variable "prod_infrastructure_ref" {
 }
 
 ################################################################################
+# Strategy Choice Pipeline Variables (Single pipeline with runtime strategy selection)
+################################################################################
+
+variable "create_strategy_pipeline" {
+  description = "Create single pipeline with runtime strategy selection (blue-green, canary, rolling)"
+  type        = bool
+  default     = true
+}
+
+variable "strategy_pipeline_id" {
+  description = "Identifier for Strategy Choice pipeline"
+  type        = string
+  default     = "k8s_strategy_deploy"
+}
+
+variable "strategy_pipeline_name" {
+  description = "Name for Strategy Choice pipeline"
+  type        = string
+  default     = "K8s Deploy with Strategy Choice"
+}
+
+variable "strategy_pipeline_description" {
+  description = "Description for Strategy Choice pipeline"
+  type        = string
+  default     = "Single pipeline with runtime strategy selection - Blue/Green, Canary, or Rolling"
+}
+
+################################################################################
 # Common Variables
 ################################################################################
 

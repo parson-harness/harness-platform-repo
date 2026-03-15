@@ -528,6 +528,12 @@ module "harness_pipelines_dev" {
   prod_environment_ref    = var.create_prod_environment ? "${var.owner}_prod" : ""
   prod_infrastructure_ref = local.enable_eks && var.create_prod_environment ? "${var.owner}_k8s_prod" : ""
 
+  # Strategy Choice pipeline (single pipeline with runtime strategy selection)
+  create_strategy_pipeline      = var.create_strategy_pipeline
+  strategy_pipeline_id          = "${var.owner}_k8s_strategy_deploy"
+  strategy_pipeline_name        = "${title(var.owner)} K8s Deploy with Strategy Choice"
+  strategy_pipeline_description = "Single pipeline with runtime strategy selection - Blue/Green, Canary, or Rolling"
+
   pipeline_tags = ["tofu-managed", var.owner]
 
   depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev]

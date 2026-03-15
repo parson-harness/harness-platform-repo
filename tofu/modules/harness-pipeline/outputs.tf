@@ -21,3 +21,13 @@ output "blue_green_pipeline_identifier" {
   description = "Identifier of the Blue/Green + Canary deployment pipeline"
   value       = var.create_blue_green_pipeline ? harness_platform_pipeline.k8s_blue_green_canary[0].identifier : null
 }
+
+output "strategy_pipeline_id" {
+  description = "ID of the Strategy Choice deployment pipeline"
+  value       = var.create_strategy_pipeline ? harness_platform_pipeline.k8s_strategy[0].id : null
+}
+
+output "strategy_pipeline_identifier" {
+  description = "Identifier of the Strategy Choice deployment pipeline"
+  value       = var.create_strategy_pipeline ? harness_platform_pipeline.k8s_strategy[0].identifier : null
+}
