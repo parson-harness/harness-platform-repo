@@ -492,6 +492,70 @@ module "harness_environment_prod" {
 }
 
 ################################################################################
+# HAR Pull Secret for Kubernetes (when using Harness Artifact Registry)
+# Creates the dockercfg secret needed to pull images from HAR
+################################################################################
+
+locals {
+  # Namespaces that need HAR pull secrets
+  har_namespaces = var.artifact_registry_type == "har" ? compact([
+    local.enable_eks ? "harness-demo-${var.owner}" : "",
+    local.enable_eks && var.create_prod_environment ? "harness-demo-${var.owner}-prod" : ""
+  ]) : []
+
+  # Generate the dockercfg JSON for HAR authentication
+  har_email       = "${var.owner}@harness.io"
+  har_auth_string = base64encode("${local.har_email}:${var.harness_api_key}")
+  har_dockercfg = jsonencode({
+    "pkg.harness.io" = {
+      username = local.har_email
+      password = var.harness_api_key
+      email    = local.har_email
+      auth     = local.har_auth_string
+    }
+  })
+}
+
+resource "kubernetes_namespace" "app" {
+  for_each = toset(local.har_namespaces)
+
+  metadata {
+    name = each.value
+
+    labels = {
+      "app.kubernetes.io/managed-by" = "tofu"
+      "harness.io/component"         = "demo-app"
+      "owner"                        = var.owner
+    }
+  }
+
+  depends_on = [module.eks]
+}
+
+resource "kubernetes_secret" "har_pull_secret" {
+  for_each = toset(local.har_namespaces)
+
+  metadata {
+    name      = "${var.owner}demoapp-dockercfg"
+    namespace = each.value
+
+    labels = {
+      "app.kubernetes.io/managed-by" = "tofu"
+      "harness.io/component"         = "har-pull-secret"
+      "owner"                        = var.owner
+    }
+  }
+
+  type = "kubernetes.io/dockercfg"
+
+  data = {
+    ".dockercfg" = local.har_dockercfg
+  }
+
+  depends_on = [kubernetes_namespace.app]
+}
+
+################################################################################
 # Harness Pipelines
 ################################################################################
 
