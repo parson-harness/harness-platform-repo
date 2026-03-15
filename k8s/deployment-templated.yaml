@@ -71,6 +71,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.labels['harness.io/color']
+            - name: DEPLOYMENT_TRACK
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['harness.io/track']
             - name: APP_ENVIRONMENT
               value: "{{ .Values.env_identifier }}"
             - name: DEPLOYMENT_TARGET

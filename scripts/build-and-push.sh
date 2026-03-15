@@ -4,20 +4,42 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 TOFU_DIR="${PROJECT_ROOT}/tofu/environments/sandbox"
+TFVARS_FILE="${TOFU_DIR}/terraform.tfvars"
 
 IMAGE_TAG="${1:-latest}"
 IMAGE_NAME="harness-demo-app"
 
-# Get registry configuration from tofu outputs
-echo "Reading registry configuration from tofu..."
+# Helper function to extract value from tfvars
+get_tfvar() {
+    local key="$1"
+    grep "^${key}[[:space:]]*=" "$TFVARS_FILE" 2>/dev/null | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/' | head -1
+}
+
+# Get registry configuration from tofu outputs (if available) or tfvars
+echo "Reading registry configuration..."
 cd "$TOFU_DIR"
-REGISTRY_TYPE=$(tofu output -raw artifact_registry_type 2>/dev/null || echo "ecr")
+REGISTRY_TYPE=$(tofu output -raw artifact_registry_type 2>/dev/null || get_tfvar "artifact_registry_type" || echo "har")
 REGISTRY_URL=$(tofu output -raw artifact_registry_url 2>/dev/null || echo "")
+
+# Get Harness configuration from tfvars if not in environment
+if [ -z "$HARNESS_API_KEY" ]; then
+    HARNESS_API_KEY=$(get_tfvar "harness_api_key")
+fi
+HARNESS_ACCOUNT_ID=$(get_tfvar "harness_account_id")
+OWNER=$(get_tfvar "owner")
 cd "$PROJECT_ROOT"
 
+# If no REGISTRY_URL from tofu outputs, construct from tfvars for HAR
+if [ -z "$REGISTRY_URL" ] && [ "$REGISTRY_TYPE" = "har" ]; then
+    if [ -n "$HARNESS_ACCOUNT_ID" ] && [ -n "$OWNER" ]; then
+        REGISTRY_URL="pkg.harness.io/${HARNESS_ACCOUNT_ID}/sandbox/${OWNER}/har-${OWNER}"
+        echo "Constructed HAR URL from tfvars"
+    fi
+fi
+
 if [ -z "$REGISTRY_URL" ]; then
-    echo "❌ Error: Could not determine registry URL from tofu outputs"
-    echo "   Run 'tofu apply' in ${TOFU_DIR} first"
+    echo "❌ Error: Could not determine registry URL"
+    echo "   Either run 'tofu apply' in ${TOFU_DIR} or ensure tfvars has harness_account_id and owner"
     exit 1
 fi
 
@@ -36,21 +58,20 @@ if [ "$REGISTRY_TYPE" = "har" ]; then
     # Harness Artifact Registry
     echo "Authenticating to Harness Artifact Registry..."
     
-    # HAR uses Harness API key for authentication
+    # HAR uses Harness API key for authentication (already loaded from tfvars above)
     if [ -z "$HARNESS_API_KEY" ]; then
-        echo "❌ Error: HARNESS_API_KEY environment variable not set"
+        echo "❌ Error: HARNESS_API_KEY not found in environment or tfvars"
         echo "   Set it with: export HARNESS_API_KEY=<your-api-key>"
+        echo "   Or add harness_api_key to ${TFVARS_FILE}"
         exit 1
     fi
     
     # HAR URL format: pkg.harness.io/<account_id_lowercase>/<registry_id>/<image>:<tag>
-    # The REGISTRY_URL from tofu may have org/project in path, we need to extract correctly
-    # Expected format from Harness UI: pkg.harness.io/eerjnxtns4grlg5vnnjzuw/har-parson/<IMAGE_NAME>
     HAR_HOST="pkg.harness.io"
     
     # Get account ID (lowercase) and registry ID from the URL
-    # REGISTRY_URL format: pkg.harness.io/ACCOUNT_ID/ORG/PROJECT/REGISTRY_ID
-    ACCOUNT_ID=$(echo "$REGISTRY_URL" | cut -d'/' -f2 | tr '[:upper:]' '[:lower:]')
+    # Use HARNESS_ACCOUNT_ID from tfvars if available, otherwise extract from URL
+    ACCOUNT_ID=$(echo "${HARNESS_ACCOUNT_ID:-$(echo "$REGISTRY_URL" | cut -d'/' -f2)}" | tr '[:upper:]' '[:lower:]')
     REGISTRY_ID=$(echo "$REGISTRY_URL" | rev | cut -d'/' -f1 | rev)
     
     HAR_IMAGE_URL="${HAR_HOST}/${ACCOUNT_ID}/${REGISTRY_ID}/${IMAGE_NAME}"

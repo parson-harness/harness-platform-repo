@@ -12,7 +12,8 @@ public class AppConfig {
     private String appName = "My Application";
     private String version = "1.0.0";
     private String environment = "development";
-    private String deploymentVariant = "stable";
+    private String deploymentVariant = "";
+    private String deploymentTrack = "";
     private String customerName = "Harness Customer";
     private String customerLogo = "";
     private String deploymentTarget = "kubernetes";
@@ -23,11 +24,30 @@ public class AppConfig {
     private int chaosLatencyMs = 0;
     private double chaosErrorRate = 0.0;
     
+    /**
+     * Returns the effective deployment variant for display.
+     * Blue/Green deployments use harness.io/color label (blue/green).
+     * Canary deployments use harness.io/track label (canary/stable).
+     * This method returns the appropriate value based on what's set.
+     */
+    public String getEffectiveVariant() {
+        // If color is set (blue/green deployment), use it
+        if (deploymentVariant != null && !deploymentVariant.isEmpty()) {
+            return deploymentVariant;
+        }
+        // Otherwise use track (canary deployment)
+        if (deploymentTrack != null && !deploymentTrack.isEmpty()) {
+            return deploymentTrack;
+        }
+        return "stable";
+    }
+    
     public String getVariantColor() {
-        if (deploymentVariant == null) {
+        String variant = getEffectiveVariant();
+        if (variant == null) {
             return "#8B5CF6"; // Purple for stable/unknown
         }
-        switch (deploymentVariant.toLowerCase()) {
+        switch (variant.toLowerCase()) {
             case "blue":
                 return "#3B82F6"; // Blue
             case "green":

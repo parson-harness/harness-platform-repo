@@ -137,27 +137,27 @@
                     <div class="flex items-center gap-6">
                         <!-- Large Color Indicator -->
                         <div class="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl font-bold variant-badge">
-                            <span th:if="${config.deploymentVariant == 'blue'}">🔵</span>
-                            <span th:if="${config.deploymentVariant == 'green'}">🟢</span>
-                            <span th:if="${config.deploymentVariant == 'canary'}">🐤</span>
-                            <span th:if="${config.deploymentVariant == 'stable' or config.deploymentVariant == ''}">🟣</span>
+                            <span th:if="${config.effectiveVariant == 'blue'}">🔵</span>
+                            <span th:if="${config.effectiveVariant == 'green'}">🟢</span>
+                            <span th:if="${config.effectiveVariant == 'canary'}">🐤</span>
+                            <span th:if="${config.effectiveVariant == 'stable'}">🟣</span>
                         </div>
                         <div>
-                            <div class="text-sm text-gray-400 uppercase tracking-wider mb-1">Harness Blue/Green Deployment</div>
+                            <div class="text-sm text-gray-400 uppercase tracking-wider mb-1" th:text="${config.effectiveVariant == 'blue' or config.effectiveVariant == 'green'} ? 'Harness Blue/Green Deployment' : 'Harness Canary Deployment'">Harness Deployment</div>
                             <div class="text-3xl font-bold" th:style="'color: ' + ${config.variantColor}">
-                                <span th:if="${config.deploymentVariant == 'blue' or config.deploymentVariant == 'green'}">
-                                    <span th:text="${config.deploymentVariant.toUpperCase()}">BLUE</span> Pod Set
+                                <span th:if="${config.effectiveVariant == 'blue' or config.effectiveVariant == 'green'}">
+                                    <span th:text="${config.effectiveVariant.toUpperCase()}">BLUE</span> Pod Set
                                 </span>
-                                <span th:if="${config.deploymentVariant == 'canary'}">CANARY Release</span>
-                                <span th:if="${config.deploymentVariant == 'stable' or config.deploymentVariant == ''}">STABLE Production</span>
+                                <span th:if="${config.effectiveVariant == 'canary'}">CANARY Release</span>
+                                <span th:if="${config.effectiveVariant == 'stable'}">STABLE Production</span>
                             </div>
-                            <div class="text-gray-400 mt-2" th:if="${config.deploymentVariant == 'blue' or config.deploymentVariant == 'green'}">
-                                <i class="fas fa-info-circle mr-2"></i>Harness labels pods with <code class="bg-white/10 px-1.5 py-0.5 rounded text-xs">harness.io/color: <span th:text="${config.deploymentVariant}">blue</span></code>
+                            <div class="text-gray-400 mt-2" th:if="${config.effectiveVariant == 'blue' or config.effectiveVariant == 'green'}">
+                                <i class="fas fa-info-circle mr-2"></i>Harness labels pods with <code class="bg-white/10 px-1.5 py-0.5 rounded text-xs">harness.io/color: <span th:text="${config.effectiveVariant}">blue</span></code>
                             </div>
-                            <div class="text-gray-400 mt-2" th:if="${config.deploymentVariant == 'canary'}">
+                            <div class="text-gray-400 mt-2" th:if="${config.effectiveVariant == 'canary'}">
                                 <i class="fas fa-info-circle mr-2"></i>Harness labels pods with <code class="bg-white/10 px-1.5 py-0.5 rounded text-xs">harness.io/track: canary</code>
                             </div>
-                            <div class="text-gray-400 mt-2" th:if="${config.deploymentVariant == 'stable' or config.deploymentVariant == ''}">
+                            <div class="text-gray-400 mt-2" th:if="${config.effectiveVariant == 'stable'}">
                                 <i class="fas fa-info-circle mr-2"></i>Harness labels pods with <code class="bg-white/10 px-1.5 py-0.5 rounded text-xs">harness.io/track: stable</code>
                             </div>
                         </div>
@@ -171,8 +171,8 @@
                 
                 <!-- How It Works -->
                 <div class="mt-6 pt-6 border-t border-white/10">
-                    <div class="text-sm text-white font-semibold mb-3">How Harness Blue/Green Works:</div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm" th:if="${config.deploymentVariant == 'blue' or config.deploymentVariant == 'green'}">
+                    <div class="text-sm text-white font-semibold mb-3" th:text="${config.effectiveVariant == 'blue' or config.effectiveVariant == 'green'} ? 'How Harness Blue/Green Works:' : 'How Harness Canary Works:'">How It Works:</div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm" th:if="${config.effectiveVariant == 'blue' or config.effectiveVariant == 'green'}">
                         <div class="bg-white/5 rounded-lg p-3">
                             <div class="text-harness-cyan font-semibold mb-1">1. Stage Deployment</div>
                             <div class="text-gray-400">New version deploys to <strong>stage</strong> service. Production traffic unchanged.</div>
@@ -186,7 +186,7 @@
                             <div class="text-gray-400">Harness swaps service selectors. Instant traffic switch, instant rollback.</div>
                         </div>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm" th:if="${config.deploymentVariant == 'canary' or config.deploymentVariant == 'stable' or config.deploymentVariant == ''}">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm" th:if="${config.effectiveVariant == 'canary' or config.effectiveVariant == 'stable'}">
                         <div class="bg-white/5 rounded-lg p-3">
                             <div class="text-yellow-400 font-semibold mb-1">1. Canary Deploy</div>
                             <div class="text-gray-400">New version deploys to canary pods receiving % of traffic.</div>
