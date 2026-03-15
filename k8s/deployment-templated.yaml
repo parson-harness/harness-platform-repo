@@ -39,12 +39,24 @@ spec:
             - containerPort: {{int .Values.containerPort}}
               name: http
           env:
+            - name: APP_NAME
+              value: "{{ .Values.appName }}"
+            - name: APP_VERSION
+              value: "{{ .Values.appVersion }}"
+            - name: CUSTOMER_NAME
+              value: "{{ .Values.customerName }}"
+            - name: CUSTOMER_LOGO
+              value: "{{ .Values.customerLogo }}"
             - name: BUILD_ID
               value: "{{ .Values.build_id }}"
             - name: DEPLOYMENT_VARIANT
               value: {{.Values.variant}}
             - name: VARIANT_COLOR
               value: {{.Values.variantColor}}
+            - name: APP_ENVIRONMENT
+              value: <+env.name>
+            - name: DEPLOYMENT_TARGET
+              value: "kubernetes"
             - name: NAMESPACE
               valueFrom:
                 fieldRef:

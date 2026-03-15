@@ -12,6 +12,12 @@ image: <+artifact.image>
 service_identifier: <+service.identifier>
 env_identifier: <+env.identifier>
 build_id: <+pipeline.executionId>
+
+# Application branding
+appName: "Harness Demo Application"
+appVersion: <+artifact.tag>
+customerName: "Harness Customer"
+customerLogo: "https://www.harness.io/hubfs/Harness-logo-white.svg"
 servicePort: 80
 serviceType: ClusterIP
 
@@ -20,8 +26,8 @@ variant: <+service.name.replace(" ", "").toLowerCase()>
 variantColor: "#3B82F6"
 
 # Ingress configuration
-ingressEnabled: false
-ingressDomain: example.com
+ingressEnabled: true
+ingressDomain: elb.us-east-1.amazonaws.com
 
 # Resource limits
 resources:
@@ -32,7 +38,7 @@ resources:
     memory: "512Mi"
     cpu: "500m"
 
-# Chaos engineering toggles
+# Chaos engineering configuration
 chaosEnabled: false
 chaosLatencyMs: 0
 chaosErrorRate: 0.0
