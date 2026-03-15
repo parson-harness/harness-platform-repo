@@ -27,3 +27,16 @@ resources:
 chaosEnabled: false
 chaosLatencyMs: 0
 chaosErrorRate: 0.0
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  annotations: {}
+
+# ServiceMonitor configuration (for Prometheus)
+serviceMonitor:
+  enabled: true
+  toolsNamespace: tools
+  releaseLabel: monitoring
+  scrapeInterval: 15s
