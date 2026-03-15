@@ -476,3 +476,19 @@ variable "prometheus_url" {
   type        = string
   default     = ""
 }
+
+################################################################################
+# Harness Code Repository Configuration
+################################################################################
+
+variable "import_to_harness_code" {
+  description = "Import the demo app repository to Harness Code for self-contained POV"
+  type        = bool
+  default     = false
+}
+
+variable "source_github_repo" {
+  description = "Source GitHub repository to import (format: owner/repo)"
+  type        = string
+  default     = "parson-harness/harness-demo-app"
+}

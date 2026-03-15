@@ -32,9 +32,9 @@ data "http" "delegate_version" {
 }
 
 locals {
-  # Parse version from API response or use default
+  # Parse version from API response - format: {"resource":{"latestSupportedVersion":"26.02.88600",...}}
   fetched_version = try(
-    regex("\"data\":\"([0-9]{2}\\.[0-9]{2}\\.[0-9]{5})\"", data.http.delegate_version[0].response_body)[0],
+    regex("\"latestSupportedVersion\":\"([0-9]{2}\\.[0-9]{2}\\.[0-9]{5})\"", data.http.delegate_version[0].response_body)[0],
     ""
   )
   
