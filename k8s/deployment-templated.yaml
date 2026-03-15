@@ -4,8 +4,6 @@ metadata:
   name: {{.Values.name}}-deployment
   labels:
     app: {{.Values.name}}
-    harness.io/service: <+service.name>
-    harness.io/environment: <+env.name>
 spec:
   replicas: {{int .Values.replicas}}
   selector:
@@ -15,13 +13,12 @@ spec:
     metadata:
       labels:
         app: {{.Values.name}}
-        version: <+artifact.tag>
-        harness.io/service: <+service.name>
-        harness.io/environment: <+env.name>
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: "/actuator/prometheus"
+        harness.io/service: <+service.name>
+        harness.io/environment: <+env.name>
         harness.io/build: <+pipeline.executionId>
     spec:
       containers:

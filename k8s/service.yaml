@@ -4,8 +4,6 @@ metadata:
   name: {{.Values.name}}-svc
   labels:
     app: {{.Values.name}}
-    harness.io/service: <+service.name>
-    harness.io/environment: <+env.name>
   {{- with .Values.service.annotations }}
   annotations:
 {{ toYaml . | indent 4 }}
