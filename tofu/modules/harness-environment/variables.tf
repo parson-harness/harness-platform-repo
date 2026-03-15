@@ -84,6 +84,12 @@ variable "allow_simultaneous_deployments" {
 variable "create_k8s_infrastructure" {
   description = "Create Kubernetes infrastructure definition"
   type        = bool
+  default     = false
+}
+
+variable "create_k8s_namespace" {
+  description = "Create Kubernetes namespace for the application"
+  type        = bool
   default     = true
 }
 

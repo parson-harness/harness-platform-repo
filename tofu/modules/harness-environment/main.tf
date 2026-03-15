@@ -34,11 +34,29 @@ resource "harness_platform_environment" "main" {
 }
 
 ################################################################################
+# Kubernetes Namespace
+################################################################################
+
+resource "kubernetes_namespace" "app" {
+  count = var.create_k8s_infrastructure && var.create_k8s_namespace ? 1 : 0
+
+  metadata {
+    name = var.k8s_namespace
+    labels = {
+      "app.kubernetes.io/managed-by" = "terraform"
+      "harness.io/environment"       = var.environment_id
+    }
+  }
+}
+
+################################################################################
 # Kubernetes Infrastructure Definition
 ################################################################################
 
 resource "harness_platform_infrastructure" "kubernetes" {
   count = var.create_k8s_infrastructure ? 1 : 0
+  
+  depends_on = [kubernetes_namespace.app]
 
   identifier      = var.k8s_infra_id
   name            = var.k8s_infra_name

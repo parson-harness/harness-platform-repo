@@ -315,9 +315,10 @@ module "harness_connectors" {
 
   # GitHub Connector
   create_github_connector = var.github_token_ref != ""
-  github_connector_id     = "${var.owner}_github"
-  github_connector_name   = "${title(var.owner)} GitHub"
+  github_connector_id     = "${var.owner}_github_reference_architecture"
+  github_connector_name   = "${title(var.owner)} GitHub Reference Architecture"
   github_url              = var.github_url
+  github_username         = var.github_username
   github_token_ref        = var.github_token_ref
 
   depends_on = [module.harness_delegate]
@@ -342,7 +343,7 @@ module "harness_service" {
 
   # Manifest configuration (K8s/Helm)
   manifest_type     = local.enable_eks ? "K8sManifest" : "values"
-  git_connector_ref = var.create_connectors ? "${var.owner}_github" : var.github_connector_ref
+  git_connector_ref = var.create_connectors ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   git_repo_name     = var.service_git_repo
   git_branch        = var.service_git_branch
   manifest_paths    = var.service_manifest_paths
@@ -354,7 +355,7 @@ module "harness_service" {
   # Artifact configuration
   artifact_source_type   = "Ecr"
   artifact_connector_ref = var.create_connectors ? "${var.owner}_aws_reference_architecture" : var.aws_connector_ref
-  ecr_image_path         = module.ecr.repository_url
+  ecr_image_path         = module.ecr.repository_name
   aws_region             = var.aws_region
 
   tags = ["tofu-managed", var.owner, join("-", var.deployment_targets)]
@@ -438,4 +439,39 @@ module "harness_environment_prod" {
   tags = ["tofu-managed", var.owner, join("-", var.deployment_targets)]
 
   depends_on = [module.harness_connectors]
+}
+
+################################################################################
+# Harness Pipelines
+################################################################################
+
+module "harness_pipelines_dev" {
+  source = "../../modules/harness-pipeline"
+  count  = var.create_harness_service && var.create_harness_environment ? 1 : 0
+
+  org_id             = local.resolved_org_id
+  project_id         = local.resolved_project_id
+  service_ref        = var.create_harness_service ? "${var.owner}_demo_app" : ""
+  environment_ref    = var.create_harness_environment ? "${var.owner}_dev" : ""
+  environment_name   = "Dev"
+  infrastructure_ref = local.enable_eks ? "${var.owner}_k8s_dev" : ""
+
+  # Canary pipeline
+  create_canary_pipeline      = var.create_canary_pipeline
+  canary_pipeline_id          = "${var.owner}_k8s_canary_deploy"
+  canary_pipeline_name        = "${title(var.owner)} K8s Canary Deploy"
+  canary_pipeline_description = "Canary deployment with CV for ${var.owner} demo app"
+  canary_instance_count       = 1
+  cv_sensitivity              = "Medium"
+  cv_duration                 = "5m"
+
+  # Blue/Green pipeline
+  create_blue_green_pipeline      = var.create_blue_green_pipeline
+  blue_green_pipeline_id          = "${var.owner}_k8s_blue_green_deploy"
+  blue_green_pipeline_name        = "${title(var.owner)} K8s Blue/Green Deploy"
+  blue_green_pipeline_description = "Blue/Green deployment for ${var.owner} demo app"
+
+  pipeline_tags = ["tofu-managed", var.owner]
+
+  depends_on = [module.harness_service, module.harness_environment_dev]
 }
