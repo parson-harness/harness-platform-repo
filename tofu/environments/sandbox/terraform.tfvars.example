@@ -162,5 +162,9 @@ enable_cv = false  # Set to true to enable CV
 cv_sensitivity = "Medium"  # High, Medium, Low
 cv_duration    = "5m"      # Analysis duration
 
-# Prometheus connector for health source
+# Prometheus URL - creates connector automatically
+# For in-cluster Prometheus: http://prometheus.monitoring.svc.cluster.local:9090
+# prometheus_url = "http://prometheus.monitoring.svc.cluster.local:9090"
+
+# Or use existing connector reference
 # prometheus_connector_ref = "prometheus"

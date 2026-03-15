@@ -354,6 +354,12 @@ module "harness_connectors" {
   github_username         = var.github_username
   github_token_ref        = var.github_token_ref
 
+  # Prometheus Connector (for CV)
+  create_prometheus_connector = var.enable_cv && var.prometheus_url != ""
+  prometheus_connector_id     = "${var.owner}_prometheus"
+  prometheus_connector_name   = "${title(var.owner)} Prometheus"
+  prometheus_url              = var.prometheus_url
+
   depends_on = [module.harness_delegate]
 }
 
@@ -541,8 +547,8 @@ module "harness_monitored_service_dev" {
   service_ref     = "${var.owner}_demo_app"
   environment_ref = "${var.owner}_dev"
 
-  # Prometheus health source
-  prometheus_connector_ref = var.prometheus_connector_ref
+  # Prometheus health source - use auto-created connector or explicit ref
+  prometheus_connector_ref = var.prometheus_url != "" ? "${var.owner}_prometheus" : var.prometheus_connector_ref
   enable_live_monitoring   = true
 
   # Application details for metric queries

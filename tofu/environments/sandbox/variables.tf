@@ -455,7 +455,13 @@ variable "cv_duration" {
 }
 
 variable "prometheus_connector_ref" {
-  description = "Reference to Prometheus connector for CV health source"
+  description = "Reference to Prometheus connector for CV health source (auto-set when prometheus_url provided)"
+  type        = string
+  default     = ""
+}
+
+variable "prometheus_url" {
+  description = "Prometheus server URL (e.g., http://prometheus.monitoring.svc.cluster.local:9090)"
   type        = string
   default     = ""
 }
