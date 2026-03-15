@@ -154,17 +154,3 @@ spec:
                 port:
                   number: {{int .Values.servicePort}}
 {{- end }}
----
-{{- if .Values.targetGroupArn }}
-apiVersion: elbv2.k8s.aws/v1beta1
-kind: TargetGroupBinding
-metadata:
-  name: {{.Values.name}}-tgb
-  namespace: {{.Values.namespace}}
-spec:
-  serviceRef:
-    name: {{.Values.name}}-service
-    port: {{int .Values.servicePort}}
-  targetGroupARN: {{.Values.targetGroupArn}}
-  targetType: ip
-{{- end }}
