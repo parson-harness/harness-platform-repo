@@ -26,8 +26,7 @@ servicePort: 80
 serviceType: ClusterIP
 
 # Deployment variant for blue/green or canary
-variant: "canary"
-variantColor: "#EAB308"
+# Color is now computed dynamically based on harness.io/color label
 
 # Ingress configuration
 ingressEnabled: false

@@ -13,7 +13,6 @@ public class AppConfig {
     private String version = "1.0.0";
     private String environment = "development";
     private String deploymentVariant = "stable";
-    private String variantColor = "#3B82F6";
     private String customerName = "Harness Customer";
     private String customerLogo = "";
     private String deploymentTarget = "kubernetes";
@@ -23,4 +22,21 @@ public class AppConfig {
     private boolean chaosEnabled = true;
     private int chaosLatencyMs = 0;
     private double chaosErrorRate = 0.0;
+    
+    public String getVariantColor() {
+        if (deploymentVariant == null) {
+            return "#8B5CF6"; // Purple for stable/unknown
+        }
+        switch (deploymentVariant.toLowerCase()) {
+            case "blue":
+                return "#3B82F6"; // Blue
+            case "green":
+                return "#22C55E"; // Green
+            case "canary":
+                return "#EAB308"; // Yellow/Amber
+            case "stable":
+            default:
+                return "#8B5CF6"; // Purple for stable
+        }
+    }
 }
