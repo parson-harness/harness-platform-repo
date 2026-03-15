@@ -83,8 +83,18 @@ output "harness_project_created" {
 }
 
 output "harness_service_id" {
-  description = "Harness Service ID"
+  description = "ID of the Harness service"
   value       = var.create_harness_service ? module.harness_service[0].service_id : null
+}
+
+output "canary_pipeline_id" {
+  description = "ID of the Canary deployment pipeline"
+  value       = var.create_harness_service && var.create_harness_environment ? module.harness_pipelines_dev[0].canary_pipeline_identifier : null
+}
+
+output "blue_green_pipeline_id" {
+  description = "ID of the Blue/Green deployment pipeline"
+  value       = var.create_blue_green_pipeline && var.create_harness_service && var.create_harness_environment ? module.harness_pipelines_dev[0].blue_green_pipeline_identifier : null
 }
 
 output "harness_dev_environment_id" {

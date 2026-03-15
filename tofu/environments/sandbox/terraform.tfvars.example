@@ -130,3 +130,4 @@ create_connectors = true
 # GitHub connector (optional - for manifest/pipeline source)
 # github_url       = "https://github.com/your-org"
 # github_token_ref = "account.github_token"
+# github_token_ref = "parson-gh-pat"

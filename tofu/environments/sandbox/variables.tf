@@ -236,6 +236,28 @@ variable "github_token_ref" {
   default     = ""
 }
 
+variable "github_username" {
+  description = "GitHub username for HTTP authentication"
+  type        = string
+  default     = ""
+}
+
+################################################################################
+# Pipeline Configuration
+################################################################################
+
+variable "create_canary_pipeline" {
+  description = "Create Canary deployment pipeline"
+  type        = bool
+  default     = true
+}
+
+variable "create_blue_green_pipeline" {
+  description = "Create Blue/Green deployment pipeline"
+  type        = bool
+  default     = false
+}
+
 ################################################################################
 # IRSA Configuration
 ################################################################################

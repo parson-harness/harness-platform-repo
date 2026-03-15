@@ -215,6 +215,12 @@ variable "github_token_ref" {
   default     = ""
 }
 
+variable "github_username" {
+  description = "GitHub username for HTTP authentication"
+  type        = string
+  default     = ""
+}
+
 ################################################################################
 # Prometheus Connector Variables
 ################################################################################

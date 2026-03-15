@@ -57,7 +57,7 @@ locals {
           type       = var.manifest_type
           spec = {
             store = {
-              type = "Git"
+              type = "Github"
               spec = {
                 connectorRef = var.git_connector_ref
                 gitFetchType = "Branch"
@@ -66,6 +66,7 @@ locals {
                 repoName     = var.git_repo_name
               }
             }
+            valuesPaths = ["k8s/values.yaml"]
           }
         }
       }

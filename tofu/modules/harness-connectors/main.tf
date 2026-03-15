@@ -128,7 +128,8 @@ resource "harness_platform_connector_github" "repo" {
 
   credentials {
     http {
-      token_ref = var.github_token_ref
+      username   = var.github_username
+      token_ref  = var.github_token_ref
     }
   }
 
