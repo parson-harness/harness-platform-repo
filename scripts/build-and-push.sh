@@ -12,7 +12,7 @@ IMAGE_NAME="harness-demo-app"
 echo "Reading registry configuration from tofu..."
 cd "$TOFU_DIR"
 REGISTRY_TYPE=$(tofu output -raw artifact_registry_type 2>/dev/null || echo "ecr")
-REGISTRY_URL=$(tofu output -raw artifact_registry_url 2>/dev/null | tr '[:upper:]' '[:lower:]' || echo "")
+REGISTRY_URL=$(tofu output -raw artifact_registry_url 2>/dev/null || echo "")
 cd "$PROJECT_ROOT"
 
 if [ -z "$REGISTRY_URL" ]; then
@@ -43,19 +43,30 @@ if [ "$REGISTRY_TYPE" = "har" ]; then
         exit 1
     fi
     
-    # Extract the base registry URL (pkg.harness.io)
-    HAR_HOST=$(echo "$REGISTRY_URL" | cut -d'/' -f1)
+    # HAR URL format: pkg.harness.io/<account_id_lowercase>/<registry_id>/<image>:<tag>
+    # The REGISTRY_URL from tofu may have org/project in path, we need to extract correctly
+    # Expected format from Harness UI: pkg.harness.io/eerjnxtns4grlg5vnnjzuw/har-parson/<IMAGE_NAME>
+    HAR_HOST="pkg.harness.io"
+    
+    # Get account ID (lowercase) and registry ID from the URL
+    # REGISTRY_URL format: pkg.harness.io/ACCOUNT_ID/ORG/PROJECT/REGISTRY_ID
+    ACCOUNT_ID=$(echo "$REGISTRY_URL" | cut -d'/' -f2 | tr '[:upper:]' '[:lower:]')
+    REGISTRY_ID=$(echo "$REGISTRY_URL" | rev | cut -d'/' -f1 | rev)
+    
+    HAR_IMAGE_URL="${HAR_HOST}/${ACCOUNT_ID}/${REGISTRY_ID}/${IMAGE_NAME}"
+    
+    echo "HAR Image URL: ${HAR_IMAGE_URL}:${IMAGE_TAG}"
     
     echo "$HARNESS_API_KEY" | docker login "$HAR_HOST" -u x-api-key --password-stdin
     
     echo "Tagging image for HAR..."
-    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+    docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${HAR_IMAGE_URL}:${IMAGE_TAG}
     
     echo "Pushing image to HAR..."
-    docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}
+    docker push ${HAR_IMAGE_URL}:${IMAGE_TAG}
     
     echo ""
-    echo "✅ Successfully pushed ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+    echo "✅ Successfully pushed ${HAR_IMAGE_URL}:${IMAGE_TAG}"
 else
     # AWS ECR
     AWS_REGION="${AWS_REGION:-us-east-1}"

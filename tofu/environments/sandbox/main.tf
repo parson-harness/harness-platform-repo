@@ -404,7 +404,7 @@ module "harness_service" {
   # HAR configuration (when artifact_registry_type = "har")
   # registryRef format: account.<registry-id> for account-level, or project-level ref
   har_registry_ref = var.artifact_registry_type == "har" && length(module.har) > 0 ? (
-    "project.${module.har[0].registry_id}"
+    module.har[0].registry_id
   ) : ""
   har_image_path = var.artifact_registry_type == "har" ? "harness-demo-app" : ""
 

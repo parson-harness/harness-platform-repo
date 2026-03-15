@@ -35,6 +35,12 @@ resource "harness_platform_pipeline" "k8s_canary" {
       tags:
         deployment-type: kubernetes
         strategy: canary
+      variables:
+        - name: image_tag
+          type: String
+          description: Docker image tag to deploy
+          required: true
+          value: <+input>
       stages:
         - stage:
             name: Deploy to ${var.environment_name}
@@ -45,14 +51,6 @@ resource "harness_platform_pipeline" "k8s_canary" {
               deploymentType: Kubernetes
               service:
                 serviceRef: ${var.service_ref}
-                serviceInputs:
-                  serviceDefinition:
-                    type: Kubernetes
-                    spec:
-                      artifacts:
-                        primary:
-                          primaryArtifactRef: <+input>
-                          sources: <+input>
               environment:
                 environmentRef: ${var.environment_ref}
                 deployToAll: false
@@ -155,6 +153,12 @@ resource "harness_platform_pipeline" "k8s_blue_green_canary" {
       tags:
         deployment-type: kubernetes
         strategy: blue-green-canary
+      variables:
+        - name: image_tag
+          type: String
+          description: Docker image tag to deploy
+          required: true
+          value: <+input>
       stages:
         - stage:
             name: BlueGreen to Dev
@@ -165,14 +169,6 @@ resource "harness_platform_pipeline" "k8s_blue_green_canary" {
               deploymentType: Kubernetes
               service:
                 serviceRef: ${var.service_ref}
-                serviceInputs:
-                  serviceDefinition:
-                    type: Kubernetes
-                    spec:
-                      artifacts:
-                        primary:
-                          primaryArtifactRef: <+input>
-                          sources: <+input>
               environment:
                 environmentRef: ${var.environment_ref}
                 deployToAll: false
@@ -227,14 +223,6 @@ resource "harness_platform_pipeline" "k8s_blue_green_canary" {
               deploymentType: Kubernetes
               service:
                 serviceRef: ${var.service_ref}
-                serviceInputs:
-                  serviceDefinition:
-                    type: Kubernetes
-                    spec:
-                      artifacts:
-                        primary:
-                          primaryArtifactRef: <+input>
-                          sources: <+input>
               environment:
                 environmentRef: ${var.prod_environment_ref}
                 deployToAll: false
