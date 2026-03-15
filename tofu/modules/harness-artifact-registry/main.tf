@@ -30,14 +30,11 @@ resource "harness_platform_har_registry" "dockerhub_upstream" {
     source = "Dockerhub"
     url    = "https://index.docker.io/v2/"
 
-    dynamic "auth" {
-      for_each = var.dockerhub_username != "" ? [1] : []
-      content {
-        auth_type         = "UserPassword"
-        user_name         = var.dockerhub_username
-        secret_identifier = var.dockerhub_password_secret_ref
-        secret_space_path = var.dockerhub_secret_space_path
-      }
+    auth {
+      auth_type         = var.dockerhub_username != "" ? "UserPassword" : "Anonymous"
+      user_name         = var.dockerhub_username != "" ? var.dockerhub_username : null
+      secret_identifier = var.dockerhub_username != "" ? var.dockerhub_password_secret_ref : null
+      secret_space_path = var.dockerhub_username != "" ? var.dockerhub_secret_space_path : null
     }
   }
 

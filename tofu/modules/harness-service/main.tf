@@ -26,43 +26,48 @@ resource "harness_platform_service" "main" {
 }
 
 locals {
-  # Artifact spec - ECR
-  ecr_artifact_spec = {
-    connectorRef = var.artifact_connector_ref
-    imagePath    = var.ecr_image_path
-    region       = var.aws_region
-    tag          = "<+input>"
-  }
-
-  # Artifact spec - Harness Artifact Registry (HAR)
-  # Structure: type=Har, spec.registryRef, spec.type=docker, spec.spec.imagePath/tag
-  har_artifact_spec = {
-    registryRef = var.har_registry_ref
-    type        = "docker"
-    spec = {
-      imagePath = var.har_image_path
-      tag       = "<+input>"
-      digest    = ""
-    }
-  }
-
-  # Select artifact spec based on registry type
-  artifact_spec = var.artifact_registry_type == "har" ? local.har_artifact_spec : local.ecr_artifact_spec
-  artifact_type = var.artifact_registry_type == "har" ? "Har" : "Ecr"
-
-  # Common artifacts block
-  artifacts_block = var.artifact_source_type != "" || var.artifact_registry_type != "" ? {
+  # Use JSON encoding to bypass Terraform's strict type checking
+  # ECR artifacts block as JSON
+  ecr_artifacts_json = jsonencode({
     primary = {
       primaryArtifactRef = "<+input>"
-      sources = [
-        {
-          identifier = "primary"
-          type       = local.artifact_type
-          spec       = local.artifact_spec
+      sources = [{
+        identifier = "primary"
+        type       = "Ecr"
+        spec = {
+          connectorRef = var.artifact_connector_ref
+          imagePath    = var.ecr_image_path
+          region       = var.aws_region
+          tag          = "<+input>"
         }
-      ]
+      }]
     }
-  } : null
+  })
+
+  # HAR artifacts block as JSON
+  har_artifacts_json = jsonencode({
+    primary = {
+      primaryArtifactRef = "<+input>"
+      sources = [{
+        identifier = "primary"
+        type       = "Har"
+        spec = {
+          registryRef = var.har_registry_ref
+          type        = "docker"
+          spec = {
+            imagePath = var.har_image_path
+            tag       = "<+input>"
+            digest    = ""
+          }
+        }
+      }]
+    }
+  })
+
+  # Select artifacts block based on registry type (or null if neither)
+  has_artifact_config = var.artifact_source_type != "" || var.artifact_registry_type != ""
+  artifacts_json      = local.has_artifact_config ? (var.artifact_registry_type == "har" ? local.har_artifacts_json : local.ecr_artifacts_json) : null
+  artifacts_block     = local.artifacts_json != null ? jsondecode(local.artifacts_json) : null
 
   # K8s manifest configuration
   k8s_manifests_block = var.deployment_type == "Kubernetes" && var.git_connector_ref != "" ? {

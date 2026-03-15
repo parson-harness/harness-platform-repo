@@ -344,7 +344,7 @@ module "harness_connectors" {
   create_docker_connector = false
   docker_connector_id     = "${var.owner}_ecr"
   docker_connector_name   = "${title(var.owner)} ECR"
-  docker_registry_url     = module.ecr.repository_url
+  docker_registry_url     = var.artifact_registry_type == "ecr" && length(module.ecr) > 0 ? module.ecr[0].repository_url : ""
 
   # GitHub Connector
   create_github_connector = var.github_token_ref != ""
