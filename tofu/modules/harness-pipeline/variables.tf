@@ -78,6 +78,18 @@ variable "cv_duration" {
   default     = "5m"
 }
 
+variable "enable_cv" {
+  description = "Enable Continuous Verification step in canary pipeline"
+  type        = bool
+  default     = false
+}
+
+variable "monitored_service_ref" {
+  description = "Reference to the monitored service for CV"
+  type        = string
+  default     = ""
+}
+
 ################################################################################
 # Blue/Green Pipeline Variables
 ################################################################################

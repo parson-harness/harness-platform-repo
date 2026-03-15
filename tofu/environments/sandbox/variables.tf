@@ -426,3 +426,36 @@ variable "dockerhub_password_secret_ref" {
   type        = string
   default     = ""
 }
+
+################################################################################
+# Continuous Verification Configuration
+################################################################################
+
+variable "enable_cv" {
+  description = "Enable Continuous Verification in canary pipeline"
+  type        = bool
+  default     = false
+}
+
+variable "cv_sensitivity" {
+  description = "CV sensitivity level (High, Medium, Low)"
+  type        = string
+  default     = "Medium"
+
+  validation {
+    condition     = contains(["High", "Medium", "Low"], var.cv_sensitivity)
+    error_message = "cv_sensitivity must be one of: High, Medium, Low"
+  }
+}
+
+variable "cv_duration" {
+  description = "CV analysis duration (e.g., 5m, 10m, 15m)"
+  type        = string
+  default     = "5m"
+}
+
+variable "prometheus_connector_ref" {
+  description = "Reference to Prometheus connector for CV health source"
+  type        = string
+  default     = ""
+}

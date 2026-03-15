@@ -16,6 +16,32 @@ terraform {
 # Kubernetes Canary Pipeline with CV
 ################################################################################
 
+locals {
+  # CV step YAML block - only included when enable_cv is true
+  cv_step_yaml = <<-EOT
+                        - step:
+                            name: Verify Canary
+                            identifier: verify_canary
+                            type: Verify
+                            timeout: 2h
+                            spec:
+                              isMultiServicesOrEnvs: false
+                              type: Canary
+                              monitoredService:
+                                type: Default
+                                spec: {}
+                              spec:
+                                sensitivity: ${var.cv_sensitivity}
+                                duration: ${var.cv_duration}
+                                deploymentTag: <+artifacts.primary.tag>
+  EOT
+
+  # Approval message varies based on CV
+  approval_message_with_cv = "Canary deployment verified by CV.\nMetrics analysis passed. Review results before proceeding to full rollout.\nApprove to deploy to all instances."
+  approval_message_no_cv   = "Canary deployment complete.\nReview metrics and logs before proceeding to full rollout.\nApprove to deploy to all instances."
+  approval_message         = var.enable_cv ? local.approval_message_with_cv : local.approval_message_no_cv
+}
+
 resource "harness_platform_pipeline" "k8s_canary" {
   count       = var.create_canary_pipeline ? 1 : 0
   identifier  = var.canary_pipeline_id
@@ -75,6 +101,7 @@ resource "harness_platform_pipeline" "k8s_canary" {
                                 spec:
                                   count: ${var.canary_instance_count}
                               skipDryRun: false
+${var.enable_cv ? local.cv_step_yaml : ""}
                         - step:
                             name: Approval
                             identifier: approval
@@ -82,9 +109,7 @@ resource "harness_platform_pipeline" "k8s_canary" {
                             timeout: 1d
                             spec:
                               approvalMessage: |
-                                Canary deployment verified.
-                                Review metrics and logs before proceeding to full rollout.
-                                Approve to deploy to all instances.
+                                ${local.approval_message}
                               includePipelineExecutionHistory: true
                               approvers:
                                 userGroups:

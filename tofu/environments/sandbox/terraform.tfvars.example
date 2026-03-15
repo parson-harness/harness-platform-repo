@@ -148,3 +148,19 @@ artifact_registry_type = "har"  # Default: Harness Artifact Registry
 create_dockerhub_upstream = true
 # dockerhub_username            = "your-dockerhub-username"
 # dockerhub_password_secret_ref = "account.dockerhub_password"
+
+#===============================================================================
+# Continuous Verification (CV) Configuration
+#===============================================================================
+# CV requires a Prometheus connector and monitored service.
+# When enabled, the canary pipeline will include a Verify step that
+# analyzes metrics during deployment.
+
+enable_cv = false  # Set to true to enable CV
+
+# CV settings (only used when enable_cv = true)
+cv_sensitivity = "Medium"  # High, Medium, Low
+cv_duration    = "5m"      # Analysis duration
+
+# Prometheus connector for health source
+# prometheus_connector_ref = "prometheus"

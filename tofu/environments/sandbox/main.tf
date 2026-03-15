@@ -506,8 +506,11 @@ module "harness_pipelines_dev" {
   canary_pipeline_name        = "${title(var.owner)} K8s Canary Deploy"
   canary_pipeline_description = "Canary deployment with CV for ${var.owner} demo app"
   canary_instance_count       = 1
-  cv_sensitivity              = "Medium"
-  cv_duration                 = "5m"
+
+  # Continuous Verification
+  enable_cv      = var.enable_cv
+  cv_sensitivity = var.cv_sensitivity
+  cv_duration    = var.cv_duration
 
   # Blue/Green pipeline
   create_blue_green_pipeline      = var.create_blue_green_pipeline
@@ -516,6 +519,40 @@ module "harness_pipelines_dev" {
   blue_green_pipeline_description = "Blue/Green deployment for ${var.owner} demo app"
 
   pipeline_tags = ["tofu-managed", var.owner]
+
+  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_monitored_service_dev]
+}
+
+################################################################################
+# Harness Monitored Service (for Continuous Verification)
+################################################################################
+
+module "harness_monitored_service_dev" {
+  source = "../../modules/harness-monitored-service"
+  count  = var.enable_cv && var.create_harness_service && var.create_harness_environment ? 1 : 0
+
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
+
+  monitored_service_id          = "${var.owner}_demo_app_dev"
+  monitored_service_name        = "${title(var.owner)} Demo App - Dev"
+  monitored_service_description = "Monitored service for CV on ${var.owner} demo app in Dev"
+
+  service_ref     = "${var.owner}_demo_app"
+  environment_ref = "${var.owner}_dev"
+
+  # Prometheus health source
+  prometheus_connector_ref = var.prometheus_connector_ref
+  enable_live_monitoring   = true
+
+  # Application details for metric queries
+  namespace = "harness-demo-${var.owner}"
+  app_name  = "harness-demo-app"
+
+  # Thresholds
+  memory_threshold_bytes = 536870912  # 512MB
+
+  tags = ["tofu-managed", var.owner, "cv"]
 
   depends_on = [module.harness_service, module.harness_environment_dev]
 }
