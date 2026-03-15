@@ -1,0 +1,88 @@
+pipeline:
+  name: CD EKS Blue-Green Deployment
+  identifier: cd_eks_bluegreen
+  projectIdentifier: <+input>
+  orgIdentifier: <+input>
+  tags:
+    deployment: bluegreen
+    target: eks
+  stages:
+    - stage:
+        name: Deploy to EKS
+        identifier: deploy_eks
+        type: Deployment
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: <+input>
+            serviceInputs:
+              serviceDefinition:
+                type: Kubernetes
+                spec:
+                  artifacts:
+                    primary:
+                      primaryArtifactRef: <+input>
+                      sources: <+input>
+          environment:
+            environmentRef: <+input>
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: <+input>
+          execution:
+            steps:
+              - step:
+                  type: K8sBlueGreenDeploy
+                  name: Blue-Green Deployment
+                  identifier: bluegreen_deploy
+                  spec:
+                    skipDryRun: false
+                  timeout: 10m
+
+              - step:
+                  type: Verify
+                  name: Verify Green
+                  identifier: verify_green
+                  spec:
+                    isMultiServicesOrEnvs: false
+                    type: Canary
+                    monitoredService:
+                      type: Default
+                      spec: {}
+                    spec:
+                      sensitivity: MEDIUM
+                      duration: 5m
+                      deploymentTag: <+artifacts.primary.tag>
+                  timeout: 15m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - Verification
+                        action:
+                          type: ManualIntervention
+                          spec:
+                            timeout: 2h
+                            onTimeout:
+                              action:
+                                type: StageRollback
+
+              - step:
+                  type: K8sBlueGreenSwap
+                  name: Swap Blue Green
+                  identifier: swap_bluegreen
+                  spec: {}
+                  timeout: 10m
+
+            rollbackSteps:
+              - step:
+                  type: K8sBlueGreenRollback
+                  name: Blue-Green Rollback
+                  identifier: bluegreen_rollback
+                  spec: {}
+                  timeout: 10m
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback

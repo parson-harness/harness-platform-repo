@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{.Values.name}}-deployment
+  labels:
+    app: {{.Values.name}}
+    harness.io/service: <+service.name>
+    harness.io/environment: <+env.name>
+spec:
+  replicas: {{int .Values.replicas}}
+  selector:
+    matchLabels:
+      app: {{.Values.name}}
+  template:
+    metadata:
+      labels:
+        app: {{.Values.name}}
+        version: <+artifact.tag>
+        harness.io/service: <+service.name>
+        harness.io/environment: <+env.name>
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/actuator/prometheus"
+        harness.io/build: <+pipeline.executionId>
+    spec:
+      containers:
+        - name: {{.Values.name}}
+          image: <+artifact.image>
+          imagePullPolicy: Always
+          ports:
+            - containerPort: {{int .Values.containerPort}}
+              name: http
+          env:
+            - name: APP_VERSION
+              value: <+artifact.tag>
+            - name: APP_ENVIRONMENT
+              value: <+env.name>
+            - name: SERVICE_NAME
+              value: <+service.name>
+            - name: PIPELINE_ID
+              value: <+pipeline.executionId>
+            - name: DEPLOYMENT_VARIANT
+              value: {{.Values.variant}}
+            - name: VARIANT_COLOR
+              value: {{.Values.variantColor}}
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CHAOS_ENABLED
+              value: "{{.Values.chaosEnabled}}"
+            - name: CHAOS_LATENCY_MS
+              value: "{{.Values.chaosLatencyMs}}"
+            - name: CHAOS_ERROR_RATE
+              value: "{{.Values.chaosErrorRate}}"
+          resources:
+            requests:
+              memory: {{.Values.resources.requests.memory}}
+              cpu: {{.Values.resources.requests.cpu}}
+            limits:
+              memory: {{.Values.resources.limits.memory}}
+              cpu: {{.Values.resources.limits.cpu}}
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: {{int .Values.containerPort}}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: {{int .Values.containerPort}}
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{.Values.name}}-service
+  labels:
+    app: {{.Values.name}}
+    harness.io/service: <+service.name>
+spec:
+  type: {{.Values.serviceType}}
+  ports:
+    - port: {{int .Values.servicePort}}
+      targetPort: {{int .Values.containerPort}}
+      protocol: TCP
+      name: http
+  selector:
+    app: {{.Values.name}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{.Values.name}}-ingress
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+    - hosts:
+        - {{.Values.ingressHost}}
+      secretName: {{.Values.name}}-tls
+  rules:
+    - host: {{.Values.ingressHost}}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{.Values.name}}-service
+                port:
+                  number: {{int .Values.servicePort}}

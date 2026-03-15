@@ -1,0 +1,132 @@
+################################################################################
+# Sandbox Environment - Example Configuration
+# Copy this file to terraform.tfvars and fill in your values
+################################################################################
+
+#===============================================================================
+# REQUIRED - Owner Identification
+#===============================================================================
+owner = "your-last-name"  # Your last name or POV name (used for resource naming)
+
+#===============================================================================
+# REQUIRED - Harness Configuration
+#===============================================================================
+harness_account_id = "your-harness-account-id"
+harness_api_key    = "your-harness-api-key"
+delegate_version   = "26.02.88600"
+
+# Harness cluster endpoint - must match your account's cluster location
+# Check: Account Settings → Account Overview → Harness Cluster Location
+#   SE Sandbox accounts (prod-2): https://app.harness.io/gratis
+#   Customer POV accounts (prod-1): https://app.harness.io  (default)
+#   prod-3 accounts:               https://app3.harness.io
+# harness_endpoint = "https://app.harness.io/gratis"
+
+# harness_delegate_token is optional - Terraform creates a project-scoped token automatically.
+# Only set this if you want to use a pre-existing token instead.
+# harness_delegate_token = "your-delegate-token"
+
+#===============================================================================
+# DEPLOYMENT TARGET (Use Case Selection)
+#===============================================================================
+# Choose which deployment targets to configure. This controls:
+# - Service definition type (Kubernetes, ECS, Lambda)
+# - Infrastructure definitions created (K8s, ECS, Lambda)
+# - Required connectors and permissions
+#
+# Options: "eks", "ecs", "lambda", "asg"
+# Can specify multiple: ["eks", "ecs"] for multi-target POVs
+
+# EKS only (default)
+deployment_targets = ["eks"]
+
+# ECS only
+# deployment_targets = ["ecs"]
+
+# Lambda only
+# deployment_targets = ["lambda"]
+
+# Multi-target POV (EKS + ECS)
+# deployment_targets = ["eks", "ecs"]
+
+# Full AWS demo (all targets)
+# deployment_targets = ["eks", "ecs", "lambda"]
+
+#===============================================================================
+# Harness Organization Configuration
+#===============================================================================
+# Option 1: Use existing organization (default)
+create_harness_org = false
+harness_org_id     = "default"  # Your existing org ID
+
+# Option 2: Create new organization
+# create_harness_org   = true
+# new_harness_org_id   = "harness_reference_architecture"
+# new_harness_org_name = "Harness Reference Architecture"
+
+#===============================================================================
+# Harness Project Configuration
+#===============================================================================
+# Option 1: Use existing project (default)
+create_harness_project = false
+harness_project_id     = "your-project-id"  # Your existing project ID
+
+# Option 2: Create new project (auto-named based on owner)
+# create_harness_project   = true
+# new_harness_project_id   = ""  # Leave empty for auto: "<owner>_demo"
+# new_harness_project_name = ""  # Leave empty for auto: "<Owner> Demo"
+
+#===============================================================================
+# Cluster Configuration (for EKS deployments)
+#===============================================================================
+# Option 1: Use existing EKS cluster (recommended for quick setup)
+create_eks_cluster    = false
+existing_cluster_name = "harness-eks-parson"  # Your existing cluster name
+
+# Option 2: Create new EKS cluster (takes ~20 min, may hit AWS limits)
+# create_eks_cluster    = true
+# existing_cluster_name = ""
+# vpc_cidr              = "10.0.0.0/16"
+# enable_nat_gateway    = true
+# kubernetes_version    = "1.29"
+# node_instance_types   = ["t3.medium"]
+# node_capacity_type    = "SPOT"
+# node_desired_size     = 2
+
+#===============================================================================
+# Delegate Configuration
+#===============================================================================
+create_delegate = true   # Set to false to use existing delegate
+
+#===============================================================================
+# IRSA Configuration (recommended for EKS)
+#===============================================================================
+enable_irsa = true
+
+#===============================================================================
+# Harness Service & Environment Configuration
+#===============================================================================
+create_harness_service     = true
+create_harness_environment = true
+create_prod_environment    = true  # Creates both Dev and Prod environments
+
+# Service manifest configuration (for GitHub-based manifests)
+# service_git_repo       = "harness-demo-app"
+# service_git_branch     = "main"
+# service_manifest_paths = ["k8s/"]
+
+# ECS manifest paths (if using ECS)
+# ecs_task_definition_paths    = ["ecs/taskdef.json"]
+# ecs_service_definition_paths = ["ecs/servicedef.json"]
+
+# ECS cluster name (required if ecs in deployment_targets)
+# ecs_cluster_name = "my-ecs-cluster"
+
+#===============================================================================
+# Connector Configuration
+#===============================================================================
+create_connectors = true
+
+# GitHub connector (optional - for manifest/pipeline source)
+# github_url       = "https://github.com/your-org"
+# github_token_ref = "account.github_token"

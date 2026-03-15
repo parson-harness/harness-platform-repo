@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: harness-pov-app-blue
+  labels:
+    app: harness-pov-app
+    variant: blue
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: harness-pov-app
+      variant: blue
+  template:
+    metadata:
+      labels:
+        app: harness-pov-app
+        variant: blue
+    spec:
+      containers:
+        - name: harness-pov-app
+          image: harness-pov-app:1.0.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DEPLOYMENT_VARIANT
+              value: "blue"
+            - name: VARIANT_COLOR
+              value: "#3B82F6"
+            - name: APP_VERSION
+              value: "1.0.0"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

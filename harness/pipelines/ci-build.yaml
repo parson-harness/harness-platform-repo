@@ -1,0 +1,114 @@
+pipeline:
+  name: CI Build Pipeline
+  identifier: ci_build_pipeline
+  projectIdentifier: <+input>
+  orgIdentifier: <+input>
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: <+input>
+        repoName: harness-demo-app
+        build: <+input>
+  stages:
+    - stage:
+        name: Build and Push
+        identifier: build_and_push
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Run Tests
+                  identifier: run_tests
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: maven:3.9-eclipse-temurin-17
+                    shell: Sh
+                    command: |
+                      mvn test -B
+                    reports:
+                      type: JUnit
+                      spec:
+                        paths:
+                          - "**/target/surefire-reports/*.xml"
+
+              - step:
+                  type: Run
+                  name: Build JAR
+                  identifier: build_jar
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: maven:3.9-eclipse-temurin-17
+                    shell: Sh
+                    command: |
+                      mvn package -DskipTests -B
+                      cp target/*.jar app.jar
+
+              - step:
+                  type: BuildAndPushECR
+                  name: Build and Push to ECR
+                  identifier: build_push_ecr
+                  spec:
+                    connectorRef: <+input>
+                    region: <+input>
+                    account: <+input>
+                    imageName: harness-demo-app
+                    tags:
+                      - <+pipeline.sequenceId>
+                      - <+codebase.commitSha>
+                      - latest
+                    dockerfile: Dockerfile
+                    context: .
+                    optimize: true
+
+              - step:
+                  type: Run
+                  name: Security Scan
+                  identifier: security_scan
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: aquasec/trivy:latest
+                    shell: Sh
+                    command: |
+                      trivy image --exit-code 0 --severity HIGH,CRITICAL \
+                        <+pipeline.stages.build_and_push.spec.execution.steps.build_push_ecr.output.outputVariables.IMAGE>
+                  when:
+                    stageStatus: Success
+                    condition: <+input>.allowedValues(true,false)
+
+    - stage:
+        name: Integration Tests
+        identifier: integration_tests
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Run Integration Tests
+                  identifier: run_integration_tests
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: maven:3.9-eclipse-temurin-17
+                    shell: Sh
+                    command: |
+                      mvn verify -DskipUnitTests -B
+        when:
+          pipelineStatus: Success
+          condition: <+input>.allowedValues(true,false)

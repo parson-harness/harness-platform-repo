@@ -1,0 +1,29 @@
+# Default values for Harness demo app deployment
+# These can be overridden in Harness pipelines using service variables
+
+name: harness-demo-app
+replicas: 2
+containerPort: 8080
+servicePort: 80
+serviceType: ClusterIP
+
+# Deployment variant for blue/green or canary
+variant: blue
+variantColor: "#3B82F6"
+
+# Ingress configuration
+ingressHost: harness-demo.example.com
+
+# Resource limits
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "250m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Chaos engineering toggles
+chaosEnabled: false
+chaosLatencyMs: 0
+chaosErrorRate: 0.0
