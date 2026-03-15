@@ -97,14 +97,16 @@ resource "harness_platform_pipeline" "k8s_strategy" {
                             script: |
                               #!/bin/bash
                               NAMESPACE="<+infra.namespace>"
-                              SERVICE_NAME="<+service.name>"
                               echo "========================================"
                               echo "  BLUE/GREEN VALIDATION"
                               echo "========================================"
-                              INGRESS_HOST=$(kubectl get ingress -n $NAMESPACE -o json | jq -r ".items[] | select(.metadata.name | contains(\"$${SERVICE_NAME}\")) | .status.loadBalancer.ingress[0].hostname // empty" | head -1)
-                              if [ -z "$INGRESS_HOST" ]; then
-                                INGRESS_HOST=$(kubectl get ingress -n $NAMESPACE -o json | jq -r '.items[] | select(.metadata.annotations["alb.ingress.kubernetes.io/group.name"] != null) | .status.loadBalancer.ingress[0].hostname // empty' | head -1)
-                              fi
+                              # Wait for ingress to get ALB hostname (retry up to 30s)
+                              for i in 1 2 3 4 5 6; do
+                                INGRESS_HOST=$(kubectl get ingress -n $NAMESPACE -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+                                if [ -n "$INGRESS_HOST" ]; then break; fi
+                                echo "Waiting for ingress hostname... (attempt $i)"
+                                sleep 5
+                              done
                               if [ -n "$INGRESS_HOST" ]; then
                                 PRIMARY_URL="http://$${INGRESS_HOST}"
                                 STAGE_URL="http://$${INGRESS_HOST}?stage=true"
@@ -113,6 +115,8 @@ resource "harness_platform_pipeline" "k8s_strategy" {
                               else
                                 PRIMARY_URL="URL_NOT_FOUND"
                                 STAGE_URL="URL_NOT_FOUND"
+                                echo "Could not find ingress hostname after retries"
+                                kubectl get ingress -n $NAMESPACE -o wide
                               fi
                               echo "========================================"
                         environmentVariables: []
@@ -148,6 +152,12 @@ resource "harness_platform_pipeline" "k8s_strategy" {
                       timeout: 10m
                       spec:
                         skipDryRun: false
+                  - step:
+                      name: Scale Down Old Version
+                      identifier: scale_down_old
+                      type: K8sBlueGreenStageScaleDown
+                      timeout: 10m
+                      spec: {}
                 rollbackSteps: []
             failureStrategies:
               - onFailure:
@@ -222,14 +232,16 @@ resource "harness_platform_pipeline" "k8s_strategy" {
                             script: |
                               #!/bin/bash
                               NAMESPACE="<+infra.namespace>"
-                              SERVICE_NAME="<+service.name>"
                               echo "========================================"
                               echo "  CANARY VALIDATION"
                               echo "========================================"
-                              INGRESS_HOST=$(kubectl get ingress -n $NAMESPACE -o json | jq -r ".items[] | select(.metadata.name | contains(\"$${SERVICE_NAME}\")) | .status.loadBalancer.ingress[0].hostname // empty" | head -1)
-                              if [ -z "$INGRESS_HOST" ]; then
-                                INGRESS_HOST=$(kubectl get ingress -n $NAMESPACE -o json | jq -r '.items[] | select(.metadata.annotations["alb.ingress.kubernetes.io/group.name"] != null) | .status.loadBalancer.ingress[0].hostname // empty' | head -1)
-                              fi
+                              # Wait for ingress to get ALB hostname (retry up to 30s)
+                              for i in 1 2 3 4 5 6; do
+                                INGRESS_HOST=$(kubectl get ingress -n $NAMESPACE -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}' 2>/dev/null)
+                                if [ -n "$INGRESS_HOST" ]; then break; fi
+                                echo "Waiting for ingress hostname... (attempt $i)"
+                                sleep 5
+                              done
                               CANARY_PODS=$(kubectl get pods -n $NAMESPACE -l harness.io/track=canary --no-headers 2>/dev/null | wc -l | tr -d ' ')
                               STABLE_PODS=$(kubectl get pods -n $NAMESPACE -l harness.io/track=stable --no-headers 2>/dev/null | wc -l | tr -d ' ')
                               TOTAL=$((CANARY_PODS + STABLE_PODS))

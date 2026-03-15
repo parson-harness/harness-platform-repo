@@ -80,11 +80,11 @@
         <div class="max-w-7xl mx-auto px-6">
             <div class="text-center mb-12">
                 <div class="inline-block rounded-2xl p-10"
-                     th:classappend="${config.deploymentVariant == 'canary'} ? 'bg-yellow-500/20 border-4 border-yellow-400' : (${config.deploymentVariant == 'stable'} ? 'bg-purple-500/20 border-4 border-purple-400' : 'bg-white/5 border-2 border-white/20')">
+                     th:classappend="${config.effectiveVariant == 'canary'} ? 'bg-yellow-500/20 border-4 border-yellow-400' : (${config.effectiveVariant == 'stable'} ? 'bg-purple-500/20 border-4 border-purple-400' : 'bg-white/5 border-2 border-white/20')">
                     <div class="text-gray-400 uppercase tracking-widest mb-2 text-sm">You Are Hitting</div>
                     <div class="text-6xl font-black mb-4 uppercase"
-                         th:classappend="${config.deploymentVariant == 'canary'} ? 'text-yellow-400' : (${config.deploymentVariant == 'stable'} ? 'text-purple-400' : 'gradient-text')"
-                         th:text="${config.deploymentVariant}">STABLE</div>
+                         th:classappend="${config.effectiveVariant == 'canary'} ? 'text-yellow-400' : (${config.effectiveVariant == 'stable'} ? 'text-purple-400' : 'gradient-text')"
+                         th:text="${config.effectiveVariant}">STABLE</div>
                     <div class="flex justify-center items-center space-x-4">
                         <span class="variant-badge px-4 py-2 rounded-full font-semibold" th:text="${config.version}">v1.0.0</span>
                         <span class="px-4 py-2 bg-white/10 rounded-full" th:text="${config.environment}">production</span>
@@ -97,28 +97,28 @@
             <h2 class="text-2xl font-bold mb-6 text-center">Deployment Strategies</h2>
             <div class="grid md:grid-cols-4 gap-6 mb-12">
                 <div class="bg-blue-500/10 border-2 border-blue-500/50 rounded-xl p-5 text-center transition-all"
-                     th:classappend="${config.deploymentVariant == 'blue'} ? 'ring-4 ring-blue-400 bg-blue-500/20' : ''">
+                     th:classappend="${config.effectiveVariant == 'blue'} ? 'ring-4 ring-blue-400 bg-blue-500/20' : ''">
                     <div class="text-3xl mb-2">🔵</div>
                     <h3 class="text-lg font-bold text-blue-400 mb-1">Blue</h3>
                     <p class="text-gray-400 text-xs">Current production</p>
                     <code class="text-xs text-blue-300 mt-1 block">blue</code>
                 </div>
                 <div class="bg-green-500/10 border-2 border-green-500/50 rounded-xl p-5 text-center transition-all"
-                     th:classappend="${config.deploymentVariant == 'green'} ? 'ring-4 ring-green-400 bg-green-500/20' : ''">
+                     th:classappend="${config.effectiveVariant == 'green'} ? 'ring-4 ring-green-400 bg-green-500/20' : ''">
                     <div class="text-3xl mb-2">🟢</div>
                     <h3 class="text-lg font-bold text-green-400 mb-1">Green</h3>
                     <p class="text-gray-400 text-xs">New version standby</p>
                     <code class="text-xs text-green-300 mt-1 block">green</code>
                 </div>
                 <div class="bg-purple-500/10 border-2 border-purple-500/50 rounded-xl p-5 text-center transition-all"
-                     th:classappend="${config.deploymentVariant == 'stable'} ? 'ring-4 ring-purple-400 bg-purple-500/20' : ''">
+                     th:classappend="${config.effectiveVariant == 'stable'} ? 'ring-4 ring-purple-400 bg-purple-500/20' : ''">
                     <div class="text-3xl mb-2">🟣</div>
                     <h3 class="text-lg font-bold text-purple-400 mb-1">Stable</h3>
                     <p class="text-gray-400 text-xs">Verified production</p>
                     <code class="text-xs text-purple-300 mt-1 block">stable</code>
                 </div>
                 <div class="bg-yellow-500/10 border-2 border-yellow-500/50 rounded-xl p-5 text-center transition-all"
-                     th:classappend="${config.deploymentVariant == 'canary'} ? 'ring-4 ring-yellow-400 bg-yellow-500/20' : ''">
+                     th:classappend="${config.effectiveVariant == 'canary'} ? 'ring-4 ring-yellow-400 bg-yellow-500/20' : ''">
                     <img src="/images/harness-canary.png" alt="Canary" class="h-12 w-auto mx-auto mb-2">
                     <h3 class="text-lg font-bold text-yellow-400 mb-1">Canary</h3>
                     <p class="text-gray-400 text-xs">Testing new version</p>

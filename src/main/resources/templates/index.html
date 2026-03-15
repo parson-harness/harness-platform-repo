@@ -119,9 +119,9 @@
             <div class="inline-block gradient-border float-animation">
                 <div class="gradient-border-inner px-8 py-6">
                     <div class="text-sm text-gray-400 uppercase tracking-wider mb-2">Current Deployment</div>
-                    <div class="text-4xl font-bold gradient-text mb-3" th:text="${config.deploymentVariant}">stable</div>
+                    <div class="text-4xl font-bold gradient-text mb-3" th:text="${config.effectiveVariant}">stable</div>
                     <div class="flex items-center justify-center space-x-4">
-                        <span class="variant-badge px-3 py-1 rounded-full text-sm font-medium" th:text="'v' + ${config.version}">v1.0.0</span>
+                        <span class="variant-badge px-3 py-1 rounded-full text-sm font-medium" th:text="${config.version}">1.0.0</span>
                         <span class="text-gray-500" th:text="${config.environment}">production</span>
                     </div>
                 </div>
@@ -139,7 +139,7 @@
                         <div class="w-20 h-20 rounded-2xl flex items-center justify-center text-3xl font-bold variant-badge">
                             <span th:if="${config.effectiveVariant == 'blue'}">🔵</span>
                             <span th:if="${config.effectiveVariant == 'green'}">🟢</span>
-                            <span th:if="${config.effectiveVariant == 'canary'}">🐤</span>
+                            <img th:if="${config.effectiveVariant == 'canary'}" src="/images/harness-canary.png" alt="Canary" class="w-12 h-12" />
                             <span th:if="${config.effectiveVariant == 'stable'}">🟣</span>
                         </div>
                         <div>
