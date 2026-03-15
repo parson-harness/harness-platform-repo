@@ -45,9 +45,13 @@ spec:
         prometheus.io/port: "8080"
         prometheus.io/path: "/actuator/prometheus"
     spec:
-      {{- if .Values.dockercfg }}
+      {{- if or .Values.dockercfg .Values.imagePullSecretName }}
       imagePullSecrets:
+        {{- if .Values.dockercfg }}
         - name: {{.Values.name}}-dockercfg
+        {{- else if .Values.imagePullSecretName }}
+        - name: {{ .Values.imagePullSecretName }}
+        {{- end }}
       {{- end }}
       containers:
         - name: {{.Values.name}}
