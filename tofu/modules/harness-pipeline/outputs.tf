@@ -13,11 +13,11 @@ output "canary_pipeline_identifier" {
 }
 
 output "blue_green_pipeline_id" {
-  description = "ID of the Blue/Green deployment pipeline"
-  value       = var.create_blue_green_pipeline ? harness_platform_pipeline.k8s_blue_green[0].id : null
+  description = "ID of the Blue/Green + Canary deployment pipeline"
+  value       = var.create_blue_green_pipeline ? harness_platform_pipeline.k8s_blue_green_canary[0].id : null
 }
 
 output "blue_green_pipeline_identifier" {
-  description = "Identifier of the Blue/Green deployment pipeline"
-  value       = var.create_blue_green_pipeline ? harness_platform_pipeline.k8s_blue_green[0].identifier : null
+  description = "Identifier of the Blue/Green + Canary deployment pipeline"
+  value       = var.create_blue_green_pipeline ? harness_platform_pipeline.k8s_blue_green_canary[0].identifier : null
 }

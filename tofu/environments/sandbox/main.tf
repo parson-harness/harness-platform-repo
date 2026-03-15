@@ -518,15 +518,19 @@ module "harness_pipelines_dev" {
   cv_sensitivity = var.cv_sensitivity
   cv_duration    = var.cv_duration
 
-  # Blue/Green pipeline
+  # Blue/Green + Canary pipeline (2-stage: B/G to Dev, Canary to Prod)
   create_blue_green_pipeline      = var.create_blue_green_pipeline
-  blue_green_pipeline_id          = "${var.owner}_k8s_blue_green_deploy"
-  blue_green_pipeline_name        = "${title(var.owner)} K8s Blue/Green Deploy"
-  blue_green_pipeline_description = "Blue/Green deployment for ${var.owner} demo app"
+  blue_green_pipeline_id          = "${var.owner}_k8s_bg_canary_deploy"
+  blue_green_pipeline_name        = "${title(var.owner)} K8s BlueGreen-Canary"
+  blue_green_pipeline_description = "2-stage pipeline - Blue-Green to Dev then Canary to Prod"
+
+  # Prod environment for 2nd stage
+  prod_environment_ref    = var.create_prod_environment ? "${var.owner}_prod" : ""
+  prod_infrastructure_ref = local.enable_eks && var.create_prod_environment ? "${var.owner}_k8s_prod" : ""
 
   pipeline_tags = ["tofu-managed", var.owner]
 
-  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_monitored_service_dev]
+  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev]
 }
 
 ################################################################################

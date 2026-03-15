@@ -131,17 +131,19 @@ resource "harness_platform_pipeline" "k8s_canary" {
 }
 
 ################################################################################
-# Kubernetes Blue/Green Pipeline
+# Kubernetes Blue/Green + Canary Pipeline (2-stage)
+# Stage 1: Blue/Green deployment to Dev environment
+# Stage 2: Canary deployment to Prod environment
 ################################################################################
 
-resource "harness_platform_pipeline" "k8s_blue_green" {
+resource "harness_platform_pipeline" "k8s_blue_green_canary" {
   count       = var.create_blue_green_pipeline ? 1 : 0
   identifier  = var.blue_green_pipeline_id
   name        = var.blue_green_pipeline_name
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.blue_green_pipeline_description
-  tags        = ["deployment-type:kubernetes", "strategy:blue-green"]
+  tags        = ["deployment-type:kubernetes", "strategy:blue-green-canary"]
 
   yaml = <<-EOT
     pipeline:
@@ -152,12 +154,12 @@ resource "harness_platform_pipeline" "k8s_blue_green" {
       description: ${var.blue_green_pipeline_description}
       tags:
         deployment-type: kubernetes
-        strategy: blue-green
+        strategy: blue-green-canary
       stages:
         - stage:
-            name: Deploy to ${var.environment_name}
-            identifier: deploy_to_${replace(lower(var.environment_name), " ", "_")}
-            description: Blue/Green deployment to Kubernetes
+            name: BlueGreen to Dev
+            identifier: blue_green_dev
+            description: Blue-Green deployment to Dev environment
             type: Deployment
             spec:
               deploymentType: Kubernetes
@@ -187,14 +189,15 @@ resource "harness_platform_pipeline" "k8s_blue_green" {
                         skipDryRun: false
                   - step:
                       name: Approval
-                      identifier: approval
+                      identifier: dev_approval
                       type: HarnessApproval
                       timeout: 1d
                       spec:
                         approvalMessage: |
-                          Blue/Green deployment complete. Stage environment is running.
-                          Review metrics and logs before swapping to production.
-                          Approve to shift all traffic to new version.
+                          Blue/Green deployment to Dev complete.
+                          Stage environment is running the new version.
+                          Review metrics and logs before swapping traffic.
+                          Approve to shift all Dev traffic to new version.
                         includePipelineExecutionHistory: true
                         approvers:
                           userGroups:
@@ -208,11 +211,97 @@ resource "harness_platform_pipeline" "k8s_blue_green" {
                       timeout: 10m
                       spec:
                         skipDryRun: false
+                rollbackSteps: []
+            failureStrategies:
+              - onFailure:
+                  errors:
+                    - AllErrors
+                  action:
+                    type: StageRollback
+        - stage:
+            name: Canary to Prod
+            identifier: canary_prod
+            description: Canary deployment to Prod environment
+            type: Deployment
+            spec:
+              deploymentType: Kubernetes
+              service:
+                serviceRef: ${var.service_ref}
+                serviceInputs:
+                  serviceDefinition:
+                    type: Kubernetes
+                    spec:
+                      artifacts:
+                        primary:
+                          primaryArtifactRef: <+input>
+                          sources: <+input>
+              environment:
+                environmentRef: ${var.prod_environment_ref}
+                deployToAll: false
+                infrastructureDefinitions:
+                  - identifier: ${var.prod_infrastructure_ref}
+              execution:
+                steps:
+                  - stepGroup:
+                      name: Canary Deployment
+                      identifier: canary_deployment
+                      steps:
+                        - step:
+                            name: Canary Deployment
+                            identifier: canary_deploy
+                            type: K8sCanaryDeploy
+                            timeout: 10m
+                            spec:
+                              instanceSelection:
+                                type: Count
+                                spec:
+                                  count: ${var.canary_instance_count}
+                              skipDryRun: false
+                        - step:
+                            name: Prod Approval
+                            identifier: prod_approval
+                            type: HarnessApproval
+                            timeout: 1d
+                            spec:
+                              approvalMessage: |
+                                Canary deployment to Prod complete.
+                                ${var.canary_instance_count} canary instance(s) running.
+                                Review metrics and logs before full rollout.
+                                Approve to deploy to all Prod instances.
+                              includePipelineExecutionHistory: true
+                              approvers:
+                                userGroups:
+                                  - _project_all_users
+                                minimumCount: 1
+                                disallowPipelineExecutor: false
+                  - stepGroup:
+                      name: Primary Deployment
+                      identifier: primary_deployment
+                      steps:
+                        - step:
+                            name: Canary Delete
+                            identifier: canary_delete
+                            type: K8sCanaryDelete
+                            timeout: 10m
+                            spec: {}
+                        - step:
+                            name: Rolling Deployment
+                            identifier: rolling_deploy
+                            type: K8sRollingDeploy
+                            timeout: 10m
+                            spec:
+                              skipDryRun: false
                 rollbackSteps:
                   - step:
-                      name: Swap Rollback
-                      identifier: swap_rollback
-                      type: K8sBlueGreenRollback
+                      name: Canary Delete
+                      identifier: rollback_canary_delete
+                      type: K8sCanaryDelete
+                      timeout: 10m
+                      spec: {}
+                  - step:
+                      name: Rolling Rollback
+                      identifier: rolling_rollback
+                      type: K8sRollingRollback
                       timeout: 10m
                       spec: {}
             failureStrategies:

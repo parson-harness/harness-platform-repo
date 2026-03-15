@@ -91,31 +91,43 @@ variable "monitored_service_ref" {
 }
 
 ################################################################################
-# Blue/Green Pipeline Variables
+# Blue/Green + Canary Pipeline Variables (2-stage)
 ################################################################################
 
 variable "create_blue_green_pipeline" {
-  description = "Create Blue/Green deployment pipeline"
+  description = "Create Blue/Green + Canary deployment pipeline (2-stage: B/G to Dev, Canary to Prod)"
   type        = bool
   default     = false
 }
 
 variable "blue_green_pipeline_id" {
-  description = "Identifier for Blue/Green pipeline"
+  description = "Identifier for Blue/Green + Canary pipeline"
   type        = string
-  default     = "k8s_blue_green_deploy"
+  default     = "k8s_blue_green_canary_deploy"
 }
 
 variable "blue_green_pipeline_name" {
-  description = "Name for Blue/Green pipeline"
+  description = "Name for Blue/Green + Canary pipeline"
   type        = string
-  default     = "K8s Blue/Green Deploy"
+  default     = "K8s Blue/Green + Canary Deploy"
 }
 
 variable "blue_green_pipeline_description" {
-  description = "Description for Blue/Green pipeline"
+  description = "Description for Blue/Green + Canary pipeline"
   type        = string
-  default     = "Deploys to Kubernetes using Blue/Green strategy"
+  default     = "2-stage deployment: Blue/Green to Dev, then Canary to Prod"
+}
+
+variable "prod_environment_ref" {
+  description = "Reference to the Prod Harness environment (for 2nd stage)"
+  type        = string
+  default     = ""
+}
+
+variable "prod_infrastructure_ref" {
+  description = "Reference to the Prod infrastructure definition (for 2nd stage)"
+  type        = string
+  default     = ""
 }
 
 ################################################################################
