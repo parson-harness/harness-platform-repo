@@ -8,8 +8,7 @@ replicas: 2
 containerPort: 8080
 
 # Image pull secret for private registries (HAR)
-# Note: <+artifact.imagePullSecret> doesn't work with HAR - using manually created secret
-imagePullSecretName: har-pull-secret
+dockercfg: <+artifact.imagePullSecret>
 
 # Harness-provided values
 image: <+artifact.image>

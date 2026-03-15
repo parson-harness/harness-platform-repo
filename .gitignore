@@ -51,3 +51,6 @@ terraform.rc
 # Test output
 test-output/
 surefire-reports/
+tofu/bootstrap/dockercfg
+tofu/bootstrap/secret.yml
+tofu/bootstrap/temp_dockercfg
