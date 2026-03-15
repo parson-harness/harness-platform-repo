@@ -7,9 +7,9 @@ namespace: <+infra.namespace>
 replicas: 2
 containerPort: 8080
 
-# Image pull secrets for private registries (HAR)
-imagePullSecrets:
-  - name: har-pull-secret
+# Image pull secret for private registries (HAR)
+# Uses Harness expression to automatically provide pull secret from artifact source
+dockercfg: <+artifact.imagePullSecret>
 
 # Harness-provided values
 image: <+artifact.image>
