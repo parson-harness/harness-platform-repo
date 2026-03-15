@@ -8,48 +8,33 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/group.name: harness-demo
+    alb.ingress.kubernetes.io/group.order: "100"
     alb.ingress.kubernetes.io/healthcheck-path: /actuator/health
     alb.ingress.kubernetes.io/healthcheck-interval-seconds: "15"
     alb.ingress.kubernetes.io/healthcheck-timeout-seconds: "5"
     alb.ingress.kubernetes.io/healthy-threshold-count: "2"
     alb.ingress.kubernetes.io/unhealthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/conditions.stage-service: >
+      [{"field":"query-string","queryStringConfig":{"values":[{"key":"stage","value":"true"}]}}]
+    alb.ingress.kubernetes.io/actions.stage-service: >
+      {"type":"forward","forwardConfig":{"targetGroups":[{"serviceName":"{{.Values.name}}-service-stage","servicePort":80}]}}
 spec:
   rules:
     - http:
         paths:
-          # Primary service - production traffic
+          # Stage service - query string routing (?stage=true)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: stage-service
+                port:
+                  name: use-annotation
+          # Primary service - production traffic (default, lower priority)
           - path: /
             pathType: Prefix
             backend:
               service:
                 name: {{.Values.name}}-service
-                port:
-                  number: 80
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: {{.Values.name}}-ingress-stage
-  namespace: {{.Values.namespace}}
-  annotations:
-    kubernetes.io/ingress.class: alb
-    alb.ingress.kubernetes.io/scheme: internet-facing
-    alb.ingress.kubernetes.io/target-type: ip
-    alb.ingress.kubernetes.io/group.name: harness-demo
-    alb.ingress.kubernetes.io/group.order: "1"
-    alb.ingress.kubernetes.io/healthcheck-path: /actuator/health
-    alb.ingress.kubernetes.io/conditions.stage-forward: |
-      [{"field":"query-string","queryStringConfig":{"values":[{"key":"stage","value":"true"}]}}]
-    alb.ingress.kubernetes.io/actions.stage-forward: |
-      {"type":"forward","targetGroupArn":"{{.Values.name}}-service-stage"}
-spec:
-  rules:
-    - http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: {{.Values.name}}-service-stage
                 port:
                   number: 80
