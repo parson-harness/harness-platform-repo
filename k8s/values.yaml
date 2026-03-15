@@ -1,14 +1,22 @@
 # Default values for Harness demo app deployment
 # These can be overridden in Harness pipelines using service variables
 
-name: harness-demo-app
+# Application metadata
+name: <+service.name.replace(" ", "")>
+namespace: <+infra.namespace>
 replicas: 2
 containerPort: 8080
+
+# Harness-provided values
+image: <+artifact.image>
+service_identifier: <+service.identifier>
+env_identifier: <+env.identifier>
+build_id: <+pipeline.executionId>
 servicePort: 80
 serviceType: ClusterIP
 
 # Deployment variant for blue/green or canary
-variant: blue
+variant: <+service.name.replace(" ", "")>
 variantColor: "#3B82F6"
 
 # Ingress configuration

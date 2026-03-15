@@ -2,8 +2,15 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{.Values.name}}-deployment
+  namespace: {{.Values.namespace}}
   labels:
     app: {{.Values.name}}
+    {{- if .Values.service_identifier }}
+    harness.io/serviceIdentifier: {{ .Values.service_identifier | quote }}
+    {{- end }}
+    {{- if .Values.env_identifier }}
+    harness.io/envIdentifier: {{ .Values.env_identifier | quote }}
+    {{- end }}
 spec:
   replicas: {{int .Values.replicas}}
   selector:
@@ -13,30 +20,27 @@ spec:
     metadata:
       labels:
         app: {{.Values.name}}
+        {{- if .Values.service_identifier }}
+        harness.io/serviceIdentifier: {{ .Values.service_identifier | quote }}
+        {{- end }}
+        {{- if .Values.env_identifier }}
+        harness.io/envIdentifier: {{ .Values.env_identifier | quote }}
+        {{- end }}
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
         prometheus.io/path: "/actuator/prometheus"
-        harness.io/service: <+service.name>
-        harness.io/environment: <+env.name>
-        harness.io/build: <+pipeline.executionId>
     spec:
       containers:
         - name: {{.Values.name}}
-          image: <+artifact.image>
+          image: {{ .Values.image | quote }}
           imagePullPolicy: Always
           ports:
             - containerPort: {{int .Values.containerPort}}
               name: http
           env:
-            - name: APP_VERSION
-              value: <+artifact.tag>
-            - name: APP_ENVIRONMENT
-              value: <+env.name>
-            - name: SERVICE_NAME
-              value: <+service.name>
-            - name: PIPELINE_ID
-              value: <+pipeline.executionId>
+            - name: BUILD_ID
+              value: "{{ .Values.build_id }}"
             - name: DEPLOYMENT_VARIANT
               value: {{.Values.variant}}
             - name: VARIANT_COLOR
@@ -83,9 +87,9 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{.Values.name}}-service
+  namespace: {{.Values.namespace}}
   labels:
     app: {{.Values.name}}
-    harness.io/service: <+service.name>
 spec:
   type: {{.Values.serviceType}}
   ports:
