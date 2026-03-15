@@ -4,9 +4,29 @@ This directory contains Kubernetes manifests with Harness templating for deployi
 
 ## Files
 
-- **`deployment-templated.yaml`** - Deployment, Service, and Ingress with Harness Go templating
-- **`values.yaml`** - Default values for template variables
-- **`deployment.yaml`** - Original static manifest (for reference)
+| File | Purpose |
+|------|---------|
+| `deployment-templated.yaml` | Main manifest - Deployment + Services (primary & stage) |
+| `ingress.yaml` | ALB Ingress with `?stage=true` routing for blue/green |
+| `values.yaml` | Default values for template variables |
+| `servicemonitor.yaml` | Prometheus ServiceMonitor for metrics |
+
+## Deployment Strategies
+
+Harness manages deployment strategies via Kubernetes labels:
+
+| Strategy | Label | UI Indicator |
+|----------|-------|--------------|
+| Blue/Green | `harness.io/color: blue\|green` | 🔵 BLUE / 🟢 GREEN |
+| Canary | `harness.io/track: canary\|stable` | 🐤 CANARY / 🟣 STABLE |
+| Rolling | (none) | Standard rolling update |
+
+### Blue/Green Validation
+- Primary URL: `http://<alb-dns>/`
+- Stage URL: `http://<alb-dns>/?stage=true`
+
+### Canary Validation
+- Refresh page multiple times to see traffic split between canary and stable pods
 
 ## Harness Templating Features
 
