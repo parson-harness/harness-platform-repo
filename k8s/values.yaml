@@ -20,7 +20,8 @@ variant: <+service.name.replace(" ", "").toLowerCase()>
 variantColor: "#3B82F6"
 
 # Ingress configuration
-ingressHost: harness-demo.example.com
+ingressEnabled: false
+ingressDomain: example.com
 
 # Resource limits
 resources:

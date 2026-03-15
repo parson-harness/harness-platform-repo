@@ -100,20 +100,18 @@ spec:
   selector:
     app: {{.Values.name}}
 ---
+{{- if .Values.ingressEnabled }}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: {{.Values.name}}-ingress
+  namespace: {{.Values.namespace}}
   annotations:
-    kubernetes.io/ingress.class: nginx
-    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/rewrite-target: /
 spec:
-  tls:
-    - hosts:
-        - {{.Values.ingressHost}}
-      secretName: {{.Values.name}}-tls
+  ingressClassName: nginx
   rules:
-    - host: {{.Values.ingressHost}}
+    - host: {{.Values.name}}.{{.Values.ingressDomain | default "example.com"}}
       http:
         paths:
           - path: /
@@ -123,3 +121,4 @@ spec:
                 name: {{.Values.name}}-service
                 port:
                   number: {{int .Values.servicePort}}
+{{- end }}
