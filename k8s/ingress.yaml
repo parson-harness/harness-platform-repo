@@ -25,8 +25,28 @@ spec:
                 name: {{.Values.name}}-service
                 port:
                   number: 80
-          # Stage service - for testing blue/green before swap
-          - path: /stage
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{.Values.name}}-ingress-stage
+  namespace: {{.Values.namespace}}
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/group.name: harness-demo
+    alb.ingress.kubernetes.io/group.order: "1"
+    alb.ingress.kubernetes.io/healthcheck-path: /actuator/health
+    alb.ingress.kubernetes.io/conditions.stage-forward: |
+      [{"field":"query-string","queryStringConfig":{"values":[{"key":"stage","value":"true"}]}}]
+    alb.ingress.kubernetes.io/actions.stage-forward: |
+      {"type":"forward","targetGroupArn":"{{.Values.name}}-service-stage"}
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /
             pathType: Prefix
             backend:
               service:

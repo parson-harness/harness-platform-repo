@@ -122,6 +122,27 @@ metadata:
   namespace: {{.Values.namespace}}
   labels:
     app: {{.Values.name}}
+  annotations:
+    harness.io/primary-service: "true"
+spec:
+  type: {{.Values.serviceType}}
+  ports:
+    - port: {{int .Values.servicePort}}
+      targetPort: {{int .Values.containerPort}}
+      protocol: TCP
+      name: http
+  selector:
+    app: {{.Values.name}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{.Values.name}}-service-stage
+  namespace: {{.Values.namespace}}
+  labels:
+    app: {{.Values.name}}
+  annotations:
+    harness.io/stage-service: "true"
 spec:
   type: {{.Values.serviceType}}
   ports:
