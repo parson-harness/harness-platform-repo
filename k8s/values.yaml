@@ -27,8 +27,11 @@ variant: "canary"
 variantColor: "#EAB308"
 
 # Ingress configuration
-ingressEnabled: true
+ingressEnabled: false
 ingressDomain: elb.us-east-1.amazonaws.com
+
+# ALB Target Group for automatic pod registration
+targetGroupArn: "arn:aws:elasticloadbalancing:us-east-1:759984737373:targetgroup/harness-demo-parson-eks/d020ddacef427f78"
 
 # Resource limits
 resources:
