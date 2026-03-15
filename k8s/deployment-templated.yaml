@@ -70,9 +70,9 @@ spec:
             - name: DEPLOYMENT_VARIANT
               valueFrom:
                 fieldRef:
-                  fieldPath: metadata.labels['harness.io/track']
+                  fieldPath: metadata.labels['harness.io/color']
             - name: VARIANT_COLOR
-              value: {{.Values.variantColor}}
+              value: "{{.Values.variantColor}}"
             - name: APP_ENVIRONMENT
               value: "{{ .Values.env_identifier }}"
             - name: DEPLOYMENT_TARGET
