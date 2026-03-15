@@ -482,9 +482,9 @@ variable "prometheus_url" {
 ################################################################################
 
 variable "import_to_harness_code" {
-  description = "Import the demo app repository to Harness Code for self-contained POV"
+  description = "Import the demo app repository to Harness Code for self-contained POV (recommended for customer POVs)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "source_github_repo" {

@@ -59,14 +59,31 @@ variable "manifest_type" {
   default     = "K8sManifest"
 }
 
+variable "manifest_store_type" {
+  description = "Manifest store type: Github, HarnessCode, Bitbucket, GitLab"
+  type        = string
+  default     = "HarnessCode"
+
+  validation {
+    condition     = contains(["Github", "HarnessCode", "Bitbucket", "GitLab"], var.manifest_store_type)
+    error_message = "manifest_store_type must be one of: Github, HarnessCode, Bitbucket, GitLab"
+  }
+}
+
 variable "git_connector_ref" {
-  description = "Reference to Git connector for manifests"
+  description = "Reference to Git connector for manifests (not needed for HarnessCode)"
   type        = string
   default     = ""
 }
 
 variable "git_repo_name" {
-  description = "Git repository name"
+  description = "Git repository name (for HarnessCode, use format: org.repo-id or account.repo-id)"
+  type        = string
+  default     = ""
+}
+
+variable "harness_code_repo_name" {
+  description = "Harness Code repository name (format: org.repo-id or project.repo-id)"
   type        = string
   default     = ""
 }

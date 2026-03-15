@@ -17,6 +17,36 @@ locals {
   # Tags formatted for YAML
   tags_yaml = join("\n", [for tag in var.tags : "    ${split(":", tag)[0]}: \"${try(split(":", tag)[1], "")}\""])
 
+  # Determine repo name based on store type
+  effective_repo_name = var.manifest_store_type == "HarnessCode" ? var.harness_code_repo_name : var.git_repo_name
+
+  # Manifest store spec - different for HarnessCode vs external Git
+  manifest_store_harness_code = <<-EOT
+              store:
+                type: HarnessCode
+                spec:
+                  gitFetchType: Branch
+                  branch: ${var.git_branch}
+                  paths:
+${join("\n", [for path in var.manifest_paths : "                    - ${path}"])}
+                  repoName: ${local.effective_repo_name}
+EOT
+
+  manifest_store_github = <<-EOT
+              store:
+                type: Github
+                spec:
+                  connectorRef: ${var.git_connector_ref}
+                  gitFetchType: Branch
+                  branch: ${var.git_branch}
+                  paths:
+${join("\n", [for path in var.manifest_paths : "                    - ${path}"])}
+                  repoName: ${local.effective_repo_name}
+EOT
+
+  # Select manifest store based on type
+  manifest_store_spec = var.manifest_store_type == "HarnessCode" ? local.manifest_store_harness_code : local.manifest_store_github
+
   # HAR service YAML (using heredoc to avoid yamlencode quoting)
   har_service_yaml = <<-EOT
 service:
@@ -46,17 +76,11 @@ ${local.tags_yaml}
             identifier: k8s_manifests
             type: ${var.manifest_type}
             spec:
-              store:
-                type: Github
-                spec:
-                  connectorRef: ${var.git_connector_ref}
-                  gitFetchType: Branch
-                  branch: ${var.git_branch}
-                  paths:
-${join("\n", [for path in var.manifest_paths : "                    - ${path}"])}
-                  repoName: ${var.git_repo_name}
+${local.manifest_store_spec}
               valuesPaths:
                 - k8s/values.yaml
+              skipResourceVersioning: false
+              enableDeclarativeRollback: false
       variables: []
 EOT
 
@@ -87,17 +111,11 @@ ${local.tags_yaml}
             identifier: k8s_manifests
             type: ${var.manifest_type}
             spec:
-              store:
-                type: Github
-                spec:
-                  connectorRef: ${var.git_connector_ref}
-                  gitFetchType: Branch
-                  branch: ${var.git_branch}
-                  paths:
-${join("\n", [for path in var.manifest_paths : "                    - ${path}"])}
-                  repoName: ${var.git_repo_name}
+${local.manifest_store_spec}
               valuesPaths:
                 - k8s/values.yaml
+              skipResourceVersioning: false
+              enableDeclarativeRollback: false
       variables: []
 EOT
 }

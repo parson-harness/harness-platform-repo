@@ -371,8 +371,8 @@ module "harness_connectors" {
   docker_connector_name   = "${title(var.owner)} ECR"
   docker_registry_url     = var.artifact_registry_type == "ecr" && length(module.ecr) > 0 ? module.ecr[0].repository_url : ""
 
-  # GitHub Connector
-  create_github_connector = var.github_token_ref != ""
+  # GitHub Connector (not needed when using Harness Code)
+  create_github_connector = var.import_to_harness_code ? false : (var.github_token_ref != "")
   github_connector_id     = "${var.owner}_github_reference_architecture"
   github_connector_name   = "${title(var.owner)} GitHub Reference Architecture"
   github_url              = var.github_url
@@ -406,11 +406,19 @@ module "harness_service" {
   deployment_type = local.primary_deployment_type
 
   # Manifest configuration (K8s/Helm)
-  manifest_type     = local.enable_eks ? "K8sManifest" : "values"
-  git_connector_ref = var.create_connectors ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
-  git_repo_name     = var.service_git_repo
+  manifest_type       = local.enable_eks ? "K8sManifest" : "values"
+  manifest_store_type = var.import_to_harness_code ? "HarnessCode" : "Github"
+  
+  # Git connector (only used when not using Harness Code)
+  git_connector_ref = var.import_to_harness_code ? "" : (
+    var.create_connectors ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+  )
+  git_repo_name     = var.import_to_harness_code ? "" : var.service_git_repo
   git_branch        = var.service_git_branch
   manifest_paths    = var.service_manifest_paths
+  
+  # Harness Code repo (used when import_to_harness_code = true)
+  harness_code_repo_name = var.import_to_harness_code ? "${var.owner}-demo-app" : ""
 
   # ECS manifest paths (if ECS target)
   ecs_task_definition_paths    = local.enable_ecs ? var.ecs_task_definition_paths : []
