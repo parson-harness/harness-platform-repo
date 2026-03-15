@@ -2,7 +2,7 @@
 # These can be overridden in Harness pipelines using service variables
 
 # Application metadata
-name: <+service.name.replace(" ", "")>
+name: <+service.name.replace(" ", "").toLowerCase()>
 namespace: <+infra.namespace>
 replicas: 2
 containerPort: 8080
@@ -16,7 +16,7 @@ servicePort: 80
 serviceType: ClusterIP
 
 # Deployment variant for blue/green or canary
-variant: <+service.name.replace(" ", "")>
+variant: <+service.name.replace(" ", "").toLowerCase()>
 variantColor: "#3B82F6"
 
 # Ingress configuration
