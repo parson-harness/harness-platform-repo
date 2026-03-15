@@ -37,12 +37,18 @@ NAMESPACE="${1:-}"
 HARNESS_API_KEY="${HARNESS_API_KEY:-$(get_tfvar 'harness_api_key')}"
 HARNESS_ACCOUNT_ID="${HARNESS_ACCOUNT_ID:-$(get_tfvar 'harness_account_id')}"
 OWNER="${OWNER:-$(get_tfvar 'owner')}"
-EMAIL="${HARNESS_EMAIL:-${OWNER}@harness.io}"
+EMAIL="${HARNESS_EMAIL:-$(get_tfvar 'harness_api_key_email')}"
 
 # Validate required variables
 if [ -z "$HARNESS_API_KEY" ]; then
     echo -e "${RED}Error: HARNESS_API_KEY not set${NC}"
     echo "Set it via environment variable or in terraform.tfvars"
+    exit 1
+fi
+
+if [ -z "$EMAIL" ]; then
+    echo -e "${RED}Error: Email not set${NC}"
+    echo "Set HARNESS_EMAIL env var or harness_api_key_email in terraform.tfvars"
     exit 1
 fi
 

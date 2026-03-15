@@ -156,9 +156,14 @@ variable "harness_account_id" {
 }
 
 variable "harness_api_key" {
-  description = "Harness Platform API Key"
+  description = "Harness Platform API Key (PAT or SAT)"
   type        = string
   sensitive   = true
+}
+
+variable "harness_api_key_email" {
+  description = "Email address associated with the Harness API Key (required for HAR pull secrets)"
+  type        = string
 }
 
 variable "harness_delegate_token" {

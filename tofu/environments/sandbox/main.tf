@@ -504,7 +504,7 @@ locals {
   ]) : []
 
   # Generate the dockercfg JSON for HAR authentication
-  har_email       = "${var.owner}@harness.io"
+  har_email       = var.harness_api_key_email
   har_auth_string = base64encode("${local.har_email}:${var.harness_api_key}")
   har_dockercfg = jsonencode({
     "pkg.harness.io" = {
