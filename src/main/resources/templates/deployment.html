@@ -43,7 +43,7 @@
                 <span th:text="${config.deploymentVariant.toUpperCase()}">STABLE</span>
             </span>
             <span class="opacity-60">|</span>
-            <span th:text="'v' + ${config.version}">v1.0.0</span>
+            <span th:text="${config.version}">v1.0.0</span>
         </span>
     </div>
 
@@ -83,7 +83,7 @@
                     <div class="text-gray-400 uppercase tracking-widest mb-2 text-sm">Current Variant</div>
                     <div class="text-6xl font-black gradient-text pulse mb-4" th:text="${config.deploymentVariant}">STABLE</div>
                     <div class="flex justify-center items-center space-x-4">
-                        <span class="variant-badge px-4 py-2 rounded-full font-semibold" th:text="'v' + ${config.version}">v1.0.0</span>
+                        <span class="variant-badge px-4 py-2 rounded-full font-semibold" th:text="${config.version}">v1.0.0</span>
                         <span class="px-4 py-2 bg-white/10 rounded-full" th:text="${config.environment}">production</span>
                         <span class="px-4 py-2 bg-white/10 rounded-full" th:text="${config.deploymentTarget}">kubernetes</span>
                     </div>
@@ -108,8 +108,8 @@
                     <code class="text-xs text-green-300 mt-2 block">DEPLOYMENT_VARIANT=green</code>
                 </div>
                 <div class="bg-yellow-500/10 border-2 border-yellow-500/50 rounded-xl p-6 text-center"
-                     th:classappend="${config.deploymentVariant == 'canary'} ? 'ring-2 ring-yellow-400' : ''">
-                    <div class="text-4xl mb-3">🐤</div>
+                     th:classappend="${config.deploymentVariant == 'canary'} ? 'ring-4 ring-yellow-400 scale-105' : ''">
+                    <img src="/images/harness-canary.png" alt="Canary" class="h-16 w-auto mx-auto mb-3">
                     <h3 class="text-xl font-bold text-yellow-400 mb-2">Canary</h3>
                     <p class="text-gray-400 text-sm">Testing with subset of traffic</p>
                     <code class="text-xs text-yellow-300 mt-2 block">DEPLOYMENT_VARIANT=canary</code>
@@ -194,21 +194,21 @@
                     Configuration
                 </h3>
                 <pre class="text-green-400 text-sm overflow-x-auto"><code># Application
-APP_NAME="My Application"
-APP_VERSION=1.0.0
-APP_ENVIRONMENT=production
+APP_NAME="<span th:text="${config.appName}">My Application</span>"
+APP_VERSION=<span th:text="${config.version}">1.0.0</span>
+APP_ENVIRONMENT=<span th:text="${config.environment}">production</span>
 
 # Deployment
-DEPLOYMENT_VARIANT=blue
-VARIANT_COLOR=#3B82F6
-DEPLOYMENT_TARGET=kubernetes
+DEPLOYMENT_VARIANT=<span th:text="${config.deploymentVariant}">blue</span>
+VARIANT_COLOR=<span th:text="${config.variantColor}">#3B82F6</span>
+DEPLOYMENT_TARGET=<span th:text="${config.deploymentTarget}">kubernetes</span>
 
 # Branding
-CUSTOMER_LOGO="https://example.com/logo.png"
+CUSTOMER_LOGO="<span th:text="${config.customerLogo}">https://example.com/logo.png</span>"
 
 # Infrastructure
-NAMESPACE=production
-REGION=us-east-1</code></pre>
+NAMESPACE=<span th:text="${config.namespace}">production</span>
+REGION=<span th:text="${config.region}">us-east-1</span></code></pre>
             </div>
         </div>
     </section>
@@ -216,7 +216,7 @@ REGION=us-east-1</code></pre>
     <!-- Footer -->
     <footer class="py-8 border-t border-white/10">
         <div class="max-w-7xl mx-auto px-6 text-center text-gray-500 text-sm">
-            <span th:text="'v' + ${config.version}">v1.0.0</span> &middot;
+            <span th:text="${config.version}">v1.0.0</span> &middot;
             <span th:text="${config.environment}">production</span>
         </div>
     </footer>

@@ -17,14 +17,14 @@ build_id: <+pipeline.executionId>
 appName: "Harness Demo Application"
 appVersion: <+artifact.tag>
 customerName: "Harness Customer"
-customerLogo: "https://app.harness.io/static/harness-logo-white.svg"
+customerLogo: "https://developer.harness.io/img/logo_harness.svg"
 deploymentStrategy: "canary"
 servicePort: 80
 serviceType: ClusterIP
 
 # Deployment variant for blue/green or canary
-variant: <+service.name.replace(" ", "").toLowerCase()>
-variantColor: "#3B82F6"
+variant: "canary"
+variantColor: "#EAB308"
 
 # Ingress configuration
 ingressEnabled: true
