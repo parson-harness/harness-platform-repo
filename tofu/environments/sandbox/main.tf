@@ -28,6 +28,10 @@ terraform {
       source  = "hashicorp/http"
       version = "~> 3.4"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 
   # Uncomment and configure for remote state (run bootstrap first)
@@ -289,9 +293,14 @@ module "irsa_delegate_role" {
 # Harness Delegate Token (project-scoped, created via API)
 ################################################################################
 
+resource "random_id" "delegate_token_suffix" {
+  count       = var.create_delegate ? 1 : 0
+  byte_length = 4
+}
+
 resource "harness_platform_delegatetoken" "delegate" {
   count      = var.create_delegate ? 1 : 0
-  name       = "${var.owner}-delegate-token"
+  name       = "${var.owner}-delegate-token-${random_id.delegate_token_suffix[0].hex}"
   account_id = var.harness_account_id
   org_id     = local.resolved_org_id
   project_id = local.resolved_project_id
