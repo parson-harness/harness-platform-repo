@@ -175,6 +175,14 @@ pipeline:
             steps:
               - step:
                   type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              
+              - step:
+                  type: IACMTerraformPlugin
                   name: Apply
                   identifier: apply
                   timeout: 30m
