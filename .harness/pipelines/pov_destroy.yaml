@@ -8,12 +8,90 @@ pipeline:
     pov: "true"
     iacm: "true"
   
+  # Pipeline variables - must match workspace variable references
   variables:
+    # Required inputs
     - name: owner
       type: String
-      description: "Owner name of the POV to destroy"
+      description: "Owner name (lowercase, used for resource naming)"
       required: true
       value: <+input>
+    
+    - name: harness_account_id
+      type: String
+      description: "Target Harness Account ID"
+      required: true
+      value: <+input>
+    
+    - name: harness_endpoint
+      type: String
+      description: "Harness platform endpoint"
+      required: true
+      value: <+input>.default(https://app.harness.io)
+    
+    - name: harness_api_key
+      type: Secret
+      description: "Harness Platform API Key (PAT or SAT)"
+      required: true
+      value: <+input>
+    
+    - name: harness_api_key_email
+      type: String
+      description: "Email associated with the API key"
+      required: true
+      value: <+input>
+    
+    # Deployment target selection
+    - name: deployment_targets
+      type: String
+      description: "Deployment targets (comma-separated: eks,ecs,lambda)"
+      required: true
+      value: <+input>.default(eks)
+    
+    # Organization/Project configuration
+    - name: create_harness_org
+      type: String
+      description: "Create new org (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    - name: harness_org_id
+      type: String
+      description: "Existing Harness Org ID"
+      required: true
+      value: <+input>
+    
+    - name: create_harness_project
+      type: String
+      description: "Create new project (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    - name: harness_project_id
+      type: String
+      description: "Existing Harness Project ID"
+      required: true
+      value: <+input>
+    
+    # Cluster configuration
+    - name: create_eks_cluster
+      type: String
+      description: "Create new EKS cluster (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    - name: existing_cluster_name
+      type: String
+      description: "Existing EKS cluster name (if not creating new)"
+      required: false
+      value: <+input>
+    
+    # GitHub connector (optional)
+    - name: github_token_ref
+      type: String
+      description: "Reference to GitHub PAT secret (e.g., account.github_pat)"
+      required: false
+      value: <+input>.default("")
     
     - name: force_delete_service
       type: String
