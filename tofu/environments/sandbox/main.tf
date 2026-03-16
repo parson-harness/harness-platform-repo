@@ -358,7 +358,7 @@ module "harness_connectors" {
   aws_connector_id            = "${var.owner}_aws_reference_architecture"
   aws_connector_name          = "${title(var.owner)} AWS Reference Architecture"
   aws_connector_description   = "AWS connector for ${title(var.owner)} sandbox Reference Architecture (irsa)"
-  connector_tags              = ["tofu-managed:true", "harness-sandbox:true"]
+  connector_tags              = ["tofu-managed:true", "harness-sandbox:true", "owner:${var.owner}"]
   aws_auth_type               = var.enable_irsa ? "irsa" : "delegate"
   aws_region                  = var.aws_region
   enable_cross_account_access = var.enable_cross_account_access
