@@ -73,6 +73,25 @@ pipeline:
       required: true
       value: <+input>
     
+    # Harness resource creation
+    - name: create_harness_environment
+      type: String
+      description: "Create Harness environment (true/false)"
+      required: false
+      value: <+input>.default(true)
+    
+    - name: create_prod_environment
+      type: String
+      description: "Create production environment (true/false)"
+      required: false
+      value: <+input>.default(true)
+    
+    - name: create_delegate
+      type: String
+      description: "Create Harness delegate (true/false)"
+      required: false
+      value: <+input>.default(true)
+    
     # Cluster configuration
     - name: create_eks_cluster
       type: String
