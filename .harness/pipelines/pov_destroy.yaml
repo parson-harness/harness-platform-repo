@@ -1,0 +1,169 @@
+pipeline:
+  name: POV Destroy
+  identifier: pov_destroy
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: "Destroy a POV-in-a-box environment using IACM"
+  tags:
+    pov: "true"
+    iacm: "true"
+  
+  variables:
+    - name: owner
+      type: String
+      description: "Owner name of the POV to destroy"
+      required: true
+      value: <+input>
+    
+    - name: force_delete_service
+      type: String
+      description: "Force delete service even if it has active instances (true/false)"
+      required: false
+      value: <+input>.default(false)
+
+  stages:
+    # Stage 1: Pre-destroy cleanup
+    - stage:
+        name: Pre-Destroy Cleanup
+        identifier: pre_destroy_cleanup
+        description: "Clean up resources that block tofu destroy"
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Delete Running Deployments
+                  identifier: delete_deployments
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Pre-Destroy Cleanup ==="
+                          echo "Owner: <+pipeline.variables.owner>"
+                          echo ""
+                          echo "This step would delete running deployments in:"
+                          echo "  - harness-demo-<+pipeline.variables.owner>"
+                          echo "  - harness-demo-<+pipeline.variables.owner>-prod"
+                          echo ""
+                          echo "In a full implementation, this would:"
+                          echo "1. kubectl delete deployment -n harness-demo-<+pipeline.variables.owner> --all"
+                          echo "2. kubectl delete deployment -n harness-demo-<+pipeline.variables.owner>-prod --all"
+                          echo "3. Wait for pods to terminate"
+                          echo ""
+                          echo "For now, manual cleanup may be needed if destroy fails on service deletion."
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 5m
+
+    # Stage 2: Plan the destroy
+    - stage:
+        name: Plan Destroy
+        identifier: plan_destroy
+        description: "Run tofu plan -destroy to preview destruction"
+        type: IACM
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+input>
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Plan Destroy
+                  identifier: plan_destroy
+                  timeout: 15m
+                  spec:
+                    command: plan-destroy
+              
+              - step:
+                  type: Run
+                  name: Show Destroy Plan
+                  identifier: show_destroy_plan
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=== POV Destroy Plan ==="
+                      echo "Owner: <+pipeline.variables.owner>"
+                      echo ""
+                      echo "The following resources will be DESTROYED:"
+                      echo ""
+                      
+                      if [ -f /harness/plan.json ]; then
+                        jq -r '.resource_changes[] | select(.change.actions | contains(["delete"])) | "  - \(.type).\(.name)"' /harness/plan.json 2>/dev/null || echo "  (unable to parse plan)"
+                      fi
+                      
+                      echo ""
+                      echo "⚠️  This action is IRREVERSIBLE!"
+              
+              - step:
+                  type: IACMApproval
+                  name: Approve Destroy
+                  identifier: approve_destroy
+                  spec:
+                    autoApprove: false
+                  timeout: 1d
+
+    # Stage 3: Execute the destroy
+    - stage:
+        name: Execute Destroy
+        identifier: execute_destroy
+        description: "Execute tofu destroy"
+        type: IACM
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+input>
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Destroy
+                  identifier: destroy
+                  timeout: 30m
+                  spec:
+                    command: destroy
+              
+              - step:
+                  type: Run
+                  name: Cleanup Complete
+                  identifier: cleanup_complete
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=== POV Destroy Complete ==="
+                      echo ""
+                      echo "The POV environment for '<+pipeline.variables.owner>' has been destroyed."
+                      echo ""
+                      echo "Note: Some resources may need manual cleanup if they were:"
+                      echo "  - Referenced by other entities (connectors)"
+                      echo "  - Had active instances (services)"
+                      echo ""
+                      echo "Check the Harness UI to verify all resources are removed."
