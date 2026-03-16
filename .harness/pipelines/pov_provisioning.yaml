@@ -1,0 +1,205 @@
+pipeline:
+  name: POV Provisioning
+  identifier: pov_provisioning
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: "Provision a new POV-in-a-box environment using IACM"
+  tags:
+    pov: "true"
+    iacm: "true"
+  
+  # Pipeline variables - these become the "form inputs" for POV provisioning
+  variables:
+    # Required inputs
+    - name: owner
+      type: String
+      description: "Owner name (lowercase, used for resource naming)"
+      required: true
+      value: <+input>
+    
+    - name: harness_account_id
+      type: String
+      description: "Target Harness Account ID"
+      required: true
+      value: <+input>
+    
+    - name: harness_endpoint
+      type: String
+      description: "Harness platform endpoint"
+      required: true
+      value: <+input>.default(https://app.harness.io)
+    
+    - name: harness_api_key
+      type: Secret
+      description: "Harness Platform API Key (PAT or SAT)"
+      required: true
+      value: <+input>
+    
+    - name: harness_api_key_email
+      type: String
+      description: "Email associated with the API key"
+      required: true
+      value: <+input>
+    
+    # Deployment target selection
+    - name: deployment_targets
+      type: String
+      description: "Deployment targets (comma-separated: eks,ecs,lambda)"
+      required: true
+      value: <+input>.default(eks)
+    
+    # Organization/Project configuration
+    - name: create_harness_org
+      type: String
+      description: "Create new org (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    - name: harness_org_id
+      type: String
+      description: "Existing Harness Org ID"
+      required: true
+      value: <+input>
+    
+    - name: create_harness_project
+      type: String
+      description: "Create new project (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    - name: harness_project_id
+      type: String
+      description: "Existing Harness Project ID"
+      required: true
+      value: <+input>
+    
+    # Cluster configuration
+    - name: create_eks_cluster
+      type: String
+      description: "Create new EKS cluster (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    - name: existing_cluster_name
+      type: String
+      description: "Existing EKS cluster name (if not creating new)"
+      required: false
+      value: <+input>
+    
+    # GitHub connector (optional)
+    - name: github_token_ref
+      type: String
+      description: "Reference to GitHub PAT secret (e.g., account.github_pat)"
+      required: false
+      value: <+input>.default("")
+
+  stages:
+    # Stage 1: Plan the infrastructure
+    - stage:
+        name: Plan Infrastructure
+        identifier: plan_infrastructure
+        description: "Run tofu plan to preview changes"
+        type: IACM
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+input>
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Plan
+                  identifier: plan
+                  timeout: 15m
+                  spec:
+                    command: plan
+              
+              - step:
+                  type: Run
+                  name: Show Plan Summary
+                  identifier: show_plan_summary
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=== POV Provisioning Plan Summary ==="
+                      echo "Owner: <+pipeline.variables.owner>"
+                      echo "Account: <+pipeline.variables.harness_account_id>"
+                      echo "Org: <+pipeline.variables.harness_org_id>"
+                      echo "Project: <+pipeline.variables.harness_project_id>"
+                      echo "Deployment Targets: <+pipeline.variables.deployment_targets>"
+                      echo "Create EKS Cluster: <+pipeline.variables.create_eks_cluster>"
+                      echo "Existing Cluster: <+pipeline.variables.existing_cluster_name>"
+                      echo "======================================="
+                      
+                      if [ -f /harness/plan.json ]; then
+                        echo ""
+                        echo "Resources to be created/modified:"
+                        jq -r '.resource_changes[] | select(.change.actions | contains(["create"]) or contains(["update"])) | "  \(.change.actions[0]): \(.type).\(.name)"' /harness/plan.json 2>/dev/null || echo "  (unable to parse plan)"
+                      fi
+              
+              - step:
+                  type: IACMApproval
+                  name: Approve Plan
+                  identifier: approve_plan
+                  spec:
+                    autoApprove: false
+                  timeout: 1d
+
+    # Stage 2: Apply the infrastructure
+    - stage:
+        name: Apply Infrastructure
+        identifier: apply_infrastructure
+        description: "Apply the approved plan"
+        type: IACM
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+input>
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Apply
+                  identifier: apply
+                  timeout: 30m
+                  spec:
+                    command: apply
+              
+              - step:
+                  type: Run
+                  name: Show Outputs
+                  identifier: show_outputs
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=== POV Provisioning Complete ==="
+                      echo ""
+                      echo "Your POV environment has been provisioned!"
+                      echo ""
+                      echo "Next steps:"
+                      echo "1. Access Harness at: <+pipeline.variables.harness_endpoint>"
+                      echo "2. Navigate to Org: <+pipeline.variables.harness_org_id>"
+                      echo "3. Navigate to Project: <+pipeline.variables.harness_project_id>"
+                      echo "4. Run a deployment pipeline to test"
+                      echo ""
+                      
+                      if [ -f /harness/outputs.json ]; then
+                        echo "Terraform Outputs:"
+                        cat /harness/outputs.json | jq '.'
+                      fi

@@ -21,7 +21,7 @@ locals {
   effective_repo_name = var.manifest_store_type == "HarnessCode" ? var.harness_code_repo_name : var.git_repo_name
 
   # Manifest store spec - different for HarnessCode vs external Git
-  manifest_store_harness_code = <<-EOT
+  manifest_store_harness_code = chomp(<<-EOT
               store:
                 type: HarnessCode
                 spec:
@@ -31,8 +31,9 @@ locals {
 ${join("\n", [for path in var.manifest_paths : "                    - ${path}"])}
                   repoName: ${local.effective_repo_name}
 EOT
+  )
 
-  manifest_store_github = <<-EOT
+  manifest_store_github = chomp(<<-EOT
               store:
                 type: Github
                 spec:
@@ -43,6 +44,7 @@ EOT
 ${join("\n", [for path in var.manifest_paths : "                    - ${path}"])}
                   repoName: ${local.effective_repo_name}
 EOT
+  )
 
   # Select manifest store based on type
   manifest_store_spec = var.manifest_store_type == "HarnessCode" ? local.manifest_store_harness_code : local.manifest_store_github
