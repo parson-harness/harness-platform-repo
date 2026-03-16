@@ -410,7 +410,7 @@ module "harness_service" {
   git_connector_ref = var.import_to_harness_code ? "" : (
     var.create_connectors ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   )
-  git_repo_name     = var.import_to_harness_code ? "" : var.service_git_repo
+  git_repo_name     = var.import_to_harness_code ? "" : var.source_github_repo
   git_branch        = var.service_git_branch
   manifest_paths    = var.service_manifest_paths
   
@@ -460,6 +460,7 @@ module "harness_environment_dev" {
 
   # Kubernetes infrastructure (created if eks in deployment_targets)
   create_k8s_infrastructure = local.enable_eks
+  create_k8s_namespace      = false  # Namespace created in main.tf
   k8s_infra_id              = "${var.owner}_k8s_dev"
   k8s_infra_name            = "${title(var.owner)} K8s Dev"
   k8s_connector_ref         = var.create_connectors ? "${var.owner}_k8s_reference_architecture" : var.k8s_connector_ref
@@ -497,6 +498,7 @@ module "harness_environment_prod" {
 
   # Kubernetes infrastructure (created if eks in deployment_targets)
   create_k8s_infrastructure = local.enable_eks
+  create_k8s_namespace      = false  # Namespace created in main.tf
   k8s_infra_id              = "${var.owner}_k8s_prod"
   k8s_infra_name            = "${title(var.owner)} K8s Prod"
   k8s_connector_ref         = var.create_connectors ? "${var.owner}_k8s_reference_architecture" : var.k8s_connector_ref
