@@ -54,6 +54,12 @@ data "aws_eks_cluster_auth" "existing" {
   name  = var.existing_cluster_name
 }
 
+# Auth token for newly created cluster
+data "aws_eks_cluster_auth" "new" {
+  count = var.create_eks_cluster ? 1 : 0
+  name  = module.eks[0].cluster_name
+}
+
 ################################################################################
 # Local Variables
 ################################################################################
@@ -65,6 +71,7 @@ locals {
   # Cluster connection details (from new or existing cluster)
   cluster_endpoint = var.create_eks_cluster ? module.eks[0].cluster_endpoint : data.aws_eks_cluster.existing[0].endpoint
   cluster_ca_data  = var.create_eks_cluster ? module.eks[0].cluster_certificate_authority_data : data.aws_eks_cluster.existing[0].certificate_authority[0].data
+  cluster_token    = var.create_eks_cluster ? data.aws_eks_cluster_auth.new[0].token : data.aws_eks_cluster_auth.existing[0].token
 
   common_tags = {
     Project     = "harness-demo"
@@ -92,24 +99,14 @@ provider "aws" {
 provider "kubernetes" {
   host                   = local.cluster_endpoint
   cluster_ca_certificate = base64decode(local.cluster_ca_data)
-
-  exec {
-    api_version = "client.authentication.k8s.io/v1beta1"
-    command     = "aws"
-    args        = ["eks", "get-token", "--cluster-name", local.cluster_name]
-  }
+  token                  = local.cluster_token
 }
 
 provider "helm" {
   kubernetes {
     host                   = local.cluster_endpoint
     cluster_ca_certificate = base64decode(local.cluster_ca_data)
-
-    exec {
-      api_version = "client.authentication.k8s.io/v1beta1"
-      command     = "aws"
-      args        = ["eks", "get-token", "--cluster-name", local.cluster_name]
-    }
+    token                  = local.cluster_token
   }
 }
 
