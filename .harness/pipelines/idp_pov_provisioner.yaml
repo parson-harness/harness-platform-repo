@@ -1,0 +1,441 @@
+pipeline:
+  name: IDP POV Provisioner
+  identifier: idp_pov_provisioner
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: "IDP-triggered pipeline that creates an IACM workspace and provisions a POV environment"
+  tags:
+    idp: "true"
+    pov: "true"
+    iacm: "true"
+  
+  # Pipeline variables - populated by IDP workflow
+  variables:
+    # POV Identity
+    - name: owner
+      type: String
+      description: "Owner name (lowercase, used for resource naming and workspace ID)"
+      required: true
+      value: <+input>
+    
+    # Harness Configuration
+    - name: harness_account_id
+      type: String
+      description: "Target Harness Account ID"
+      required: true
+      value: <+account.identifier>
+    
+    - name: harness_endpoint
+      type: String
+      description: "Harness platform endpoint"
+      required: true
+      value: <+input>.default(https://app.harness.io/gratis)
+    
+    - name: harness_api_key
+      type: Secret
+      description: "Harness Platform API Key (PAT or SAT)"
+      required: true
+      value: <+input>
+    
+    - name: harness_api_key_email
+      type: String
+      description: "Email associated with the API key"
+      required: true
+      value: <+input>
+    
+    # Organization/Project
+    - name: harness_org_id
+      type: String
+      description: "Harness Org ID for the POV"
+      required: true
+      value: <+org.identifier>
+    
+    - name: harness_project_id
+      type: String
+      description: "Harness Project ID for the POV"
+      required: true
+      value: <+project.identifier>
+    
+    - name: create_harness_org
+      type: String
+      description: "Create new org (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    - name: create_harness_project
+      type: String
+      description: "Create new project (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    # Infrastructure Options
+    - name: deployment_targets
+      type: String
+      description: "Deployment targets (eks, ecs, lambda)"
+      required: true
+      value: <+input>.default(eks)
+    
+    - name: create_eks_cluster
+      type: String
+      description: "Create new EKS cluster (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    - name: existing_cluster_name
+      type: String
+      description: "Existing EKS cluster name"
+      required: false
+      value: <+input>.default(harness-eks-parson)
+    
+    # Harness Resources
+    - name: create_harness_environment
+      type: String
+      description: "Create Harness environment (true/false)"
+      required: false
+      value: <+input>.default(true)
+    
+    - name: create_prod_environment
+      type: String
+      description: "Create production environment (true/false)"
+      required: false
+      value: <+input>.default(true)
+    
+    - name: create_delegate
+      type: String
+      description: "Create Harness delegate (true/false)"
+      required: false
+      value: <+input>.default(true)
+
+  stages:
+    # Stage 1: Create IACM Workspace from Template
+    - stage:
+        name: Create Workspace
+        identifier: create_workspace
+        description: "Create a new IACM workspace for this POV from the template"
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: Http
+                  name: Create IACM Workspace
+                  identifier: create_iacm_workspace
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces
+                    method: POST
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.harness_api_key>
+                    inputVariables: []
+                    outputVariables:
+                      - name: workspace_id
+                        value: <+json.select("identifier", httpResponseBody)>
+                        type: String
+                    requestBody: |
+                      {
+                        "identifier": "<+pipeline.variables.owner>_pov",
+                        "name": "<+pipeline.variables.owner> POV Workspace",
+                        "description": "POV environment for <+pipeline.variables.owner>",
+                        "provisioner": "opentofu",
+                        "provisioner_version": "1.11.2",
+                        "repository_connector": "parsongh",
+                        "repository": "harness-demo-app",
+                        "repository_branch": "main",
+                        "repository_path": "tofu/environments/sandbox",
+                        "provider_connector": "aws_oidc_iacm",
+                        "cost_estimation_enabled": true,
+                        "provider_connectors": [
+                          {
+                            "connector_ref": "aws_oidc_iacm",
+                            "type": "aws"
+                          }
+                        ],
+                        "default_pipelines": {
+                          "provision": {
+                            "project_pipeline": "pov_provisioning"
+                          },
+                          "destroy": {
+                            "project_pipeline": "pov_destroy"
+                          }
+                        },
+                        "terraform_variables": {
+                          "owner": {
+                            "key": "owner",
+                            "value": "<+pipeline.variables.owner>",
+                            "value_type": "string"
+                          },
+                          "harness_account_id": {
+                            "key": "harness_account_id",
+                            "value": "<+pipeline.variables.harness_account_id>",
+                            "value_type": "string"
+                          },
+                          "harness_endpoint": {
+                            "key": "harness_endpoint",
+                            "value": "<+pipeline.variables.harness_endpoint>",
+                            "value_type": "string"
+                          },
+                          "harness_api_key": {
+                            "key": "harness_api_key",
+                            "value": "<+pipeline.variables.harness_api_key>",
+                            "value_type": "string"
+                          },
+                          "harness_api_key_email": {
+                            "key": "harness_api_key_email",
+                            "value": "<+pipeline.variables.harness_api_key_email>",
+                            "value_type": "string"
+                          },
+                          "harness_org_id": {
+                            "key": "harness_org_id",
+                            "value": "<+pipeline.variables.harness_org_id>",
+                            "value_type": "string"
+                          },
+                          "harness_project_id": {
+                            "key": "harness_project_id",
+                            "value": "<+pipeline.variables.harness_project_id>",
+                            "value_type": "string"
+                          },
+                          "deployment_targets": {
+                            "key": "deployment_targets",
+                            "value": "[\"<+pipeline.variables.deployment_targets>\"]",
+                            "value_type": "string"
+                          },
+                          "create_harness_org": {
+                            "key": "create_harness_org",
+                            "value": "<+pipeline.variables.create_harness_org>",
+                            "value_type": "string"
+                          },
+                          "create_harness_project": {
+                            "key": "create_harness_project",
+                            "value": "<+pipeline.variables.create_harness_project>",
+                            "value_type": "string"
+                          },
+                          "create_harness_environment": {
+                            "key": "create_harness_environment",
+                            "value": "<+pipeline.variables.create_harness_environment>",
+                            "value_type": "string"
+                          },
+                          "create_prod_environment": {
+                            "key": "create_prod_environment",
+                            "value": "<+pipeline.variables.create_prod_environment>",
+                            "value_type": "string"
+                          },
+                          "create_delegate": {
+                            "key": "create_delegate",
+                            "value": "<+pipeline.variables.create_delegate>",
+                            "value_type": "string"
+                          },
+                          "create_eks_cluster": {
+                            "key": "create_eks_cluster",
+                            "value": "<+pipeline.variables.create_eks_cluster>",
+                            "value_type": "string"
+                          },
+                          "existing_cluster_name": {
+                            "key": "existing_cluster_name",
+                            "value": "<+pipeline.variables.existing_cluster_name>",
+                            "value_type": "string"
+                          },
+                          "enable_irsa": {
+                            "key": "enable_irsa",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "create_connectors": {
+                            "key": "create_connectors",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "create_harness_service": {
+                            "key": "create_harness_service",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "create_canary_pipeline": {
+                            "key": "create_canary_pipeline",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "create_blue_green_pipeline": {
+                            "key": "create_blue_green_pipeline",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "artifact_registry_type": {
+                            "key": "artifact_registry_type",
+                            "value": "har",
+                            "value_type": "string"
+                          },
+                          "import_to_harness_code": {
+                            "key": "import_to_harness_code",
+                            "value": "false",
+                            "value_type": "string"
+                          }
+                        },
+                        "tags": {
+                          "owner": "<+pipeline.variables.owner>",
+                          "pov": "true",
+                          "idp-managed": "true"
+                        }
+                      }
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201
+                  timeout: 2m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+                          spec: {}
+              
+              - step:
+                  type: ShellScript
+                  name: Workspace Created
+                  identifier: workspace_created
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== IACM Workspace Created ==="
+                          echo "Workspace ID: <+pipeline.variables.owner>_pov"
+                          echo "Owner: <+pipeline.variables.owner>"
+                          echo "Org: <+pipeline.variables.harness_org_id>"
+                          echo "Project: <+pipeline.variables.harness_project_id>"
+                          echo ""
+                          echo "Proceeding to provision infrastructure..."
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m
+
+    # Stage 2: Run IACM Plan
+    - stage:
+        name: Plan Infrastructure
+        identifier: plan_infrastructure
+        description: "Run tofu plan to preview changes"
+        type: IACM
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+pipeline.variables.owner>_pov
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Plan
+                  identifier: plan
+                  timeout: 15m
+                  spec:
+                    command: plan
+              
+              - step:
+                  type: Run
+                  name: Show Plan Summary
+                  identifier: show_plan_summary
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=== POV Provisioning Plan Summary ==="
+                      echo "Owner: <+pipeline.variables.owner>"
+                      echo "Workspace: <+pipeline.variables.owner>_pov"
+                      echo "Account: <+pipeline.variables.harness_account_id>"
+                      echo "Org: <+pipeline.variables.harness_org_id>"
+                      echo "Project: <+pipeline.variables.harness_project_id>"
+                      echo "Deployment Targets: <+pipeline.variables.deployment_targets>"
+                      echo "======================================="
+                      
+                      if [ -f /harness/plan.json ]; then
+                        echo ""
+                        echo "Resources to be created/modified:"
+                        jq -r '.resource_changes[] | select(.change.actions | contains(["create"]) or contains(["update"])) | "  \(.change.actions[0]): \(.type).\(.name)"' /harness/plan.json 2>/dev/null || echo "  (unable to parse plan)"
+                      fi
+              
+              - step:
+                  type: IACMApproval
+                  name: Approve Plan
+                  identifier: approve_plan
+                  spec:
+                    autoApprove: false
+                  timeout: 1d
+
+    # Stage 3: Apply Infrastructure
+    - stage:
+        name: Apply Infrastructure
+        identifier: apply_infrastructure
+        description: "Apply the approved plan"
+        type: IACM
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+pipeline.variables.owner>_pov
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Apply
+                  identifier: apply
+                  timeout: 30m
+                  spec:
+                    command: apply
+              
+              - step:
+                  type: Run
+                  name: POV Ready
+                  identifier: pov_ready
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=============================================="
+                      echo "   POV Environment Ready!"
+                      echo "=============================================="
+                      echo ""
+                      echo "Owner: <+pipeline.variables.owner>"
+                      echo "Workspace: <+pipeline.variables.owner>_pov"
+                      echo ""
+                      echo "Access your POV at:"
+                      echo "  Harness: <+pipeline.variables.harness_endpoint>"
+                      echo "  Org: <+pipeline.variables.harness_org_id>"
+                      echo "  Project: <+pipeline.variables.harness_project_id>"
+                      echo ""
+                      echo "Resources created:"
+                      echo "  - Delegate: delegate-<+pipeline.variables.owner>"
+                      echo "  - Service: <+pipeline.variables.owner>_demo_app"
+                      echo "  - Environments: <+pipeline.variables.owner>_dev, <+pipeline.variables.owner>_prod"
+                      echo "  - Pipelines: Canary, Blue-Green, Strategy Choice"
+                      echo ""
+                      echo "To destroy this POV, run the 'IDP POV Destroyer' pipeline"
+                      echo "with owner: <+pipeline.variables.owner>"
+                      echo ""
+                      
+                      if [ -f /harness/outputs.json ]; then
+                        echo "Terraform Outputs:"
+                        cat /harness/outputs.json | jq '.'
+                      fi

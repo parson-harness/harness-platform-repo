@@ -1,0 +1,311 @@
+pipeline:
+  name: IDP POV Destroyer
+  identifier: idp_pov_destroyer
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: "IDP-triggered pipeline that destroys a POV environment and deletes the IACM workspace"
+  tags:
+    idp: "true"
+    pov: "true"
+    iacm: "true"
+  
+  # Pipeline variables - populated by IDP workflow
+  variables:
+    # POV Identity
+    - name: owner
+      type: String
+      description: "Owner name (identifies the workspace to destroy)"
+      required: true
+      value: <+input>
+    
+    # Harness Configuration
+    - name: harness_account_id
+      type: String
+      description: "Target Harness Account ID"
+      required: true
+      value: <+account.identifier>
+    
+    - name: harness_endpoint
+      type: String
+      description: "Harness platform endpoint"
+      required: true
+      value: <+input>.default(https://app.harness.io/gratis)
+    
+    - name: harness_api_key
+      type: Secret
+      description: "Harness Platform API Key (PAT or SAT)"
+      required: true
+      value: <+input>
+    
+    - name: harness_api_key_email
+      type: String
+      description: "Email associated with the API key"
+      required: true
+      value: <+input>
+    
+    # Organization/Project
+    - name: harness_org_id
+      type: String
+      description: "Harness Org ID"
+      required: true
+      value: <+org.identifier>
+    
+    - name: harness_project_id
+      type: String
+      description: "Harness Project ID"
+      required: true
+      value: <+project.identifier>
+    
+    # Variables needed for workspace (even though destroying, workspace needs these)
+    - name: deployment_targets
+      type: String
+      description: "Deployment targets"
+      required: false
+      value: <+input>.default(eks)
+    
+    - name: create_harness_org
+      type: String
+      description: "Create new org (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    - name: create_harness_project
+      type: String
+      description: "Create new project (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    - name: create_harness_environment
+      type: String
+      description: "Create Harness environment (true/false)"
+      required: false
+      value: <+input>.default(true)
+    
+    - name: create_prod_environment
+      type: String
+      description: "Create production environment (true/false)"
+      required: false
+      value: <+input>.default(true)
+    
+    - name: create_delegate
+      type: String
+      description: "Create Harness delegate (true/false)"
+      required: false
+      value: <+input>.default(true)
+    
+    - name: create_eks_cluster
+      type: String
+      description: "Create new EKS cluster (true/false)"
+      required: false
+      value: <+input>.default(false)
+    
+    - name: existing_cluster_name
+      type: String
+      description: "Existing EKS cluster name"
+      required: false
+      value: <+input>.default(harness-eks-parson)
+
+  stages:
+    # Stage 1: Plan Destroy
+    - stage:
+        name: Plan Destroy
+        identifier: plan_destroy
+        description: "Run tofu plan -destroy to preview destruction"
+        type: IACM
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+pipeline.variables.owner>_pov
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Plan Destroy
+                  identifier: plan_destroy
+                  timeout: 15m
+                  spec:
+                    command: plan-destroy
+              
+              - step:
+                  type: Run
+                  name: Show Destroy Plan
+                  identifier: show_destroy_plan
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=== POV Destroy Plan ==="
+                      echo "Owner: <+pipeline.variables.owner>"
+                      echo "Workspace: <+pipeline.variables.owner>_pov"
+                      echo ""
+                      echo "The following resources will be DESTROYED:"
+                      echo ""
+                      
+                      if [ -f /harness/plan.json ]; then
+                        jq -r '.resource_changes[] | select(.change.actions | contains(["delete"])) | "  - \(.type).\(.name)"' /harness/plan.json 2>/dev/null || echo "  (unable to parse plan)"
+                      fi
+                      
+                      echo ""
+                      echo "⚠️  This action is IRREVERSIBLE!"
+              
+              - step:
+                  type: IACMApproval
+                  name: Approve Destroy
+                  identifier: approve_destroy
+                  spec:
+                    autoApprove: false
+                  timeout: 1d
+
+    # Stage 2: Execute Destroy
+    - stage:
+        name: Execute Destroy
+        identifier: execute_destroy
+        description: "Execute tofu destroy"
+        type: IACM
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+pipeline.variables.owner>_pov
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Destroy
+                  identifier: destroy
+                  timeout: 30m
+                  spec:
+                    command: destroy
+              
+              - step:
+                  type: Run
+                  name: Force Delete Remaining Resources
+                  identifier: force_delete_remaining
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=== Force Deleting Remaining Harness Resources ==="
+                      
+                      OWNER="<+pipeline.variables.owner>"
+                      ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
+                      ORG_ID="<+pipeline.variables.harness_org_id>"
+                      PROJECT_ID="<+pipeline.variables.harness_project_id>"
+                      API_KEY="<+pipeline.variables.harness_api_key>"
+                      ENDPOINT="<+pipeline.variables.harness_endpoint>"
+                      
+                      # Force delete service
+                      echo "Force deleting service: ${OWNER}_demo_app"
+                      curl -s -X DELETE "${ENDPOINT}/ng/api/servicesV2/${OWNER}_demo_app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true" \
+                        -H "x-api-key: ${API_KEY}" \
+                        -H "Content-Type: application/json" || true
+                      
+                      # Force delete infrastructures
+                      for ENV in dev prod; do
+                        echo "Force deleting infrastructure: ${OWNER}_k8s_${ENV}"
+                        curl -s -X DELETE "${ENDPOINT}/ng/api/infrastructures/${OWNER}_k8s_${ENV}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_${ENV}&forceDelete=true" \
+                          -H "x-api-key: ${API_KEY}" \
+                          -H "Content-Type: application/json" || true
+                      done
+                      
+                      # Force delete environments
+                      for ENV in dev prod; do
+                        echo "Force deleting environment: ${OWNER}_${ENV}"
+                        curl -s -X DELETE "${ENDPOINT}/ng/api/environmentsV2/${OWNER}_${ENV}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true" \
+                          -H "x-api-key: ${API_KEY}" \
+                          -H "Content-Type: application/json" || true
+                      done
+                      
+                      # Force delete connectors
+                      for CONN in k8s_reference_architecture aws_reference_architecture github_reference_architecture; do
+                        echo "Force deleting connector: ${OWNER}_${CONN}"
+                        curl -s -X DELETE "${ENDPOINT}/ng/api/connectors/${OWNER}_${CONN}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true" \
+                          -H "x-api-key: ${API_KEY}" \
+                          -H "Content-Type: application/json" || true
+                      done
+                      
+                      echo ""
+                      echo "Force delete complete."
+                  timeout: 5m
+                  when:
+                    stageStatus: All
+
+    # Stage 3: Delete Workspace
+    - stage:
+        name: Delete Workspace
+        identifier: delete_workspace
+        description: "Delete the IACM workspace"
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: Http
+                  name: Delete IACM Workspace
+                  identifier: delete_iacm_workspace
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces/<+pipeline.variables.owner>_pov
+                    method: DELETE
+                    headers:
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.harness_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
+                  timeout: 2m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+                          spec: {}
+              
+              - step:
+                  type: ShellScript
+                  name: POV Destroyed
+                  identifier: pov_destroyed
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=============================================="
+                          echo "   POV Environment Destroyed"
+                          echo "=============================================="
+                          echo ""
+                          echo "Owner: <+pipeline.variables.owner>"
+                          echo "Workspace: <+pipeline.variables.owner>_pov (deleted)"
+                          echo ""
+                          echo "All resources have been cleaned up:"
+                          echo "  ✓ Terraform-managed resources destroyed"
+                          echo "  ✓ Harness resources force-deleted"
+                          echo "  ✓ IACM workspace deleted"
+                          echo ""
+                          echo "The POV environment for '<+pipeline.variables.owner>' no longer exists."
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m
