@@ -383,12 +383,6 @@ variable "ecs_service_definition_paths" {
   default     = ["ecs/servicedef.json"]
 }
 
-variable "github_connector_ref" {
-  description = "Reference to existing GitHub connector (if not creating)"
-  type        = string
-  default     = ""
-}
-
 variable "aws_connector_ref" {
   description = "Reference to existing AWS connector (if not creating)"
   type        = string
