@@ -51,17 +51,17 @@ resource "harness_platform_pipeline" "ci_build" {
               execution:
                 steps:
                   - step:
-                      type: GitClone
+                      type: Run
                       name: Clone Repository
                       identifier: clone_repo
                       spec:
-                        repoName: demo-app
-                        cloneDirectory: /harness/demo-app
-                        build:
-                          type: branch
-                          spec:
-                            branch: <+pipeline.variables.git_branch>
-                        url: <+pipeline.variables.git_repo_url>
+                        shell: Bash
+                        command: |
+                          echo "Cloning <+pipeline.variables.git_repo_url> branch <+pipeline.variables.git_branch>"
+                          git clone --depth 1 --branch <+pipeline.variables.git_branch> <+pipeline.variables.git_repo_url> /harness/demo-app
+                          cd /harness/demo-app
+                          echo "Cloned successfully"
+                          git log -1 --oneline
                   - step:
                       type: Run
                       name: Build Info
