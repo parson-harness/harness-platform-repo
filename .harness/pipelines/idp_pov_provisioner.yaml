@@ -281,7 +281,7 @@ pipeline:
                           "idp-managed": "true"
                         }
                       }
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201 || <+httpResponseCode> == 409
                   timeout: 2m
               
               - step:
