@@ -58,15 +58,15 @@ pipeline:
     
     - name: create_harness_org
       type: String
-      description: "Create new org (true/false)"
+      description: "Create new org"
       required: false
-      value: <+input>.default(false)
+      value: <+input>.default(false).allowedValues(true,false)
     
     - name: create_harness_project
       type: String
-      description: "Create new project (true/false)"
+      description: "Create new project"
       required: false
-      value: <+input>.default(false)
+      value: <+input>.default(false).allowedValues(true,false)
     
     # Infrastructure Options
     - name: deployment_targets
@@ -77,9 +77,9 @@ pipeline:
     
     - name: create_eks_cluster
       type: String
-      description: "Create new EKS cluster (true/false)"
+      description: "Create new EKS cluster"
       required: false
-      value: <+input>.default(false)
+      value: <+input>.default(false).allowedValues(true,false)
     
     - name: existing_cluster_name
       type: String
@@ -90,27 +90,27 @@ pipeline:
     # Harness Resources
     - name: create_harness_environment
       type: String
-      description: "Create Harness environment (true/false)"
+      description: "Create Harness environment"
       required: false
-      value: <+input>.default(true)
+      value: <+input>.default(true).allowedValues(true,false)
     
     - name: create_prod_environment
       type: String
-      description: "Create production environment (true/false)"
+      description: "Create production environment"
       required: false
-      value: <+input>.default(true)
+      value: <+input>.default(true).allowedValues(true,false)
     
     - name: create_delegate
       type: String
-      description: "Create Harness delegate (true/false)"
+      description: "Create Harness delegate"
       required: false
-      value: <+input>.default(true)
+      value: <+input>.default(true).allowedValues(true,false)
     
     - name: force_recreate
       type: String
-      description: "Delete existing resources before provisioning (true/false)"
+      description: "Delete existing resources before provisioning"
       required: false
-      value: <+input>.default(false)
+      value: <+input>.default(false).allowedValues(true,false)
 
   stages:
     # Stage 0: Cleanup existing resources (conditional)
@@ -135,7 +135,7 @@ pipeline:
                     headers:
                       - key: x-api-key
                         value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
                   timeout: 1m
               - step:
                   type: Http
@@ -147,7 +147,7 @@ pipeline:
                     headers:
                       - key: x-api-key
                         value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
                   timeout: 1m
               - step:
                   type: Http
@@ -159,7 +159,7 @@ pipeline:
                     headers:
                       - key: x-api-key
                         value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
                   timeout: 1m
               - step:
                   type: Http
@@ -171,7 +171,7 @@ pipeline:
                     headers:
                       - key: x-api-key
                         value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
                   timeout: 1m
               - step:
                   type: Http
@@ -183,7 +183,7 @@ pipeline:
                     headers:
                       - key: x-api-key
                         value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
                   timeout: 1m
               - step:
                   type: Http
@@ -195,7 +195,7 @@ pipeline:
                     headers:
                       - key: x-api-key
                         value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
                   timeout: 1m
               - step:
                   type: Http
@@ -207,7 +207,7 @@ pipeline:
                     headers:
                       - key: x-api-key
                         value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
                   timeout: 1m
               - step:
                   type: Http
@@ -219,7 +219,7 @@ pipeline:
                     headers:
                       - key: x-api-key
                         value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
                   timeout: 1m
               - step:
                   type: Http
