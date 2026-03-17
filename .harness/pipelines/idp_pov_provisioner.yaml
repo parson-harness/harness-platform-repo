@@ -113,7 +113,47 @@ pipeline:
       value: <+input>.default(false).allowedValues(true,false)
 
   stages:
-    # Stage 0: Cleanup existing resources (conditional)
+    # Stage 0a: Terraform Destroy (conditional - runs if workspace exists and force_recreate=true)
+    - stage:
+        name: Terraform Destroy
+        identifier: terraform_destroy
+        description: "Destroy Terraform-managed resources (K8s namespaces, IAM roles, HAR registry)"
+        type: IACM
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.force_recreate> == "true"
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+pipeline.variables.owner>_pov
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: destroy_init
+                  timeout: 10m
+                  spec:
+                    command: init
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Destroy
+                  identifier: destroy
+                  timeout: 30m
+                  spec:
+                    command: destroy
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: MarkAsSuccess
+
+    # Stage 0b: Cleanup existing Harness resources via API (conditional)
     - stage:
         name: Cleanup Existing Resources
         identifier: cleanup_existing
