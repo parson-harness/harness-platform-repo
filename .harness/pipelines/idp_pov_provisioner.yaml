@@ -262,20 +262,6 @@ pipeline:
                     assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
                   timeout: 1m
               - step:
-                  type: Http
-                  name: Delete IACM Workspace
-                  identifier: delete_iacm_workspace
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces/<+pipeline.variables.owner>_pov
-                    method: DELETE
-                    headers:
-                      - key: Harness-Account
-                        value: <+pipeline.variables.harness_account_id>
-                      - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
-                  timeout: 1m
-              - step:
                   type: ShellScript
                   name: Cleanup Complete
                   identifier: cleanup_complete
@@ -287,16 +273,17 @@ pipeline:
                       spec:
                         script: |
                           echo "=== Cleanup Complete ==="
-                          echo "Deleted existing Harness resources for owner: <+pipeline.variables.owner>"
-                          echo "Resources cleaned up:"
+                          echo "Terraform destroy ran in previous stage (if workspace existed)"
+                          echo "Deleted Harness API resources for owner: <+pipeline.variables.owner>"
+                          echo ""
+                          echo "API resources cleaned up:"
                           echo "  - Environments: <+pipeline.variables.owner>_dev, <+pipeline.variables.owner>_prod"
                           echo "  - Service: <+pipeline.variables.owner>_demo_app"
                           echo "  - Connectors: K8s, AWS"
                           echo "  - Pipelines: Canary, Blue-Green, Strategy Choice"
-                          echo "  - IACM Workspace: <+pipeline.variables.owner>_pov"
                           echo ""
-                          echo "Note: HAR registry and K8s/IAM resources will be recreated by Terraform"
-                          echo "Proceeding to create workspace and provision..."
+                          echo "Note: IACM workspace preserved to maintain Terraform state"
+                          echo "Proceeding to provision..."
                     environmentVariables: []
                     outputVariables: []
                   timeout: 1m
