@@ -159,6 +159,58 @@ variable "strategy_pipeline_description" {
 }
 
 ################################################################################
+# CI Pipeline Variables
+################################################################################
+
+variable "create_ci_pipeline" {
+  description = "Create CI build pipeline"
+  type        = bool
+  default     = true
+}
+
+variable "ci_pipeline_id" {
+  description = "Identifier for CI pipeline"
+  type        = string
+  default     = "ci_build"
+}
+
+variable "ci_pipeline_name" {
+  description = "Name for CI pipeline"
+  type        = string
+  default     = "CI Build"
+}
+
+variable "ci_pipeline_description" {
+  description = "Description for CI pipeline"
+  type        = string
+  default     = "Builds Docker image and pushes to Harness Artifact Registry"
+}
+
+variable "git_connector_ref" {
+  description = "Reference to the Git connector for codebase"
+  type        = string
+  default     = ""
+}
+
+variable "git_repo_name" {
+  description = "Git repository name"
+  type        = string
+  default     = ""
+}
+
+variable "har_registry_ref" {
+  description = "Reference to the HAR registry"
+  type        = string
+  default     = ""
+}
+
+variable "har_image_name" {
+  description = "Image name in HAR (without registry prefix)"
+  type        = string
+  default     = "demo-app"
+}
+
+################################################################################
 # Common Variables
 ################################################################################
 

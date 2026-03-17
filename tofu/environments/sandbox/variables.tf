@@ -269,6 +269,24 @@ variable "create_strategy_pipeline" {
   default     = true
 }
 
+variable "create_ci_pipeline" {
+  description = "Create CI build pipeline"
+  type        = bool
+  default     = true
+}
+
+variable "github_repo_name" {
+  description = "GitHub repository name for CI pipeline codebase"
+  type        = string
+  default     = "parson-harness/harness-demo-app"
+}
+
+variable "github_connector_ref" {
+  description = "Reference to existing GitHub connector (if not creating connectors)"
+  type        = string
+  default     = ""
+}
+
 ################################################################################
 # IRSA Configuration
 ################################################################################

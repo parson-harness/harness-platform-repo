@@ -639,9 +639,19 @@ module "harness_pipelines_dev" {
   strategy_pipeline_name        = "${title(var.owner)} K8s Deploy with Strategy Choice"
   strategy_pipeline_description = "Single pipeline with runtime strategy selection - Blue/Green, Canary, or Rolling"
 
+  # CI Build pipeline
+  create_ci_pipeline      = var.create_ci_pipeline
+  ci_pipeline_id          = "${var.owner}_ci_build"
+  ci_pipeline_name        = "${title(var.owner)} CI Build"
+  ci_pipeline_description = "Builds Docker image and pushes to Harness Artifact Registry"
+  git_connector_ref       = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+  git_repo_name           = var.github_repo_name
+  har_registry_ref        = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""
+  har_image_name          = "${var.owner}demoapp"
+
   pipeline_tags = ["tofu-managed", var.owner]
 
-  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev]
+  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev, module.har]
 }
 
 ################################################################################
