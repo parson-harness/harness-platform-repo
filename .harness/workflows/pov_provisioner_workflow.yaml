@@ -1,0 +1,169 @@
+apiVersion: harness.io/v1
+kind: Workflow
+name: POV Provisioner
+identifier: pov_provisioner
+type: workflow
+owner: platform-team
+metadata:
+  description: "Self-service workflow to provision a complete POV environment with Harness CD, CI, and demo app"
+  tags:
+    - pov
+    - iacm
+    - self-service
+spec:
+  presentation:
+    customTitle: Provision POV Environment
+    customSubTitle: Create a complete Harness POV with CI/CD pipelines, environments, and demo app
+    customCreateButtonText: Provision POV
+  
+  output:
+    links:
+      - title: Pipeline Execution
+        url: ${{ steps.trigger.output.PipelineUrl }}
+  
+  lifecycle: production
+  
+  parameters:
+    - title: POV Identity
+      required:
+        - owner
+      properties:
+        owner:
+          title: POV Owner
+          type: string
+          description: "Owner name (lowercase, alphanumeric). Used for resource naming (e.g., 'todd' creates 'todd_pov' workspace)"
+          pattern: "^[a-z][a-z0-9]*$"
+          ui:help: "Must start with a letter, lowercase alphanumeric only"
+        
+        token:
+          title: Harness Token
+          type: string
+          ui:widget: password
+          ui:field: HarnessAuthToken
+    
+    - title: Harness Configuration
+      required:
+        - harness_org_id
+        - harness_project_id
+        - harness_api_key
+        - harness_api_key_email
+      properties:
+        harness_endpoint:
+          title: Harness Endpoint
+          type: string
+          description: "Harness platform endpoint"
+          default: "https://app.harness.io/gratis"
+          enum:
+            - "https://app.harness.io/gratis"
+            - "https://app.harness.io"
+            - "https://app3.harness.io"
+        
+        harness_org_id:
+          title: Organization ID
+          type: string
+          description: "Harness Organization ID for the POV"
+          ui:field: HarnessOrgPicker
+        
+        harness_project_id:
+          title: Project ID
+          type: string
+          description: "Harness Project ID for the POV"
+          ui:field: HarnessProjectPicker
+        
+        harness_api_key:
+          title: Harness API Key
+          type: string
+          description: "Harness Platform API Key (PAT or SAT) with admin permissions"
+          ui:widget: password
+        
+        harness_api_key_email:
+          title: API Key Email
+          type: string
+          description: "Email associated with the API key"
+          format: email
+    
+    - title: Infrastructure Options
+      properties:
+        deployment_targets:
+          title: Deployment Target
+          type: string
+          description: "Where to deploy the demo app"
+          enum:
+            - eks
+            - ecs
+            - lambda
+          default: eks
+        
+        create_eks_cluster:
+          title: Create New EKS Cluster?
+          type: boolean
+          description: "Create a new EKS cluster (takes ~15 min) or use existing"
+          default: false
+        
+        existing_cluster_name:
+          title: Existing EKS Cluster Name
+          type: string
+          description: "Name of existing EKS cluster (if not creating new)"
+          default: "harness-eks-parson"
+          ui:options:
+            hidden: ${{ parameters.create_eks_cluster === true }}
+    
+    - title: Harness Resources
+      properties:
+        create_harness_environment:
+          title: Create Dev Environment?
+          type: boolean
+          description: "Create Harness dev environment and infrastructure"
+          default: true
+        
+        create_prod_environment:
+          title: Create Prod Environment?
+          type: boolean
+          description: "Create Harness prod environment and infrastructure"
+          default: true
+        
+        create_delegate:
+          title: Create Delegate?
+          type: boolean
+          description: "Create a new Harness delegate in the cluster"
+          default: true
+    
+    - title: Application Source
+      properties:
+        git_repo_url:
+          title: Git Repository URL
+          type: string
+          description: "Git repository URL for the demo app source code"
+          default: "https://github.com/parson-harness/harness-demo-app.git"
+    
+    - title: Advanced Options
+      properties:
+        force_recreate:
+          title: Force Recreate?
+          type: boolean
+          description: "Delete existing resources before provisioning (use with caution)"
+          default: false
+          ui:help: "Warning: This will destroy any existing POV resources for this owner"
+
+  steps:
+    - id: trigger
+      name: Provisioning POV Environment
+      action: trigger:harness-custom-pipeline
+      input:
+        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/module/idp/orgs/sandbox/projects/parson/pipelines/idp_pov_provisioner/pipeline-studio/?storeType=INLINE"
+        inputset:
+          owner: ${{ parameters.owner }}
+          harness_endpoint: ${{ parameters.harness_endpoint }}
+          harness_org_id: ${{ parameters.harness_org_id }}
+          harness_project_id: ${{ parameters.harness_project_id }}
+          harness_api_key: ${{ parameters.harness_api_key }}
+          harness_api_key_email: ${{ parameters.harness_api_key_email }}
+          deployment_targets: ${{ parameters.deployment_targets }}
+          create_eks_cluster: ${{ parameters.create_eks_cluster }}
+          existing_cluster_name: ${{ parameters.existing_cluster_name }}
+          create_harness_environment: ${{ parameters.create_harness_environment }}
+          create_prod_environment: ${{ parameters.create_prod_environment }}
+          create_delegate: ${{ parameters.create_delegate }}
+          git_repo_url: ${{ parameters.git_repo_url }}
+          force_recreate: ${{ parameters.force_recreate }}
+        apikey: ${{ parameters.token }}

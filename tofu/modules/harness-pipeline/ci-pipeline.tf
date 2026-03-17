@@ -64,6 +64,33 @@ resource "harness_platform_pipeline" "ci_build" {
                           git log -1 --oneline
                   - step:
                       type: Run
+                      name: Build Java App
+                      identifier: build_java
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: maven:3.9-eclipse-temurin-17
+                        shell: Bash
+                        command: |
+                          cd /harness/demo-app
+                          echo "========================================"
+                          echo "  BUILDING JAVA APPLICATION"
+                          echo "========================================"
+                          echo "Java version:"
+                          java -version
+                          echo ""
+                          echo "Maven version:"
+                          mvn -version
+                          echo ""
+
+                          # Build the application
+                          echo "Running: mvn clean package -DskipTests"
+                          mvn clean package -DskipTests
+
+                          # Verify JAR was created
+                          ls -la target/*.jar
+                          echo "Build complete!"
+                  - step:
+                      type: Run
                       name: Build Info
                       identifier: build_info
                       spec:
@@ -78,7 +105,7 @@ resource "harness_platform_pipeline" "ci_build" {
                           echo "Branch: <+pipeline.variables.git_branch>"
                           echo "Repo: <+pipeline.variables.git_repo_url>"
                           echo "========================================"
-                          
+
                           # Set image tag based on branch and build number
                           if [ "<+pipeline.variables.git_branch>" = "main" ]; then
                             IMAGE_TAG="<+pipeline.sequenceId>"
@@ -96,14 +123,15 @@ resource "harness_platform_pipeline" "ci_build" {
                       name: Build and Push to HAR
                       identifier: build_push_har
                       spec:
-                        connectorRef: account.harnessImage
-                        repo: app.harness.io/${var.har_registry_ref}/${var.har_image_name}
+                        repo: ${var.har_image_name}
                         tags:
                           - <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
                           - latest
+                        caching: true
                         dockerfile: /harness/demo-app/Dockerfile
                         context: /harness/demo-app
                         optimize: true
+                        registryRef: ${var.har_registry_ref}
                   - step:
                       type: Run
                       name: Build Summary

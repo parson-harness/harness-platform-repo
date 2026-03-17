@@ -205,15 +205,16 @@ pipeline:
                   identifier: force_delete_remaining
                   spec:
                     shell: Bash
+                    envVariables:
+                      OWNER: <+pipeline.variables.owner>
+                      ACCOUNT_ID: <+pipeline.variables.harness_account_id>
+                      ORG_ID: <+pipeline.variables.harness_org_id>
+                      PROJECT_ID: <+pipeline.variables.harness_project_id>
+                      API_KEY: <+pipeline.variables.harness_api_key>
+                      ENDPOINT: <+pipeline.variables.harness_endpoint>
                     command: |
                       echo "=== Force Deleting Remaining Harness Resources ==="
-                      
-                      OWNER="<+pipeline.variables.owner>"
-                      ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
-                      ORG_ID="<+pipeline.variables.harness_org_id>"
-                      PROJECT_ID="<+pipeline.variables.harness_project_id>"
-                      API_KEY="<+pipeline.variables.harness_api_key>"
-                      ENDPOINT="<+pipeline.variables.harness_endpoint>"
+                      echo "Owner: ${OWNER}, Org: ${ORG_ID}, Project: ${PROJECT_ID}"
                       
                       # Force delete service
                       echo "Force deleting service: ${OWNER}_demo_app"

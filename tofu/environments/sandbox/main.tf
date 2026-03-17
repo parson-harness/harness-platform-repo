@@ -419,7 +419,7 @@ module "harness_service" {
   git_connector_ref = var.import_to_harness_code ? "" : (
     var.create_connectors ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   )
-  git_repo_name     = var.import_to_harness_code ? "" : var.source_github_repo
+  git_repo_name     = var.import_to_harness_code ? "" : element(split("/", var.source_github_repo), length(split("/", var.source_github_repo)) - 1)
   git_branch        = var.service_git_branch
   manifest_paths    = var.service_manifest_paths
   
@@ -445,7 +445,7 @@ module "harness_service" {
   har_registry_ref = var.artifact_registry_type == "har" && length(module.har) > 0 ? (
     module.har[0].registry_id
   ) : ""
-  har_image_path = var.artifact_registry_type == "har" ? "harness-demo-app" : ""
+  har_image_path = var.artifact_registry_type == "har" ? "${var.owner}demoapp" : ""
 
   tags = ["tofu-managed", var.owner, join("-", var.deployment_targets)]
 

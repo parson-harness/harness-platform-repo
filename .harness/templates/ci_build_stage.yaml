@@ -1,0 +1,153 @@
+template:
+  name: CI Build Stage
+  identifier: ci_build_stage
+  type: Stage
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: "Reusable CI stage template for building Java apps and pushing to Harness Artifact Registry"
+  tags:
+    ci: "true"
+    java: "true"
+    har: "true"
+  versionLabel: "1.0.0"
+  spec:
+    type: CI
+    spec:
+      cloneCodebase: false
+      platform:
+        os: Linux
+        arch: Amd64
+      runtime:
+        type: Cloud
+        spec: {}
+      execution:
+        steps:
+          - step:
+              type: Run
+              name: Clone Repository
+              identifier: clone_repo
+              spec:
+                shell: Bash
+                command: |
+                  echo "Cloning <+stage.variables.git_repo_url> branch <+stage.variables.git_branch>"
+                  git clone --depth 1 --branch <+stage.variables.git_branch> <+stage.variables.git_repo_url> /harness/demo-app
+                  cd /harness/demo-app
+                  echo "Cloned successfully"
+                  git log -1 --oneline
+          - step:
+              type: Run
+              name: Build Java App
+              identifier: build_java
+              spec:
+                connectorRef: account.harnessImage
+                image: maven:3.9-eclipse-temurin-17
+                shell: Bash
+                command: |
+                  cd /harness/demo-app
+                  echo "========================================"
+                  echo "  BUILDING JAVA APPLICATION"
+                  echo "========================================"
+                  echo "Java version:"
+                  java -version
+                  echo ""
+                  echo "Maven version:"
+                  mvn -version
+                  echo ""
+
+                  # Build the application
+                  echo "Running: mvn clean package -DskipTests"
+                  mvn clean package -DskipTests
+
+                  # Verify JAR was created
+                  ls -la target/*.jar
+                  echo "Build complete!"
+          - step:
+              type: Run
+              name: Build Info
+              identifier: build_info
+              spec:
+                shell: Bash
+                command: |
+                  cd /harness/demo-app
+                  echo "========================================"
+                  echo "  BUILD INFORMATION"
+                  echo "========================================"
+                  echo "Pipeline: <+pipeline.name>"
+                  echo "Build Number: <+pipeline.sequenceId>"
+                  echo "Branch: <+stage.variables.git_branch>"
+                  echo "Repo: <+stage.variables.git_repo_url>"
+                  echo "========================================"
+
+                  # Set image tag based on branch and build number
+                  if [ "<+stage.variables.git_branch>" = "main" ]; then
+                    IMAGE_TAG="<+pipeline.sequenceId>"
+                  else
+                    BRANCH_SAFE=$(echo "<+stage.variables.git_branch>" | sed 's/[^a-zA-Z0-9]/-/g')
+                    IMAGE_TAG="${BRANCH_SAFE}-<+pipeline.sequenceId>"
+                  fi
+                  echo "Image Tag: $IMAGE_TAG"
+                envVariables:
+                  DOCKER_BUILDKIT: "1"
+                outputVariables:
+                  - name: IMAGE_TAG
+          - step:
+              type: BuildAndPushDockerRegistry
+              name: Build and Push to HAR
+              identifier: build_push_har
+              spec:
+                repo: <+stage.variables.har_image_name>
+                tags:
+                  - <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
+                  - latest
+                caching: true
+                dockerfile: /harness/demo-app/Dockerfile
+                context: /harness/demo-app
+                optimize: true
+                registryRef: <+stage.variables.har_registry_ref>
+          - step:
+              type: Run
+              name: Build Summary
+              identifier: build_summary
+              spec:
+                shell: Bash
+                command: |
+                  echo "========================================"
+                  echo "  BUILD COMPLETE"
+                  echo "========================================"
+                  echo "Image: <+stage.variables.har_registry_ref>/<+stage.variables.har_image_name>"
+                  echo "Tags: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>, latest"
+                  echo ""
+                  echo "To deploy this image, run one of the CD pipelines:"
+                  echo "  - Strategy Choice Pipeline"
+                  echo "  - Blue-Green Pipeline"
+                  echo "  - Canary Pipeline"
+                  echo ""
+                  echo "Use image_tag: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>"
+                  echo "========================================"
+    failureStrategies:
+      - onFailure:
+          errors:
+            - AllErrors
+          action:
+            type: StageRollback
+    variables:
+      - name: git_branch
+        type: String
+        description: "Git branch to build"
+        required: true
+        value: <+input>.default(main)
+      - name: git_repo_url
+        type: String
+        description: "Git repository URL"
+        required: true
+        value: <+input>
+      - name: har_registry_ref
+        type: String
+        description: "Harness Artifact Registry reference (e.g., har-todd)"
+        required: true
+        value: <+input>
+      - name: har_image_name
+        type: String
+        description: "Docker image name in HAR"
+        required: true
+        value: <+input>.default(demoapp)
