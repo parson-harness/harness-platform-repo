@@ -105,8 +105,104 @@ pipeline:
       description: "Create Harness delegate (true/false)"
       required: false
       value: <+input>.default(true)
+    
+    - name: force_recreate
+      type: String
+      description: "Delete existing resources before provisioning (true/false)"
+      required: false
+      value: <+input>.default(false)
 
   stages:
+    # Stage 0: Cleanup existing resources (conditional)
+    - stage:
+        name: Cleanup Existing Resources
+        identifier: cleanup_existing
+        description: "Delete existing Harness resources to allow fresh provisioning"
+        type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.force_recreate> == "true"
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: Http
+                  name: Delete Dev Environment
+                  identifier: delete_dev_env
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/ng/api/environmentsV2/<+pipeline.variables.owner>_dev?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>&forceDelete=true
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.harness_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                  timeout: 1m
+              - step:
+                  type: Http
+                  name: Delete Prod Environment
+                  identifier: delete_prod_env
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/ng/api/environmentsV2/<+pipeline.variables.owner>_prod?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>&forceDelete=true
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.harness_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                  timeout: 1m
+              - step:
+                  type: Http
+                  name: Delete Service
+                  identifier: delete_service
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/ng/api/servicesV2/<+pipeline.variables.owner>_demo_app?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>&forceDelete=true
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.harness_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                  timeout: 1m
+              - step:
+                  type: Http
+                  name: Delete K8s Connector
+                  identifier: delete_k8s_connector
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/ng/api/connectors/<+pipeline.variables.owner>_k8s_reference_architecture?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>&forceDelete=true
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.harness_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                  timeout: 1m
+              - step:
+                  type: Http
+                  name: Delete AWS Connector
+                  identifier: delete_aws_connector
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/ng/api/connectors/<+pipeline.variables.owner>_aws_reference_architecture?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>&forceDelete=true
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.harness_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                  timeout: 1m
+              - step:
+                  type: ShellScript
+                  name: Cleanup Complete
+                  identifier: cleanup_complete
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Cleanup Complete ==="
+                          echo "Deleted existing Harness resources for owner: <+pipeline.variables.owner>"
+                          echo "Proceeding to create workspace and provision..."
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m
+
     # Stage 1: Create IACM Workspace from Template
     - stage:
         name: Create Workspace
