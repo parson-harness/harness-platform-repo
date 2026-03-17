@@ -4,7 +4,7 @@
 ################################################################################
 
 resource "harness_platform_pipeline" "ci_build" {
-  count       = var.create_ci_pipeline ? 1 : 0
+  count       = var.create_ci_pipeline && var.git_connector_ref != "" ? 1 : 0
   identifier  = var.ci_pipeline_id
   name        = var.ci_pipeline_name
   org_id      = var.org_id
@@ -75,21 +75,18 @@ resource "harness_platform_pipeline" "ci_build" {
                         outputVariables:
                           - name: IMAGE_TAG
                   - step:
-                      type: BuildAndPushToHar
+                      type: BuildAndPushDockerRegistry
                       name: Build and Push to HAR
                       identifier: build_push_har
                       spec:
                         connectorRef: account.harnessImage
-                        registry: ${var.har_registry_ref}
-                        imageName: ${var.har_image_name}
+                        repo: app.harness.io/${var.har_registry_ref}/${var.har_image_name}
                         tags:
                           - <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
                           - latest
                         dockerfile: Dockerfile
                         context: .
                         optimize: true
-                      when:
-                        stageStatus: Success
                   - step:
                       type: Run
                       name: Build Summary
@@ -110,5 +107,11 @@ resource "harness_platform_pipeline" "ci_build" {
                           echo ""
                           echo "Use image_tag: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>"
                           echo "========================================"
+            failureStrategies:
+              - onFailure:
+                  errors:
+                    - AllErrors
+                  action:
+                    type: StageRollback
   CI_EOT
 }

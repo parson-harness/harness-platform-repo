@@ -34,10 +34,10 @@ output "strategy_pipeline_identifier" {
 
 output "ci_pipeline_id" {
   description = "ID of the CI build pipeline"
-  value       = var.create_ci_pipeline ? harness_platform_pipeline.ci_build[0].id : null
+  value       = var.create_ci_pipeline && var.git_connector_ref != "" ? harness_platform_pipeline.ci_build[0].id : null
 }
 
 output "ci_pipeline_identifier" {
   description = "Identifier of the CI build pipeline"
-  value       = var.create_ci_pipeline ? harness_platform_pipeline.ci_build[0].identifier : null
+  value       = var.create_ci_pipeline && var.git_connector_ref != "" ? harness_platform_pipeline.ci_build[0].identifier : null
 }
