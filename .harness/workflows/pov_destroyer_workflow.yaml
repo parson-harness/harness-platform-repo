@@ -132,8 +132,8 @@ spec:
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
           harness_api_key: ${{ parameters.harness_api_key }}
-          destroy_terraform: ${{ parameters.destroy_terraform | string }}
-          delete_harness_resources: ${{ parameters.delete_harness_resources | string }}
-          delete_delegate: ${{ parameters.delete_delegate | string }}
-          delete_workspace: ${{ parameters.delete_workspace | string }}
+          destroy_terraform: ${{ parameters.destroy_terraform }}
+          delete_harness_resources: ${{ parameters.delete_harness_resources }}
+          delete_delegate: ${{ parameters.delete_delegate }}
+          delete_workspace: ${{ parameters.delete_workspace }}
         apikey: ${{ parameters.token }}

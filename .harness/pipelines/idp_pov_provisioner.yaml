@@ -76,10 +76,10 @@ pipeline:
       value: <+input>.default(eks)
     
     - name: create_eks_cluster
-      type: String
+      type: Boolean
       description: "Create new EKS cluster"
       required: false
-      value: <+input>.default(false).allowedValues(true,false)
+      value: <+input>.default(false)
     
     - name: existing_cluster_name
       type: String
@@ -89,28 +89,28 @@ pipeline:
     
     # Harness Resources
     - name: create_harness_environment
-      type: String
+      type: Boolean
       description: "Create Harness environment"
       required: false
-      value: <+input>.default(true).allowedValues(true,false)
+      value: <+input>.default(true)
     
     - name: create_prod_environment
-      type: String
+      type: Boolean
       description: "Create production environment"
       required: false
-      value: <+input>.default(true).allowedValues(true,false)
+      value: <+input>.default(true)
     
     - name: create_delegate
-      type: String
+      type: Boolean
       description: "Create Harness delegate"
       required: false
-      value: <+input>.default(true).allowedValues(true,false)
+      value: <+input>.default(true)
     
     - name: force_recreate
-      type: String
+      type: Boolean
       description: "Delete existing resources before provisioning"
       required: false
-      value: <+input>.default(false).allowedValues(true,false)
+      value: <+input>.default(false)
     
     # Git Repository
     - name: git_repo_url

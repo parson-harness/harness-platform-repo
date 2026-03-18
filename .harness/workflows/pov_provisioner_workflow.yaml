@@ -177,11 +177,11 @@ spec:
           harness_api_key: ${{ parameters.harness_api_key }}
           harness_api_key_email: ${{ parameters.harness_api_key_email }}
           deployment_targets: ${{ parameters.deployment_targets }}
-          create_eks_cluster: ${{ parameters.create_eks_cluster | string }}
+          create_eks_cluster: ${{ parameters.create_eks_cluster }}
           existing_cluster_name: ${{ parameters.existing_cluster_name }}
-          create_harness_environment: ${{ parameters.create_harness_environment | string }}
-          create_prod_environment: ${{ parameters.create_prod_environment | string }}
-          create_delegate: ${{ parameters.create_delegate | string }}
+          create_harness_environment: ${{ parameters.create_harness_environment }}
+          create_prod_environment: ${{ parameters.create_prod_environment }}
+          create_delegate: ${{ parameters.create_delegate }}
           git_repo_url: ${{ parameters.git_repo_url }}
-          force_recreate: ${{ parameters.force_recreate | string }}
+          force_recreate: ${{ parameters.force_recreate }}
         apikey: ${{ parameters.token }}
