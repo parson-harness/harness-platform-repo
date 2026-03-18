@@ -8,15 +8,28 @@ projectIdentifier: parson
 orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
-  description: "Quick provisioning for SE sandbox environments in the current account"
+  description: |
+    Quick provisioning for SE sandbox environments in the Harness demo account.
+    
+    What gets created:
+    - Harness CI pipeline (builds from GitHub, pushes to HAR)
+    - Harness CD pipelines (Canary, Blue-Green, Strategy Choice)
+    - Harness Service and Environments (Dev, Prod)
+    - K8s namespaces in shared EKS cluster
+    - Harness Artifact Registry for Docker images
+    
+    Prerequisites:
+    - Your Harness API key with admin permissions
+    - Access to sandbox org (you're already here!)
   tags:
     - se-sandbox
     - iacm
     - self-service
+    - same-account
 spec:
   presentation:
-    customTitle: Provision SE Sandbox
-    customSubTitle: Create a demo environment in your current Harness account
+    customTitle: SE Sandbox
+    customSubTitle: Create your own demo environment in this Harness account (uses shared EKS cluster)
     customCreateButtonText: Provision Sandbox
   
   output:

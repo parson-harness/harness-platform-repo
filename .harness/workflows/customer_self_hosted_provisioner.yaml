@@ -1,7 +1,7 @@
 apiVersion: harness.io/v1
 kind: Workflow
-name: POV in a Box Provisioner
-identifier: pov_in_a_box_provisioner
+name: Customer Self-Hosted Provisioner
+identifier: customer_self_hosted_provisioner
 type: workflow
 scope: project
 projectIdentifier: parson
@@ -9,29 +9,38 @@ orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
   description: |
-    Provision a complete Harness POV in a customer account using shared infrastructure.
+    ADVANCED: Provision a complete Harness demo in a customer's own AWS environment.
+    
+    ⚠️  This option requires the customer to set up their own AWS infrastructure.
     
     What gets created:
-    - Harness CI pipeline (builds from GitHub, pushes to HAR)
-    - Harness CD pipelines (Canary, Blue-Green, Strategy Choice)
-    - Harness Service and Environments (Dev, Prod)
-    - K8s namespaces in shared EKS cluster
-    - Harness Artifact Registry for Docker images
+    - NEW EKS cluster in customer's AWS account
+    - VPC, subnets, NAT gateways
+    - IAM roles for IRSA (delegate permissions)
+    - Harness CI/CD pipelines
+    - Harness Service and Environments
+    - Harness Artifact Registry
     
-    Prerequisites:
-    - Customer Harness account with org/project created
-    - Customer API key with admin permissions
-    - Access to shared EKS cluster (harness-eks-parson)
+    Prerequisites (REQUIRED):
+    1. Customer AWS account with admin permissions
+    2. OIDC AWS Connector in customer's Harness account
+       - Must have permissions: EKS, VPC, IAM, EC2
+       - See: https://developer.harness.io/docs/platform/connectors/cloud-providers/ref-cloud-providers/aws-connector-settings-reference
+    3. Customer Harness account with IACM enabled
+    4. Customer API key with admin permissions
+    
+    Estimated provisioning time: 20-30 minutes (EKS cluster creation)
+    Estimated AWS cost: ~$150/month for EKS + node groups
   tags:
-    - pov-in-a-box
+    - customer-self-hosted
     - iacm
-    - cross-account
-    - shared-infra
+    - own-aws
+    - advanced
 spec:
   presentation:
-    customTitle: POV in a Box
-    customSubTitle: Deploy a complete Harness demo into a customer account (uses shared EKS cluster)
-    customCreateButtonText: Provision POV
+    customTitle: Customer Self-Hosted (Advanced)
+    customSubTitle: "⚠️ Creates AWS infrastructure in customer's account - requires OIDC AWS connector"
+    customCreateButtonText: Provision Infrastructure
   
   output:
     links:
@@ -58,9 +67,9 @@ spec:
         owner:
           title: POV Owner
           type: string
-          description: "Owner name (lowercase, alphanumeric). Used for resource naming (e.g., 'todd' creates 'todd_pov' workspace)"
+          description: "Owner name (lowercase, alphanumeric). Used for resource naming"
           pattern: "^[a-z][a-z0-9]*$"
-          ui:help: "Must start with a letter, lowercase alphanumeric only"
+          ui:help: "Must start with a letter, lowercase alphanumeric only. This will be used to name AWS resources."
         
         token:
           title: Harness Token
@@ -68,7 +77,7 @@ spec:
           ui:widget: password
           ui:field: HarnessAuthToken
     
-    - title: Harness Configuration
+    - title: Customer Harness Account
       required:
         - harness_account_id
         - harness_org_id
@@ -77,66 +86,87 @@ spec:
         - harness_api_key_email
       properties:
         harness_account_id:
-          title: Target Account ID
+          title: Customer Account ID
           type: string
-          description: "Harness Account ID where the POV will be provisioned"
-          default: <+account.identifier>
+          description: "Customer's Harness Account ID"
           ui:help: "Find this in Account Settings > Overview, or in the URL after /account/"
         
         harness_cluster:
           title: Harness Cluster
           type: string
-          description: "Which Harness cluster is the target account on?"
-          default: "https://app.harness.io/gratis"
+          description: "Which Harness cluster is the customer account on?"
+          default: "https://app.harness.io"
           enum:
             - "https://app.harness.io/gratis"
             - "https://app.harness.io"
             - "https://app3.harness.io"
           enumNames:
-            - "Prod 1 - Harness Demo Account Cluster"
-            - "Prod 2 - Enterprise accounts"
+            - "Prod 1 - Free/Community accounts"
+            - "Prod 2 - Enterprise accounts (most common)"
             - "Prod 3 - Enterprise accounts"
         
         harness_org_id:
           title: Organization ID
           type: string
-          description: "Harness Organization ID for the POV (type manually for cross-account)"
-          default: sandbox
-          ui:help: "For cross-account provisioning, type the org ID manually instead of using the picker"
+          description: "Customer's Harness Organization ID"
         
         harness_project_id:
           title: Project ID
           type: string
-          description: "Harness Project ID for the POV (type manually for cross-account)"
-          default: parson
-          ui:help: "For cross-account provisioning, type the project ID manually"
+          description: "Customer's Harness Project ID"
         
         harness_api_key:
-          title: Harness API Key
+          title: Customer API Key
           type: string
-          description: "Harness Platform API Key (PAT or SAT) with admin permissions"
+          description: "Customer's Harness API Key with admin permissions"
           ui:widget: password
         
         harness_api_key_email:
           title: API Key Email
           type: string
-          description: "Email associated with the API key"
+          description: "Email associated with the customer's API key"
           format: email
     
-    - title: Infrastructure
+    - title: AWS Infrastructure
+      required:
+        - aws_region
       properties:
-        existing_cluster_name:
-          title: EKS Cluster
+        create_eks_cluster:
+          title: Create New EKS Cluster
           type: string
-          description: "Shared EKS cluster for deployments"
-          default: "harness-eks-parson"
-          ui:readonly: true
-          ui:help: "POV in a Box uses the shared Harness EKS cluster. No AWS setup required in customer account."
+          description: "Create a new EKS cluster in customer's AWS account"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+          ui:help: "⚠️ Requires OIDC AWS connector with EKS, VPC, IAM permissions"
+        
+        aws_region:
+          title: AWS Region
+          type: string
+          description: "AWS region for infrastructure"
+          default: "us-west-2"
+          enum:
+            - "us-east-1"
+            - "us-east-2"
+            - "us-west-1"
+            - "us-west-2"
+            - "eu-west-1"
+            - "eu-central-1"
+            - "ap-southeast-1"
+            - "ap-northeast-1"
+        
+        existing_cluster_name:
+          title: Existing EKS Cluster Name
+          type: string
+          description: "If not creating new cluster, provide existing cluster name"
+          ui:options:
+            hidden: ${{ parameters.create_eks_cluster === "true" }}
     
     - title: Harness Resources
       properties:
         create_harness_environment:
-          title: Create Harness Environment?
+          title: Create Dev Environment?
           type: string
           description: "Create Harness dev environment and infrastructure"
           default: "true"
@@ -169,22 +199,23 @@ spec:
           type: string
           description: "Git repository URL for the demo app source code"
           default: "https://github.com/parson-harness/harness-demo-app.git"
+          ui:help: "Customer can fork this repo and use their own URL"
     
     - title: Advanced Options
       properties:
         force_recreate:
           title: Force Recreate?
           type: string
-          description: "Delete existing resources before provisioning (use with caution)"
-          default: "true"
+          description: "Delete existing resources before provisioning"
+          default: "false"
           enum:
             - "true"
             - "false"
-          ui:help: "Recommended during testing. Will destroy any existing POV resources for this owner before provisioning."
+          ui:help: "⚠️ Use with caution - will destroy existing AWS infrastructure"
 
   steps:
     - id: trigger
-      name: Provisioning POV Environment
+      name: Provisioning Customer Infrastructure
       action: trigger:harness-custom-pipeline
       input:
         url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/idp_pov_provisioner/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
@@ -197,7 +228,7 @@ spec:
           harness_api_key: ${{ parameters.harness_api_key }}
           harness_api_key_email: ${{ parameters.harness_api_key_email }}
           deployment_targets: "eks"
-          create_eks_cluster: "false"
+          create_eks_cluster: ${{ parameters.create_eks_cluster }}
           existing_cluster_name: ${{ parameters.existing_cluster_name }}
           create_harness_environment: ${{ parameters.create_harness_environment }}
           create_prod_environment: ${{ parameters.create_prod_environment }}
