@@ -41,3 +41,13 @@ output "ci_pipeline_identifier" {
   description = "Identifier of the CI build pipeline"
   value       = var.create_ci_pipeline ? harness_platform_pipeline.ci_build[0].identifier : null
 }
+
+output "cd_webhook_trigger_id" {
+  description = "ID of the CD webhook trigger for auto-deploy"
+  value       = var.create_ci_completion_trigger && var.create_ci_pipeline && var.create_canary_pipeline ? harness_platform_triggers.cd_webhook_trigger[0].id : null
+}
+
+output "cd_webhook_trigger_identifier" {
+  description = "Identifier of the CD webhook trigger for auto-deploy"
+  value       = var.create_ci_completion_trigger && var.create_ci_pipeline && var.create_canary_pipeline ? harness_platform_triggers.cd_webhook_trigger[0].identifier : null
+}

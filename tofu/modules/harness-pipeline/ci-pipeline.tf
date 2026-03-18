@@ -34,6 +34,21 @@ resource "harness_platform_pipeline" "ci_build" {
           description: Git repository URL
           required: true
           value: <+input>.default(https://github.com/${var.git_repo_name}.git)
+        - name: auto_deploy
+          type: String
+          description: Automatically trigger CD pipeline after successful build
+          required: false
+          value: <+input>.default(true).allowedValues(true,false)
+        - name: harness_endpoint
+          type: String
+          description: Harness API endpoint
+          required: false
+          value: <+input>.default(https://app.harness.io/gratis)
+        - name: harness_api_key
+          type: String
+          description: Harness API key for triggering CD pipeline
+          required: false
+          value: <+input>
       stages:
         - stage:
             name: Build and Push
@@ -152,6 +167,61 @@ resource "harness_platform_pipeline" "ci_build" {
                           echo ""
                           echo "Use image_tag: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>"
                           echo "========================================"
+                  - step:
+                      type: Run
+                      name: Trigger CD Pipeline
+                      identifier: trigger_cd
+                      spec:
+                        shell: Bash
+                        command: |
+                          if [ "$AUTO_DEPLOY" = "true" ]; then
+                            echo "========================================"
+                            echo "  AUTO-DEPLOYING TO DEV"
+                            echo "========================================"
+                            echo "Triggering Canary deployment with image tag: $IMAGE_TAG"
+                            
+                            # Get the webhook URL from the trigger
+                            WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.canary_pipeline_id}&triggerIdentifier=auto_deploy_webhook"
+                            
+                            echo "Webhook URL: $WEBHOOK_URL"
+                            
+                            # Trigger the CD pipeline
+                            response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
+                              -H "Content-Type: application/json" \
+                              -H "x-api-key: $API_KEY" \
+                              -d "{\"image_tag\": \"$IMAGE_TAG\"}")
+                            
+                            http_code=$(echo "$response" | tail -n1)
+                            body=$(echo "$response" | sed '$d')
+                            
+                            echo "Response code: $http_code"
+                            echo "Response: $body"
+                            
+                            if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
+                              echo "✓ CD pipeline triggered successfully!"
+                            else
+                              echo "⚠ CD pipeline trigger returned: $http_code"
+                              echo "Deployment can still be triggered manually."
+                            fi
+                          else
+                            echo "Auto-deploy is disabled. To deploy, run a CD pipeline manually."
+                          fi
+                        envVariables:
+                          IMAGE_TAG: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
+                          AUTO_DEPLOY: <+pipeline.variables.auto_deploy>
+                          HARNESS_ENDPOINT: <+pipeline.variables.harness_endpoint>
+                          ACCOUNT_ID: <+account.identifier>
+                          ORG_ID: <+org.identifier>
+                          PROJECT_ID: <+project.identifier>
+                          API_KEY: <+pipeline.variables.harness_api_key>
+                      when:
+                        stageStatus: Success
+                      failureStrategies:
+                        - onFailure:
+                            errors:
+                              - AllErrors
+                            action:
+                              type: MarkAsSuccess
             failureStrategies:
               - onFailure:
                   errors:

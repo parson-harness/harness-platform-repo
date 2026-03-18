@@ -211,6 +211,22 @@ variable "har_image_name" {
 }
 
 ################################################################################
+# Trigger Variables
+################################################################################
+
+variable "create_ci_completion_trigger" {
+  description = "Create webhook trigger on CD pipeline for auto-deploy from CI"
+  type        = bool
+  default     = true
+}
+
+variable "ci_completion_trigger_enabled" {
+  description = "Enable the auto-deploy webhook trigger"
+  type        = bool
+  default     = true
+}
+
+################################################################################
 # Common Variables
 ################################################################################
 
