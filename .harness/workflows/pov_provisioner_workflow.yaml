@@ -91,7 +91,7 @@ spec:
           title: Harness API Key
           type: string
           description: "Harness Platform API Key (PAT or SAT) with admin permissions"
-          ui:field: Secret
+          ui:widget: password
         
         harness_api_key_email:
           title: API Key Email
