@@ -1,0 +1,129 @@
+apiVersion: harness.io/v1
+kind: Workflow
+name: SE Sandbox Destroyer
+identifier: se_sandbox_destroyer
+type: workflow
+scope: project
+projectIdentifier: parson
+orgIdentifier: sandbox
+owner: todd.parson@harness.io
+metadata:
+  description: "Destroy an SE sandbox environment in the current account"
+  tags:
+    - se-sandbox
+    - iacm
+    - self-service
+spec:
+  presentation:
+    customTitle: Destroy SE Sandbox
+    customSubTitle: Remove all resources from your sandbox environment
+    customCreateButtonText: Destroy Sandbox
+  
+  output:
+    links:
+      - title: Pipeline Execution
+        url: ${{ steps.trigger.output.PipelineUrl }}
+  
+  lifecycle: production
+  
+  parameters:
+    - title: Sandbox Identity
+      required:
+        - owner
+      properties:
+        owner:
+          title: Sandbox Owner
+          type: string
+          description: "Owner name of the sandbox to destroy (must match exactly)"
+          pattern: "^[a-z][a-z0-9]*$"
+          ui:help: "Enter the same owner name used when provisioning"
+        
+        token:
+          title: Harness Token
+          type: string
+          ui:widget: password
+          ui:field: HarnessAuthToken
+    
+    - title: Target Location
+      required:
+        - harness_org_id
+        - harness_project_id
+        - harness_api_key
+      properties:
+        harness_org_id:
+          title: Organization
+          type: string
+          description: "Organization where the sandbox exists"
+          default: sandbox
+          ui:field: HarnessOrgPicker
+        
+        harness_project_id:
+          title: Project
+          type: string
+          description: "Project where the sandbox exists"
+          default: parson
+          ui:field: HarnessProjectPicker
+        
+        harness_api_key:
+          title: Harness API Key
+          type: string
+          description: "Your Harness API Key (PAT) with admin permissions"
+          ui:widget: password
+    
+    - title: Destruction Options
+      properties:
+        destroy_terraform:
+          title: Destroy Terraform Resources?
+          type: string
+          description: "Run terraform destroy to remove infrastructure (K8s namespaces, IAM roles, HAR registry)"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+        
+        delete_delegate:
+          title: Delete Delegate?
+          type: string
+          description: "Delete the Harness delegate from the cluster"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+        
+        delete_workspace:
+          title: Delete IACM Workspace?
+          type: string
+          description: "Delete the IACM workspace (loses Terraform state)"
+          default: "false"
+          enum:
+            - "true"
+            - "false"
+          ui:help: "Warning: Deleting the workspace loses Terraform state. Only do this if you're sure."
+        
+        force_delete:
+          title: Force Delete?
+          type: string
+          description: "Force delete resources even if they have dependencies"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+
+  steps:
+    - id: trigger
+      name: Destroying SE Sandbox
+      action: trigger:harness-custom-pipeline
+      input:
+        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/idp_pov_destroyer/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
+        inputset:
+          owner: ${{ parameters.owner }}
+          harness_account_id: <+account.identifier>
+          harness_endpoint: "https://app.harness.io/gratis"
+          harness_org_id: ${{ parameters.harness_org_id }}
+          harness_project_id: ${{ parameters.harness_project_id }}
+          harness_api_key: ${{ parameters.harness_api_key }}
+          destroy_terraform: ${{ parameters.destroy_terraform }}
+          delete_delegate: ${{ parameters.delete_delegate }}
+          delete_workspace: ${{ parameters.delete_workspace }}
+          force_delete: ${{ parameters.force_delete }}
+        apikey: ${{ parameters.token }}

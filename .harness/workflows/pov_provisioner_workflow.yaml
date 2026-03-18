@@ -1,22 +1,22 @@
 apiVersion: harness.io/v1
 kind: Workflow
-name: POV Provisioner
-identifier: pov_provisioner
+name: POV in a Box Provisioner
+identifier: pov_in_a_box_provisioner
 type: workflow
 scope: project
 projectIdentifier: parson
 orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
-  description: "Self-service workflow to provision a complete POV environment with Harness CD, CI, and demo app"
+  description: "Provision a complete POV environment in a customer or external Harness account"
   tags:
-    - pov
+    - pov-in-a-box
     - iacm
-    - self-service
+    - cross-account
 spec:
   presentation:
-    customTitle: Provision POV Environment
-    customSubTitle: Create a complete Harness POV with CI/CD pipelines, environments, and demo app
+    customTitle: POV in a Box - Provisioner
+    customSubTitle: Create a complete Harness POV in a customer or external account
     customCreateButtonText: Provision POV
   
   output:

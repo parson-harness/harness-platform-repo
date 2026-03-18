@@ -1,0 +1,171 @@
+apiVersion: harness.io/v1
+kind: Workflow
+name: SE Sandbox Provisioner
+identifier: se_sandbox_provisioner
+type: workflow
+scope: project
+projectIdentifier: parson
+orgIdentifier: sandbox
+owner: todd.parson@harness.io
+metadata:
+  description: "Quick provisioning for SE sandbox environments in the current account"
+  tags:
+    - se-sandbox
+    - iacm
+    - self-service
+spec:
+  presentation:
+    customTitle: Provision SE Sandbox
+    customSubTitle: Create a demo environment in your current Harness account
+    customCreateButtonText: Provision Sandbox
+  
+  output:
+    links:
+      - title: Pipeline Execution
+        url: ${{ steps.trigger.output.PipelineUrl }}
+      - title: CD Pipeline (Strategy Choice)
+        url: https://app.harness.io/ng/account/<+account.identifier>/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_k8s_strategy_deploy/pipeline-studio
+      - title: CD Pipeline (Canary)
+        url: https://app.harness.io/ng/account/<+account.identifier>/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_k8s_canary_deploy/pipeline-studio
+      - title: CD Pipeline (Blue-Green)
+        url: https://app.harness.io/ng/account/<+account.identifier>/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_k8s_bg_canary_deploy/pipeline-studio
+      - title: CI Pipeline
+        url: https://app.harness.io/ng/account/<+account.identifier>/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_ci_build/pipeline-studio
+      - title: Artifact Registry
+        url: https://app.harness.io/ng/account/<+account.identifier>/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/artifacts
+  
+  lifecycle: production
+  
+  parameters:
+    - title: Sandbox Identity
+      required:
+        - owner
+      properties:
+        owner:
+          title: Sandbox Owner
+          type: string
+          description: "Your name (lowercase, alphanumeric). Used for resource naming (e.g., 'todd' creates 'todd_pov' workspace)"
+          pattern: "^[a-z][a-z0-9]*$"
+          ui:help: "Must start with a letter, lowercase alphanumeric only"
+        
+        token:
+          title: Harness Token
+          type: string
+          ui:widget: password
+          ui:field: HarnessAuthToken
+    
+    - title: Target Location
+      required:
+        - harness_org_id
+        - harness_project_id
+        - harness_api_key
+        - harness_api_key_email
+      properties:
+        harness_org_id:
+          title: Organization
+          type: string
+          description: "Select the organization for your sandbox"
+          default: sandbox
+          ui:field: HarnessOrgPicker
+        
+        harness_project_id:
+          title: Project
+          type: string
+          description: "Select the project for your sandbox"
+          default: parson
+          ui:field: HarnessProjectPicker
+        
+        harness_api_key:
+          title: Harness API Key
+          type: string
+          description: "Your Harness API Key (PAT) with admin permissions"
+          ui:widget: password
+        
+        harness_api_key_email:
+          title: Your Email
+          type: string
+          description: "Email associated with your API key"
+          format: email
+    
+    - title: Infrastructure Options
+      properties:
+        deployment_targets:
+          title: Deployment Target
+          type: string
+          description: "Where to deploy the demo app"
+          enum:
+            - eks
+            - ecs
+            - lambda
+          default: eks
+        
+        existing_cluster_name:
+          title: EKS Cluster Name
+          type: string
+          description: "Name of the shared EKS cluster"
+          default: "harness-eks-parson"
+    
+    - title: Harness Resources
+      properties:
+        create_harness_environment:
+          title: Create Harness Environment?
+          type: string
+          description: "Create Harness dev environment and infrastructure"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+        
+        create_prod_environment:
+          title: Create Prod Environment?
+          type: string
+          description: "Create Harness prod environment and infrastructure"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+        
+        create_delegate:
+          title: Create Delegate?
+          type: string
+          description: "Create a new Harness delegate in the cluster"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+    
+    - title: Advanced Options
+      properties:
+        force_recreate:
+          title: Force Recreate?
+          type: string
+          description: "Delete existing resources before provisioning"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+          ui:help: "Recommended during testing. Will destroy any existing sandbox resources for this owner."
+
+  steps:
+    - id: trigger
+      name: Provisioning SE Sandbox
+      action: trigger:harness-custom-pipeline
+      input:
+        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/idp_pov_provisioner/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
+        inputset:
+          owner: ${{ parameters.owner }}
+          harness_account_id: <+account.identifier>
+          harness_endpoint: "https://app.harness.io/gratis"
+          harness_org_id: ${{ parameters.harness_org_id }}
+          harness_project_id: ${{ parameters.harness_project_id }}
+          harness_api_key: ${{ parameters.harness_api_key }}
+          harness_api_key_email: ${{ parameters.harness_api_key_email }}
+          deployment_targets: ${{ parameters.deployment_targets }}
+          create_eks_cluster: "false"
+          existing_cluster_name: ${{ parameters.existing_cluster_name }}
+          create_harness_environment: ${{ parameters.create_harness_environment }}
+          create_prod_environment: ${{ parameters.create_prod_environment }}
+          create_delegate: ${{ parameters.create_delegate }}
+          git_repo_url: "https://github.com/parson-harness/harness-demo-app.git"
+          force_recreate: ${{ parameters.force_recreate }}
+        apikey: ${{ parameters.token }}

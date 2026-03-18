@@ -1,22 +1,22 @@
 apiVersion: harness.io/v1
 kind: Workflow
-name: POV Destroyer
-identifier: pov_destroyer
+name: POV in a Box Destroyer
+identifier: pov_in_a_box_destroyer
 type: workflow
 scope: project
 projectIdentifier: parson
 orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
-  description: "Self-service workflow to destroy a POV environment and clean up all resources"
+  description: "Destroy a POV environment in a customer or external Harness account"
   tags:
-    - pov
+    - pov-in-a-box
     - iacm
-    - cleanup
+    - cross-account
 spec:
   presentation:
-    customTitle: Destroy POV Environment
-    customSubTitle: Remove all resources associated with a POV environment
+    customTitle: POV in a Box - Destroyer
+    customSubTitle: Remove all resources from a POV in a customer or external account
     customCreateButtonText: Destroy POV
   
   output:
