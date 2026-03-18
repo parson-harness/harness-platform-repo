@@ -23,6 +23,16 @@ spec:
     links:
       - title: Pipeline Execution
         url: ${{ steps.trigger.output.PipelineUrl }}
+      - title: CD Pipeline (Strategy Choice)
+        url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_k8s_strategy_deploy/pipeline-studio
+      - title: CD Pipeline (Canary)
+        url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_k8s_canary_deploy/pipeline-studio
+      - title: CD Pipeline (Blue-Green)
+        url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_k8s_bg_canary_deploy/pipeline-studio
+      - title: CI Pipeline
+        url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_ci_build/pipeline-studio
+      - title: Artifact Registry
+        url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/artifacts
   
   lifecycle: production
   
