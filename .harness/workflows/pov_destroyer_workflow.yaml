@@ -57,15 +57,19 @@ spec:
           description: "Harness Account ID where the POV exists"
           ui:help: "Find this in Account Settings > Overview, or in the URL after /account/"
         
-        harness_endpoint:
-          title: Harness Endpoint
+        harness_cluster:
+          title: Harness Cluster
           type: string
-          description: "Harness platform endpoint for the target account"
-          default: "https://app.harness.io/gratis"
+          description: "Which Harness cluster is the target account on?"
+          default: "Prod 1 (Free/Team)"
           enum:
-            - "https://app.harness.io/gratis"
-            - "https://app.harness.io"
-            - "https://app3.harness.io"
+            - "Prod 1 (Free/Team)"
+            - "Prod 2 (Enterprise)"
+            - "Prod 3 (Enterprise)"
+          enumNames:
+            - "Prod 1 - Free & Team accounts (app.harness.io)"
+            - "Prod 2 - Enterprise accounts (app.harness.io)"
+            - "Prod 3 - Enterprise accounts (app3.harness.io)"
         
         harness_org_id:
           title: Organization ID
@@ -91,27 +95,39 @@ spec:
       properties:
         destroy_terraform:
           title: Destroy Terraform Resources?
-          type: boolean
+          type: string
           description: "Run terraform destroy to remove infrastructure (K8s namespaces, IAM roles, HAR registry)"
-          default: true
+          default: "true"
+          enum:
+            - "true"
+            - "false"
         
         delete_harness_resources:
           title: Delete Harness Resources?
-          type: boolean
+          type: string
           description: "Delete Harness pipelines, environments, services, and connectors"
-          default: true
+          default: "true"
+          enum:
+            - "true"
+            - "false"
         
         delete_delegate:
           title: Delete Delegate?
-          type: boolean
+          type: string
           description: "Delete the Harness delegate from the cluster"
-          default: true
+          default: "true"
+          enum:
+            - "true"
+            - "false"
         
         delete_workspace:
           title: Delete IACM Workspace?
-          type: boolean
+          type: string
           description: "Delete the IACM workspace after destruction"
-          default: false
+          default: "false"
+          enum:
+            - "true"
+            - "false"
           ui:help: "Warning: This permanently removes the workspace and its state"
 
   steps:
@@ -123,12 +139,12 @@ spec:
         inputset:
           owner: ${{ parameters.owner }}
           harness_account_id: ${{ parameters.harness_account_id }}
-          harness_endpoint: ${{ parameters.harness_endpoint }}
+          harness_endpoint: ${{ parameters.harness_cluster === "Prod 1 (Free/Team)" && "https://app.harness.io/gratis" || parameters.harness_cluster === "Prod 3 (Enterprise)" && "https://app3.harness.io" || "https://app.harness.io" }}
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
           harness_api_key: ${{ parameters.harness_api_key }}
-          destroy_terraform: "${{ parameters.destroy_terraform }}"
-          delete_harness_resources: "${{ parameters.delete_harness_resources }}"
-          delete_delegate: "${{ parameters.delete_delegate }}"
-          delete_workspace: "${{ parameters.delete_workspace }}"
+          destroy_terraform: ${{ parameters.destroy_terraform }}
+          delete_harness_resources: ${{ parameters.delete_harness_resources }}
+          delete_delegate: ${{ parameters.delete_delegate }}
+          delete_workspace: ${{ parameters.delete_workspace }}
         apikey: ${{ parameters.token }}
