@@ -32,7 +32,7 @@ pipeline:
       value: <+input>.default(https://app.harness.io/gratis)
     
     - name: harness_api_key
-      type: Secret
+      type: String
       description: "Harness Platform API Key (PAT or SAT)"
       required: true
       value: <+input>
