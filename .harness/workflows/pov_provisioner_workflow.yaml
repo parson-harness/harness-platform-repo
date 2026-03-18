@@ -153,7 +153,7 @@ spec:
       name: Provisioning POV Environment
       action: trigger:harness-custom-pipeline
       input:
-        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/module/idp/orgs/sandbox/projects/parson/pipelines/idp_pov_provisioner/pipeline-studio/?storeType=INLINE"
+        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/idp_pov_provisioner/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
         inputset:
           owner: ${{ parameters.owner }}
           harness_endpoint: ${{ parameters.harness_endpoint }}

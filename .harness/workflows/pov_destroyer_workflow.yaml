@@ -3,7 +3,10 @@ kind: Workflow
 name: POV Destroyer
 identifier: pov_destroyer
 type: workflow
-owner: platform-team
+scope: project
+projectIdentifier: parson
+orgIdentifier: sandbox
+owner: todd.parson@harness.io
 metadata:
   description: "Self-service workflow to destroy a POV environment and clean up all resources"
   tags:
@@ -107,7 +110,7 @@ spec:
       name: Destroying POV Environment
       action: trigger:harness-custom-pipeline
       input:
-        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/module/idp/orgs/sandbox/projects/parson/pipelines/idp_pov_destroyer/pipeline-studio/?storeType=INLINE"
+        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/idp_pov_destroyer/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
         inputset:
           owner: ${{ parameters.owner }}
           harness_endpoint: ${{ parameters.harness_endpoint }}
