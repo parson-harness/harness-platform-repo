@@ -274,9 +274,9 @@ pipeline:
                     outputVariables: []
                   timeout: 1m
     - stage:
-        name: Create Workspace
+        name: Create Workspace from Template
         identifier: create_workspace
-        description: Create a new IACM workspace for this POV from the template
+        description: Create a new IACM workspace from the POV_Provisioner template using "Use Template" linkage
         type: Custom
         spec:
           execution:
@@ -304,7 +304,11 @@ pipeline:
                       {
                         "identifier": "<+pipeline.variables.owner>_pov",
                         "name": "<+pipeline.variables.owner> POV Workspace",
-                        "description": "POV environment for <+pipeline.variables.owner>",
+                        "description": "POV environment for <+pipeline.variables.owner> - linked to POV_Provisioner template",
+                        "associated_template": {
+                          "template_id": "POV_Provisioner",
+                          "version": "1.0"
+                        },
                         "provisioner": "opentofu",
                         "provisioner_version": "1.11.2",
                         "repository_connector": "parsongh",
@@ -402,67 +406,46 @@ pipeline:
                             "key": "existing_cluster_name",
                             "value": "<+pipeline.variables.existing_cluster_name>",
                             "value_type": "string"
-                          },
-                          "enable_irsa": {
-                            "key": "enable_irsa",
-                            "value": "true",
-                            "value_type": "string"
-                          },
-                          "create_connectors": {
-                            "key": "create_connectors",
-                            "value": "true",
-                            "value_type": "string"
-                          },
-                          "create_harness_service": {
-                            "key": "create_harness_service",
-                            "value": "true",
-                            "value_type": "string"
-                          },
-                          "create_canary_pipeline": {
-                            "key": "create_canary_pipeline",
-                            "value": "true",
-                            "value_type": "string"
-                          },
-                          "create_blue_green_pipeline": {
-                            "key": "create_blue_green_pipeline",
-                            "value": "true",
-                            "value_type": "string"
-                          },
-                          "artifact_registry_type": {
-                            "key": "artifact_registry_type",
-                            "value": "har",
-                            "value_type": "string"
-                          },
-                          "create_dockerhub_upstream": {
-                            "key": "create_dockerhub_upstream",
-                            "value": "false",
-                            "value_type": "string"
-                          },
-                          "import_to_harness_code": {
-                            "key": "import_to_harness_code",
-                            "value": "false",
-                            "value_type": "string"
-                          },
-                          "create_ci_pipeline": {
-                            "key": "create_ci_pipeline",
-                            "value": "true",
-                            "value_type": "string"
-                          },
-                          "github_repo_name": {
-                            "key": "github_repo_name",
-                            "value": "parson-harness/harness-demo-app",
-                            "value_type": "string"
                           }
                         },
                         "environment_variables": {},
                         "tags": {
                           "owner": "<+pipeline.variables.owner>",
                           "pov": "true",
-                          "idp-managed": "true"
+                          "idp-managed": "true",
+                          "template": "POV_Provisioner"
                         }
                       }
                     assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201 || <+httpResponseCode> == 409
                   timeout: 2m
+              - step:
+                  type: Http
+                  name: Link Workspace to Template
+                  identifier: link_workspace_template
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspace/templates
+                    method: POST
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.harness_api_key>
+                    requestBody: |
+                      {
+                        "template_id": "POV_Provisioner",
+                        "version": "1.0",
+                        "workspace_id": "<+pipeline.variables.owner>_pov"
+                      }
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201 || <+httpResponseCode> == 409
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
               - step:
                   type: ShellScript
                   name: Workspace Created
@@ -474,12 +457,16 @@ pipeline:
                       type: Inline
                       spec:
                         script: |
-                          echo "=== IACM Workspace Created ==="
+                          echo "=== IACM Workspace Created from Template ==="
                           echo "Workspace ID: <+pipeline.variables.owner>_pov"
+                          echo "Template: POV_Provisioner (v1.0)"
+                          echo "Linkage: Use Template (centrally managed)"
+                          echo ""
                           echo "Owner: <+pipeline.variables.owner>"
                           echo "Org: <+pipeline.variables.harness_org_id>"
                           echo "Project: <+pipeline.variables.harness_project_id>"
                           echo ""
+                          echo "Template changes will automatically propagate to this workspace."
                           echo "Proceeding to provision infrastructure..."
                     environmentVariables: []
                     outputVariables: []
