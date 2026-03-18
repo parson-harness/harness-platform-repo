@@ -145,161 +145,84 @@ pipeline:
           execution:
             steps:
               - step:
-                  type: Http
-                  name: Delete Dev Environment
-                  identifier: delete_dev_env
+                  type: ShellScript
+                  name: Delete Harness Resources
+                  identifier: delete_harness_resources
                   spec:
-                    url: <+pipeline.variables.harness_endpoint>/ng/api/environmentsV2/<+pipeline.variables.owner>_dev?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>&forceDelete=true
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -x
+                          
+                          echo "=== Deleting Harness Resources for owner: $OWNER ==="
+                          
+                          # Function to delete a resource
+                          delete_resource() {
+                            local url="$1"
+                            local name="$2"
+                            echo ""
+                            echo "Deleting $name..."
+                            response=$(curl -s -w "\n%{http_code}" -X DELETE "$url" -H "x-api-key: $API_KEY")
+                            http_code=$(echo "$response" | tail -n1)
+                            body=$(echo "$response" | sed '$d')
+                            echo "Response code: $http_code"
+                            if [ "$http_code" = "200" ] || [ "$http_code" = "204" ]; then
+                              echo "✓ $name deleted successfully"
+                            elif [ "$http_code" = "404" ] || [ "$http_code" = "400" ]; then
+                              echo "○ $name not found (already deleted or doesn't exist)"
+                            else
+                              echo "⚠ $name deletion returned: $http_code"
+                              echo "$body"
+                            fi
+                          }
+                          
+                          BASE_URL="$ENDPOINT"
+                          PARAMS="accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID"
+                          
+                          # Delete environments
+                          delete_resource "$BASE_URL/ng/api/environmentsV2/${OWNER}_dev?$PARAMS&forceDelete=true" "Dev Environment"
+                          delete_resource "$BASE_URL/ng/api/environmentsV2/${OWNER}_prod?$PARAMS&forceDelete=true" "Prod Environment"
+                          
+                          # Delete service
+                          delete_resource "$BASE_URL/ng/api/servicesV2/${OWNER}_demo_app?$PARAMS&forceDelete=true" "Service"
+                          
+                          # Delete connectors
+                          delete_resource "$BASE_URL/ng/api/connectors/${OWNER}_k8s_reference_architecture?$PARAMS&forceDelete=true" "K8s Connector"
+                          delete_resource "$BASE_URL/ng/api/connectors/${OWNER}_aws_reference_architecture?$PARAMS&forceDelete=true" "AWS Connector"
+                          
+                          # Delete pipelines
+                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_k8s_canary_deploy?$PARAMS" "Canary Pipeline"
+                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_k8s_bg_canary_deploy?$PARAMS" "Blue-Green Pipeline"
+                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_k8s_strategy_deploy?$PARAMS" "Strategy Choice Pipeline"
+                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_ci_build?$PARAMS" "CI Pipeline"
+                          
+                          echo ""
+                          echo "=== Cleanup Complete ==="
+                    environmentVariables:
+                      - name: OWNER
+                        type: String
+                        value: <+pipeline.variables.owner>
+                      - name: ACCOUNT_ID
+                        type: String
+                        value: <+pipeline.variables.harness_account_id>
+                      - name: ORG_ID
+                        type: String
+                        value: <+pipeline.variables.harness_org_id>
+                      - name: PROJECT_ID
+                        type: String
+                        value: <+pipeline.variables.harness_project_id>
+                      - name: ENDPOINT
+                        type: String
+                        value: <+pipeline.variables.harness_endpoint>
+                      - name: API_KEY
+                        type: String
                         value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
-                  timeout: 5m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Prod Environment
-                  identifier: delete_prod_env
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/ng/api/environmentsV2/<+pipeline.variables.owner>_prod?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>&forceDelete=true
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
-                  timeout: 5m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Service
-                  identifier: delete_service
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/ng/api/servicesV2/<+pipeline.variables.owner>_demo_app?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>&forceDelete=true
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
-                  timeout: 5m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete K8s Connector
-                  identifier: delete_k8s_connector
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/ng/api/connectors/<+pipeline.variables.owner>_k8s_reference_architecture?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>&forceDelete=true
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
-                  timeout: 5m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete AWS Connector
-                  identifier: delete_aws_connector
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/ng/api/connectors/<+pipeline.variables.owner>_aws_reference_architecture?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>&forceDelete=true
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
-                  timeout: 5m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Canary Pipeline
-                  identifier: delete_canary_pipeline
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/pipeline/api/pipelines/<+pipeline.variables.owner>_k8s_canary_deploy?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
-                  timeout: 5m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Blue-Green Pipeline
-                  identifier: delete_bluegreen_pipeline
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/pipeline/api/pipelines/<+pipeline.variables.owner>_k8s_bg_canary_deploy?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
-                  timeout: 5m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Strategy Choice Pipeline
-                  identifier: delete_strategy_pipeline
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/pipeline/api/pipelines/<+pipeline.variables.owner>_k8s_strategy_deploy?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
-                  timeout: 5m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete CI Pipeline
-                  identifier: delete_ci_pipeline
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/pipeline/api/pipelines/<+pipeline.variables.owner>_ci_build?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 400 || <+httpResponseCode> == 404
-                  timeout: 5m
+                    outputVariables: []
+                  timeout: 10m
                   failureStrategies:
                     - onFailure:
                         errors:
