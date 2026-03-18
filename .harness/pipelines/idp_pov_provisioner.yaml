@@ -96,166 +96,6 @@ pipeline:
       value: <+input>.default(https://github.com/parson-harness/harness-demo-app.git)
   stages:
     - stage:
-        name: Terraform Destroy
-        identifier: terraform_destroy
-        description: Destroy Terraform-managed resources (K8s namespaces, IAM roles, HAR registry)
-        type: IACM
-        when:
-          pipelineStatus: Success
-          condition: <+pipeline.variables.force_recreate> == "true"
-        spec:
-          platform:
-            os: Linux
-            arch: Amd64
-          runtime:
-            type: Cloud
-            spec: {}
-          workspace: <+pipeline.variables.owner>_pov
-          execution:
-            steps:
-              - step:
-                  type: IACMTerraformPlugin
-                  name: Init
-                  identifier: destroy_init
-                  timeout: 10m
-                  spec:
-                    command: init
-              - step:
-                  type: IACMTerraformPlugin
-                  name: Destroy
-                  identifier: destroy
-                  timeout: 30m
-                  spec:
-                    command: destroy
-        failureStrategies:
-          - onFailure:
-              errors:
-                - AllErrors
-              action:
-                type: MarkAsSuccess
-    - stage:
-        name: Cleanup Existing Resources
-        identifier: cleanup_existing
-        description: Delete existing Harness resources to allow fresh provisioning
-        type: Custom
-        when:
-          pipelineStatus: Success
-          condition: <+pipeline.variables.force_recreate> == "true"
-        spec:
-          execution:
-            steps:
-              - step:
-                  type: ShellScript
-                  name: Delete Harness Resources
-                  identifier: delete_harness_resources
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          #!/bin/bash
-                          set -x
-                          
-                          echo "=== Deleting Harness Resources for owner: $OWNER ==="
-                          
-                          # Function to delete a resource
-                          delete_resource() {
-                            local url="$1"
-                            local name="$2"
-                            echo ""
-                            echo "Deleting $name..."
-                            response=$(curl -s -w "\n%{http_code}" -X DELETE "$url" -H "x-api-key: $API_KEY")
-                            http_code=$(echo "$response" | tail -n1)
-                            body=$(echo "$response" | sed '$d')
-                            echo "Response code: $http_code"
-                            if [ "$http_code" = "200" ] || [ "$http_code" = "204" ]; then
-                              echo "✓ $name deleted successfully"
-                            elif [ "$http_code" = "404" ] || [ "$http_code" = "400" ]; then
-                              echo "○ $name not found (already deleted or doesn't exist)"
-                            else
-                              echo "⚠ $name deletion returned: $http_code"
-                              echo "$body"
-                            fi
-                          }
-                          
-                          BASE_URL="$ENDPOINT"
-                          PARAMS="accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID"
-                          
-                          # Delete environments
-                          delete_resource "$BASE_URL/ng/api/environmentsV2/${OWNER}_dev?$PARAMS&forceDelete=true" "Dev Environment"
-                          delete_resource "$BASE_URL/ng/api/environmentsV2/${OWNER}_prod?$PARAMS&forceDelete=true" "Prod Environment"
-                          
-                          # Delete service
-                          delete_resource "$BASE_URL/ng/api/servicesV2/${OWNER}_demo_app?$PARAMS&forceDelete=true" "Service"
-                          
-                          # Delete connectors
-                          delete_resource "$BASE_URL/ng/api/connectors/${OWNER}_k8s_reference_architecture?$PARAMS&forceDelete=true" "K8s Connector"
-                          delete_resource "$BASE_URL/ng/api/connectors/${OWNER}_aws_reference_architecture?$PARAMS&forceDelete=true" "AWS Connector"
-                          
-                          # Delete pipelines
-                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_k8s_canary_deploy?$PARAMS" "Canary Pipeline"
-                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_k8s_bg_canary_deploy?$PARAMS" "Blue-Green Pipeline"
-                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_k8s_strategy_deploy?$PARAMS" "Strategy Choice Pipeline"
-                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_ci_build?$PARAMS" "CI Pipeline"
-                          
-                          echo ""
-                          echo "=== Cleanup Complete ==="
-                    environmentVariables:
-                      - name: OWNER
-                        type: String
-                        value: <+pipeline.variables.owner>
-                      - name: ACCOUNT_ID
-                        type: String
-                        value: <+pipeline.variables.harness_account_id>
-                      - name: ORG_ID
-                        type: String
-                        value: <+pipeline.variables.harness_org_id>
-                      - name: PROJECT_ID
-                        type: String
-                        value: <+pipeline.variables.harness_project_id>
-                      - name: ENDPOINT
-                        type: String
-                        value: <+pipeline.variables.harness_endpoint>
-                      - name: API_KEY
-                        type: String
-                        value: <+pipeline.variables.harness_api_key>
-                    outputVariables: []
-                  timeout: 10m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: ShellScript
-                  name: Cleanup Complete
-                  identifier: cleanup_complete
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          echo "=== Cleanup Complete ==="
-                          echo "Terraform destroy ran in previous stage (if workspace existed)"
-                          echo "Deleted Harness API resources for owner: <+pipeline.variables.owner>"
-                          echo ""
-                          echo "API resources cleaned up:"
-                          echo "  - Environments: <+pipeline.variables.owner>_dev, <+pipeline.variables.owner>_prod"
-                          echo "  - Service: <+pipeline.variables.owner>_demo_app"
-                          echo "  - Connectors: K8s, AWS"
-                          echo "  - Pipelines: Canary, Blue-Green, Strategy Choice, CI Build"
-                          echo ""
-                          echo "Note: IACM workspace preserved to maintain Terraform state"
-                          echo "Proceeding to provision..."
-                    environmentVariables: []
-                    outputVariables: []
-                  timeout: 1m
-    - stage:
         name: Create Workspace from Template
         identifier: create_workspace
         description: Create a new IACM workspace from the POV_Provisioner template using "Use Template" linkage
@@ -453,6 +293,132 @@ pipeline:
                     environmentVariables: []
                     outputVariables: []
                   timeout: 1m
+    - stage:
+        name: Terraform Destroy
+        identifier: terraform_destroy
+        description: Destroy Terraform-managed resources (only if force_recreate is true)
+        type: IACM
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.force_recreate> == "true"
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+pipeline.variables.owner>_pov
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: destroy_init
+                  timeout: 10m
+                  spec:
+                    command: init
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Destroy
+                  identifier: destroy
+                  timeout: 30m
+                  spec:
+                    command: destroy
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: MarkAsSuccess
+    - stage:
+        name: Cleanup Existing Resources
+        identifier: cleanup_existing
+        description: Delete existing Harness resources to allow fresh provisioning
+        type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.force_recreate> == "true"
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Delete Harness Resources
+                  identifier: delete_harness_resources
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -x
+                          
+                          echo "=== Deleting Harness Resources for owner: $OWNER ==="
+                          
+                          delete_resource() {
+                            local url="$1"
+                            local name="$2"
+                            echo ""
+                            echo "Deleting $name..."
+                            response=$(curl -s -w "\n%{http_code}" -X DELETE "$url" -H "x-api-key: $API_KEY")
+                            http_code=$(echo "$response" | tail -n1)
+                            body=$(echo "$response" | sed '$d')
+                            echo "Response code: $http_code"
+                            if [ "$http_code" = "200" ] || [ "$http_code" = "204" ]; then
+                              echo "✓ $name deleted successfully"
+                            elif [ "$http_code" = "404" ] || [ "$http_code" = "400" ]; then
+                              echo "○ $name not found (already deleted or doesn't exist)"
+                            else
+                              echo "⚠ $name deletion returned: $http_code"
+                              echo "$body"
+                            fi
+                          }
+                          
+                          BASE_URL="$ENDPOINT"
+                          PARAMS="accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID"
+                          
+                          delete_resource "$BASE_URL/ng/api/environmentsV2/${OWNER}_dev?$PARAMS&forceDelete=true" "Dev Environment"
+                          delete_resource "$BASE_URL/ng/api/environmentsV2/${OWNER}_prod?$PARAMS&forceDelete=true" "Prod Environment"
+                          delete_resource "$BASE_URL/ng/api/servicesV2/${OWNER}_demo_app?$PARAMS&forceDelete=true" "Service"
+                          delete_resource "$BASE_URL/ng/api/connectors/${OWNER}_k8s_reference_architecture?$PARAMS&forceDelete=true" "K8s Connector"
+                          delete_resource "$BASE_URL/ng/api/connectors/${OWNER}_aws_reference_architecture?$PARAMS&forceDelete=true" "AWS Connector"
+                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_k8s_canary_deploy?$PARAMS" "Canary Pipeline"
+                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_k8s_bg_canary_deploy?$PARAMS" "Blue-Green Pipeline"
+                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_k8s_strategy_deploy?$PARAMS" "Strategy Choice Pipeline"
+                          delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_ci_build?$PARAMS" "CI Pipeline"
+                          
+                          echo ""
+                          echo "=== Cleanup Complete ==="
+                    environmentVariables:
+                      - name: OWNER
+                        type: String
+                        value: <+pipeline.variables.owner>
+                      - name: ACCOUNT_ID
+                        type: String
+                        value: <+pipeline.variables.harness_account_id>
+                      - name: ORG_ID
+                        type: String
+                        value: <+pipeline.variables.harness_org_id>
+                      - name: PROJECT_ID
+                        type: String
+                        value: <+pipeline.variables.harness_project_id>
+                      - name: ENDPOINT
+                        type: String
+                        value: <+pipeline.variables.harness_endpoint>
+                      - name: API_KEY
+                        type: String
+                        value: <+pipeline.variables.harness_api_key>
+                    outputVariables: []
+                  timeout: 10m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
     - stage:
         name: Plan and Apply
         identifier: plan_and_apply
