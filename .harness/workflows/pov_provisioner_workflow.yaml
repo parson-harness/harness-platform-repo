@@ -86,16 +86,16 @@ spec:
         harness_org_id:
           title: Organization ID
           type: string
-          description: "Harness Organization ID for the POV"
+          description: "Harness Organization ID for the POV (type manually for cross-account)"
           default: sandbox
-          ui:field: HarnessOrgPicker
+          ui:help: "For cross-account provisioning, type the org ID manually instead of using the picker"
         
         harness_project_id:
           title: Project ID
           type: string
-          description: "Harness Project ID for the POV"
+          description: "Harness Project ID for the POV (type manually for cross-account)"
           default: parson
-          ui:field: HarnessProjectPicker
+          ui:help: "For cross-account provisioning, type the project ID manually"
         
         harness_api_key:
           title: Harness API Key

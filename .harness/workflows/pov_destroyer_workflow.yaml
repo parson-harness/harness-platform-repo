@@ -75,16 +75,16 @@ spec:
         harness_org_id:
           title: Organization ID
           type: string
-          description: "Harness Organization ID where the POV exists"
+          description: "Harness Organization ID where the POV exists (type manually for cross-account)"
           default: sandbox
-          ui:field: HarnessOrgPicker
+          ui:help: "For cross-account destruction, type the org ID manually"
         
         harness_project_id:
           title: Project ID
           type: string
-          description: "Harness Project ID where the POV exists"
+          description: "Harness Project ID where the POV exists (type manually for cross-account)"
           default: parson
-          ui:field: HarnessProjectPicker
+          ui:help: "For cross-account destruction, type the project ID manually"
         
         harness_api_key:
           title: Harness API Key
