@@ -57,16 +57,16 @@ pipeline:
       value: <+project.identifier>
     
     - name: create_harness_org
-      type: String
+      type: Boolean
       description: "Create new org"
       required: false
-      value: <+input>.default(false).allowedValues(true,false)
+      value: <+input>.default(false)
     
     - name: create_harness_project
-      type: String
+      type: Boolean
       description: "Create new project"
       required: false
-      value: <+input>.default(false).allowedValues(true,false)
+      value: <+input>.default(false)
     
     # Infrastructure Options
     - name: deployment_targets
