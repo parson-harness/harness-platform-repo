@@ -64,19 +64,21 @@ spec:
           title: Organization ID
           type: string
           description: "Harness Organization ID where the POV exists"
+          default: sandbox
           ui:field: HarnessOrgPicker
         
         harness_project_id:
           title: Project ID
           type: string
           description: "Harness Project ID where the POV exists"
+          default: parson
           ui:field: HarnessProjectPicker
         
         harness_api_key:
           title: Harness API Key
           type: string
           description: "Harness Platform API Key (PAT or SAT) with admin permissions"
-          ui:widget: password
+          ui:field: Secret
     
     - title: Destruction Options
       properties:
@@ -117,8 +119,8 @@ spec:
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
           harness_api_key: ${{ parameters.harness_api_key }}
-          destroy_terraform: ${{ parameters.destroy_terraform }}
-          delete_harness_resources: ${{ parameters.delete_harness_resources }}
-          delete_delegate: ${{ parameters.delete_delegate }}
-          delete_workspace: ${{ parameters.delete_workspace }}
+          destroy_terraform: "${{ parameters.destroy_terraform }}"
+          delete_harness_resources: "${{ parameters.delete_harness_resources }}"
+          delete_delegate: "${{ parameters.delete_delegate }}"
+          delete_workspace: "${{ parameters.delete_workspace }}"
         apikey: ${{ parameters.token }}
