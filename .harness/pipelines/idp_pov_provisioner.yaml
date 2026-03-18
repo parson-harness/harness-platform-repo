@@ -126,11 +126,7 @@ pipeline:
                       {
                         "identifier": "<+pipeline.variables.owner>_pov",
                         "name": "<+pipeline.variables.owner> POV Workspace",
-                        "description": "POV environment for <+pipeline.variables.owner> - linked to POV_Provisioner template",
-                        "associated_template": {
-                          "template_id": "POV_Provisioner",
-                          "version": "1.0"
-                        },
+                        "description": "POV environment for <+pipeline.variables.owner>",
                         "provisioner": "opentofu",
                         "provisioner_version": "1.11.2",
                         "repository_connector": "parsongh",
@@ -230,13 +226,7 @@ pipeline:
                             "value_type": "string"
                           }
                         },
-                        "environment_variables": {},
-                        "tags": {
-                          "owner": "<+pipeline.variables.owner>",
-                          "pov": "true",
-                          "idp-managed": "true",
-                          "template": "POV_Provisioner"
-                        }
+                        "environment_variables": {}
                       }
                     assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201 || <+httpResponseCode> == 409
                   timeout: 2m
