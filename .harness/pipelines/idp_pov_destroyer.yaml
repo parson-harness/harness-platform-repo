@@ -21,9 +21,9 @@ pipeline:
     # Harness Configuration
     - name: harness_account_id
       type: String
-      description: "Target Harness Account ID"
+      description: "Target Harness Account ID (for cross-account destruction)"
       required: true
-      value: <+account.identifier>
+      value: <+input>.default(<+account.identifier>)
     
     - name: harness_endpoint
       type: String

@@ -46,14 +46,21 @@ spec:
     
     - title: Harness Configuration
       required:
+        - harness_account_id
         - harness_org_id
         - harness_project_id
         - harness_api_key
       properties:
+        harness_account_id:
+          title: Target Account ID
+          type: string
+          description: "Harness Account ID where the POV exists"
+          ui:help: "Find this in Account Settings > Overview, or in the URL after /account/"
+        
         harness_endpoint:
           title: Harness Endpoint
           type: string
-          description: "Harness platform endpoint"
+          description: "Harness platform endpoint for the target account"
           default: "https://app.harness.io/gratis"
           enum:
             - "https://app.harness.io/gratis"
@@ -115,6 +122,7 @@ spec:
         url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/idp_pov_destroyer/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
         inputset:
           owner: ${{ parameters.owner }}
+          harness_account_id: ${{ parameters.harness_account_id }}
           harness_endpoint: ${{ parameters.harness_endpoint }}
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
