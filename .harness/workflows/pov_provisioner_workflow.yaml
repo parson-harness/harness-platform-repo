@@ -113,9 +113,12 @@ spec:
         
         create_eks_cluster:
           title: Create New EKS Cluster?
-          type: boolean
+          type: string
           description: "Create a new EKS cluster (if false, uses existing cluster)"
-          default: false
+          default: "false"
+          enum:
+            - "true"
+            - "false"
         
         existing_cluster_name:
           title: Existing EKS Cluster Name
@@ -129,21 +132,30 @@ spec:
       properties:
         create_harness_environment:
           title: Create Harness Environment?
-          type: boolean
+          type: string
           description: "Create Harness dev environment and infrastructure"
-          default: true
+          default: "true"
+          enum:
+            - "true"
+            - "false"
         
         create_prod_environment:
           title: Create Prod Environment?
-          type: boolean
+          type: string
           description: "Create Harness prod environment and infrastructure"
-          default: true
+          default: "true"
+          enum:
+            - "true"
+            - "false"
         
         create_delegate:
           title: Create Delegate?
-          type: boolean
+          type: string
           description: "Create a new Harness delegate in the cluster"
-          default: true
+          default: "true"
+          enum:
+            - "true"
+            - "false"
     
     - title: Application Source
       properties:
@@ -157,9 +169,12 @@ spec:
       properties:
         force_recreate:
           title: Force Recreate?
-          type: boolean
+          type: string
           description: "Delete existing resources before provisioning (use with caution)"
-          default: false
+          default: "false"
+          enum:
+            - "true"
+            - "false"
           ui:help: "Warning: This will destroy any existing POV resources for this owner"
 
   steps:

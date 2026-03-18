@@ -96,27 +96,39 @@ spec:
       properties:
         destroy_terraform:
           title: Destroy Terraform Resources?
-          type: boolean
+          type: string
           description: "Run terraform destroy to remove infrastructure (K8s namespaces, IAM roles, HAR registry)"
-          default: true
+          default: "true"
+          enum:
+            - "true"
+            - "false"
         
         delete_harness_resources:
           title: Delete Harness Resources?
-          type: boolean
+          type: string
           description: "Delete Harness pipelines, environments, services, and connectors"
-          default: true
+          default: "true"
+          enum:
+            - "true"
+            - "false"
         
         delete_delegate:
           title: Delete Delegate?
-          type: boolean
+          type: string
           description: "Delete the Harness delegate from the cluster"
-          default: true
+          default: "true"
+          enum:
+            - "true"
+            - "false"
         
         delete_workspace:
           title: Delete IACM Workspace?
-          type: boolean
+          type: string
           description: "Delete the IACM workspace after destruction"
-          default: false
+          default: "false"
+          enum:
+            - "true"
+            - "false"
           ui:help: "Warning: This permanently removes the workspace and its state"
 
   steps:

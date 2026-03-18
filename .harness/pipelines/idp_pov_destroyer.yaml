@@ -64,40 +64,40 @@ pipeline:
       value: <+input>.default(eks)
     
     - name: create_harness_org
-      type: Boolean
+      type: String
       description: "Create new org"
       required: false
-      value: <+input>.default(false)
+      value: <+input>.default(false).allowedValues(true,false)
     
     - name: create_harness_project
-      type: Boolean
+      type: String
       description: "Create new project"
       required: false
-      value: <+input>.default(false)
+      value: <+input>.default(false).allowedValues(true,false)
     
     - name: create_harness_environment
-      type: Boolean
+      type: String
       description: "Create Harness environment"
       required: false
-      value: <+input>.default(true)
+      value: <+input>.default(true).allowedValues(true,false)
     
     - name: create_prod_environment
-      type: Boolean
+      type: String
       description: "Create production environment"
       required: false
-      value: <+input>.default(true)
+      value: <+input>.default(true).allowedValues(true,false)
     
     - name: create_delegate
-      type: Boolean
+      type: String
       description: "Create Harness delegate"
       required: false
-      value: <+input>.default(true)
+      value: <+input>.default(true).allowedValues(true,false)
     
     - name: create_eks_cluster
-      type: Boolean
+      type: String
       description: "Create new EKS cluster"
       required: false
-      value: <+input>.default(false)
+      value: <+input>.default(false).allowedValues(true,false)
     
     - name: existing_cluster_name
       type: String
