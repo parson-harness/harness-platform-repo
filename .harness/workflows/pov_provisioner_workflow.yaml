@@ -56,21 +56,22 @@ spec:
           title: Target Account ID
           type: string
           description: "Harness Account ID where the POV will be provisioned"
+          default: <+account.identifier>
           ui:help: "Find this in Account Settings > Overview, or in the URL after /account/"
         
         harness_cluster:
           title: Harness Cluster
           type: string
           description: "Which Harness cluster is the target account on?"
-          default: "Prod 1 (Free/Team)"
+          default: "https://app.harness.io/gratis"
           enum:
-            - "Prod 1 (Free/Team)"
-            - "Prod 2 (Enterprise)"
-            - "Prod 3 (Enterprise)"
+            - "https://app.harness.io/gratis"
+            - "https://app.harness.io"
+            - "https://app3.harness.io"
           enumNames:
-            - "Prod 1 - Free & Team accounts (app.harness.io)"
-            - "Prod 2 - Enterprise accounts (app.harness.io)"
-            - "Prod 3 - Enterprise accounts (app3.harness.io)"
+            - "Prod 1 - Harness Demo Account Cluster"
+            - "Prod 2 - Enterprise accounts"
+            - "Prod 3 - Enterprise accounts"
         
         harness_org_id:
           title: Organization ID
@@ -112,12 +113,9 @@ spec:
         
         create_eks_cluster:
           title: Create New EKS Cluster?
-          type: string
+          type: boolean
           description: "Create a new EKS cluster (if false, uses existing cluster)"
-          default: "false"
-          enum:
-            - "true"
-            - "false"
+          default: false
         
         existing_cluster_name:
           title: Existing EKS Cluster Name
@@ -131,30 +129,21 @@ spec:
       properties:
         create_harness_environment:
           title: Create Harness Environment?
-          type: string
+          type: boolean
           description: "Create Harness dev environment and infrastructure"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
+          default: true
         
         create_prod_environment:
           title: Create Prod Environment?
-          type: string
+          type: boolean
           description: "Create Harness prod environment and infrastructure"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
+          default: true
         
         create_delegate:
           title: Create Delegate?
-          type: string
+          type: boolean
           description: "Create a new Harness delegate in the cluster"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
+          default: true
     
     - title: Application Source
       properties:
@@ -168,12 +157,9 @@ spec:
       properties:
         force_recreate:
           title: Force Recreate?
-          type: string
+          type: boolean
           description: "Delete existing resources before provisioning (use with caution)"
-          default: "false"
-          enum:
-            - "true"
-            - "false"
+          default: false
           ui:help: "Warning: This will destroy any existing POV resources for this owner"
 
   steps:
@@ -185,17 +171,17 @@ spec:
         inputset:
           owner: ${{ parameters.owner }}
           harness_account_id: ${{ parameters.harness_account_id }}
-          harness_endpoint: ${{ parameters.harness_cluster === "Prod 1 (Free/Team)" && "https://app.harness.io/gratis" || parameters.harness_cluster === "Prod 3 (Enterprise)" && "https://app3.harness.io" || "https://app.harness.io" }}
+          harness_endpoint: ${{ parameters.harness_cluster }}
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
           harness_api_key: ${{ parameters.harness_api_key }}
           harness_api_key_email: ${{ parameters.harness_api_key_email }}
           deployment_targets: ${{ parameters.deployment_targets }}
-          create_eks_cluster: ${{ parameters.create_eks_cluster }}
+          create_eks_cluster: ${{ parameters.create_eks_cluster | string }}
           existing_cluster_name: ${{ parameters.existing_cluster_name }}
-          create_harness_environment: ${{ parameters.create_harness_environment }}
-          create_prod_environment: ${{ parameters.create_prod_environment }}
-          create_delegate: ${{ parameters.create_delegate }}
+          create_harness_environment: ${{ parameters.create_harness_environment | string }}
+          create_prod_environment: ${{ parameters.create_prod_environment | string }}
+          create_delegate: ${{ parameters.create_delegate | string }}
           git_repo_url: ${{ parameters.git_repo_url }}
-          force_recreate: ${{ parameters.force_recreate }}
+          force_recreate: ${{ parameters.force_recreate | string }}
         apikey: ${{ parameters.token }}
