@@ -3,7 +3,10 @@ kind: Workflow
 name: POV Provisioner
 identifier: pov_provisioner
 type: workflow
-owner: platform-team
+scope: project
+projectIdentifier: parson
+orgIdentifier: sandbox
+owner: todd.parson@harness.io
 metadata:
   description: "Self-service workflow to provision a complete POV environment with Harness CD, CI, and demo app"
   tags:
