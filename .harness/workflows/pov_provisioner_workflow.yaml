@@ -181,11 +181,11 @@ spec:
           title: Force Recreate?
           type: string
           description: "Delete existing resources before provisioning (use with caution)"
-          default: "false"
+          default: "true"
           enum:
             - "true"
             - "false"
-          ui:help: "Warning: This will destroy any existing POV resources for this owner"
+          ui:help: "Recommended during testing. Will destroy any existing POV resources for this owner before provisioning."
 
   steps:
     - id: trigger
