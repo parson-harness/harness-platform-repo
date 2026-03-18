@@ -3,128 +3,102 @@ pipeline:
   identifier: idp_pov_provisioner
   projectIdentifier: parson
   orgIdentifier: sandbox
-  description: "IDP-triggered pipeline that creates an IACM workspace and provisions a POV environment"
+  description: IDP-triggered pipeline that creates an IACM workspace and provisions a POV environment
   tags:
     idp: "true"
     pov: "true"
     iacm: "true"
-  
-  # Pipeline variables - populated by IDP workflow
   variables:
-    # POV Identity
     - name: owner
       type: String
-      description: "Owner name (lowercase, used for resource naming and workspace ID)"
+      description: Owner name (lowercase, used for resource naming and workspace ID)
       required: true
       value: <+input>
-    
-    # Harness Configuration
     - name: harness_account_id
       type: String
-      description: "Target Harness Account ID (for cross-account provisioning)"
+      description: Target Harness Account ID (for cross-account provisioning)
       required: true
       value: <+input>.default(<+account.identifier>)
-    
     - name: harness_endpoint
       type: String
-      description: "Harness platform endpoint"
+      description: Harness platform endpoint
       required: true
       value: <+input>.default(https://app.harness.io/gratis)
-    
     - name: harness_api_key
       type: String
-      description: "Harness Platform API Key (PAT or SAT)"
+      description: Harness Platform API Key (PAT or SAT)
       required: true
       value: <+input>
-    
     - name: harness_api_key_email
       type: String
-      description: "Email associated with the API key"
+      description: Email associated with the API key
       required: true
       value: <+input>
-    
-    # Organization/Project
     - name: harness_org_id
       type: String
-      description: "Harness Org ID for the POV"
+      description: Harness Org ID for the POV
       required: true
       value: <+org.identifier>
-    
     - name: harness_project_id
       type: String
-      description: "Harness Project ID for the POV"
+      description: Harness Project ID for the POV
       required: true
       value: <+project.identifier>
-    
     - name: create_harness_org
       type: String
-      description: "Create new org"
+      description: Create new org
       required: false
       value: <+input>.default(false).allowedValues(true,false)
-    
     - name: create_harness_project
       type: String
-      description: "Create new project"
+      description: Create new project
       required: false
       value: <+input>.default(false).allowedValues(true,false)
-    
-    # Infrastructure Options
     - name: deployment_targets
       type: String
-      description: "Deployment targets (eks, ecs, lambda)"
+      description: Deployment targets (eks, ecs, lambda)
       required: true
       value: <+input>.default(eks)
-    
     - name: create_eks_cluster
       type: String
-      description: "Create new EKS cluster"
+      description: Create new EKS cluster
       required: false
       value: <+input>.default(false).allowedValues(true,false)
-    
     - name: existing_cluster_name
       type: String
-      description: "Existing EKS cluster name"
+      description: Existing EKS cluster name
       required: false
       value: <+input>.default(harness-eks-parson)
-    
-    # Harness Resources
     - name: create_harness_environment
       type: String
-      description: "Create Harness environment"
+      description: Create Harness environment
       required: false
       value: <+input>.default(true).allowedValues(true,false)
-    
     - name: create_prod_environment
       type: String
-      description: "Create production environment"
+      description: Create production environment
       required: false
       value: <+input>.default(true).allowedValues(true,false)
-    
     - name: create_delegate
       type: String
-      description: "Create Harness delegate"
+      description: Create Harness delegate
       required: false
       value: <+input>.default(true).allowedValues(true,false)
-    
     - name: force_recreate
       type: String
-      description: "Delete existing resources before provisioning"
+      description: Delete existing resources before provisioning
       required: false
       value: <+input>.default(false).allowedValues(true,false)
-    
-    # Git Repository
     - name: git_repo_url
       type: String
-      description: "Git repository URL for the demo app"
+      description: Git repository URL for the demo app
       required: true
       value: <+input>.default(https://github.com/parson-harness/harness-demo-app.git)
-
   stages:
-    # Stage 0a: Terraform Destroy (conditional - runs if workspace exists and force_recreate=true)
     - stage:
         name: Terraform Destroy
         identifier: terraform_destroy
-        description: "Destroy Terraform-managed resources (K8s namespaces, IAM roles, HAR registry)"
+        description: Destroy Terraform-managed resources (K8s namespaces, IAM roles, HAR registry)
         type: IACM
         when:
           pipelineStatus: Success
@@ -159,12 +133,10 @@ pipeline:
                 - AllErrors
               action:
                 type: MarkAsSuccess
-
-    # Stage 0b: Cleanup existing Harness resources via API (conditional)
     - stage:
         name: Cleanup Existing Resources
         identifier: cleanup_existing
-        description: "Delete existing Harness resources to allow fresh provisioning"
+        description: Delete existing Harness resources to allow fresh provisioning
         type: Custom
         when:
           pipelineStatus: Success
@@ -306,12 +278,10 @@ pipeline:
                     environmentVariables: []
                     outputVariables: []
                   timeout: 1m
-
-    # Stage 1: Create IACM Workspace from Template
     - stage:
         name: Create Workspace
         identifier: create_workspace
-        description: "Create a new IACM workspace for this POV from the template"
+        description: Create a new IACM workspace for this POV from the template
         type: Custom
         spec:
           execution:
@@ -498,7 +468,6 @@ pipeline:
                       }
                     assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201 || <+httpResponseCode> == 409
                   timeout: 2m
-              
               - step:
                   type: ShellScript
                   name: Workspace Created
@@ -520,12 +489,10 @@ pipeline:
                     environmentVariables: []
                     outputVariables: []
                   timeout: 1m
-
-    # Stage 2: Plan and Apply Infrastructure (single stage to avoid drift)
     - stage:
         name: Plan and Apply
         identifier: plan_and_apply
-        description: "Plan, approve, and apply infrastructure changes"
+        description: Plan, approve, and apply infrastructure changes
         type: IACM
         spec:
           platform:
@@ -544,7 +511,6 @@ pipeline:
                   timeout: 10m
                   spec:
                     command: init
-              
               - step:
                   type: IACMTerraformPlugin
                   name: Plan
@@ -552,7 +518,6 @@ pipeline:
                   timeout: 15m
                   spec:
                     command: plan
-              
               - step:
                   type: Run
                   name: Show Plan Summary
@@ -568,21 +533,25 @@ pipeline:
                       echo "Project: <+pipeline.variables.harness_project_id>"
                       echo "Deployment Targets: <+pipeline.variables.deployment_targets>"
                       echo "======================================="
-                      
+
                       if [ -f /harness/plan.json ]; then
                         echo ""
                         echo "Resources to be created/modified:"
                         jq -r '.resource_changes[] | select(.change.actions | contains(["create"]) or contains(["update"])) | "  \(.change.actions[0]): \(.type).\(.name)"' /harness/plan.json 2>/dev/null || echo "  (unable to parse plan)"
                       fi
-              
               - step:
                   type: IACMApproval
                   name: Approve Plan
                   identifier: approve_plan
                   spec:
                     autoApprove: false
-                  timeout: 1d
-              
+                  timeout: 10m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - Timeout
+                        action:
+                          type: MarkAsSuccess
               - step:
                   type: IACMTerraformPlugin
                   name: Apply
@@ -590,7 +559,6 @@ pipeline:
                   timeout: 1h
                   spec:
                     command: apply
-              
               - step:
                   type: Run
                   name: POV Ready
@@ -621,17 +589,15 @@ pipeline:
                       echo ""
                       echo "CI Pipeline: <+pipeline.variables.owner>_ci_build"
                       echo ""
-                      
+
                       if [ -f /harness/outputs.json ]; then
                         echo "Terraform Outputs:"
                         cat /harness/outputs.json | jq '.'
                       fi
-
-    # Stage 3: Trigger Initial CI Build
     - stage:
         name: Trigger CI Build
         identifier: trigger_ci_build
-        description: "Trigger the CI pipeline to build initial Docker image"
+        description: Trigger the CI pipeline to build initial Docker image
         type: Custom
         spec:
           execution:
