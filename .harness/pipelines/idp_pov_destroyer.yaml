@@ -193,11 +193,21 @@ pipeline:
                             echo "    Response: $HTTP_CODE"
                           done
                           
-                          # Delete HAR registry
+                          # Delete HAR registries (project-level registry and org-level upstream proxy)
                           echo ""
-                          echo "=== Deleting HAR Registry ==="
-                          echo "  Deleting registry: har-${OWNER}"
+                          echo "=== Deleting HAR Registries ==="
+                          
+                          # Delete project-level registry
+                          echo "  Deleting project registry: har-${OWNER}"
                           RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/har/api/v1/registry/har-${OWNER}?space_ref=${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}" \
+                            -H "x-api-key: ${API_KEY}" \
+                            -H "Content-Type: application/json")
+                          HTTP_CODE=$(echo "$RESP" | tail -n1)
+                          echo "    Response: $HTTP_CODE"
+                          
+                          # Delete org-level upstream proxy
+                          echo "  Deleting upstream proxy: ${OWNER}-dockerhub-proxy"
+                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/har/api/v1/registry/${OWNER}-dockerhub-proxy?space_ref=${ACCOUNT_ID}/${ORG_ID}" \
                             -H "x-api-key: ${API_KEY}" \
                             -H "Content-Type: application/json")
                           HTTP_CODE=$(echo "$RESP" | tail -n1)

@@ -232,9 +232,9 @@ module "har" {
   registry_id          = "har-${var.owner}"
   registry_description = "Docker registry for ${var.owner} demo app"
 
-  # DockerHub upstream proxy (org-level)
+  # DockerHub upstream proxy (per-owner to avoid conflicts)
   create_dockerhub_upstream     = var.create_dockerhub_upstream
-  dockerhub_upstream_id         = "org-${local.resolved_org_id}-dockerhub-proxy"
+  dockerhub_upstream_id         = "${var.owner}-dockerhub-proxy"
   dockerhub_username            = var.dockerhub_username
   dockerhub_password_secret_ref = var.dockerhub_password_secret_ref
   dockerhub_secret_space_path   = var.harness_account_id
