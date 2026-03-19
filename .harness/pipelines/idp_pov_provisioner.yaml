@@ -29,10 +29,10 @@ pipeline:
       required: true
       value: <+input>.default(https://app.harness.io/gratis)
     - name: harness_api_key
-      type: String
+      type: Secret
       description: Harness Platform API Key (PAT or SAT)
       required: true
-      value: <+input>.default(<+secrets.getValue("account.harness_api_key")>)
+      value: account.harness_api_key
     - name: harness_api_key_email
       type: String
       description: Email associated with the API key
