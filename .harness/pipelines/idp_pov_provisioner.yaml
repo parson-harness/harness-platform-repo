@@ -355,27 +355,43 @@ pipeline:
                       if aws iam get-role --role-name "$IAM_ROLE_NAME" 2>/dev/null; then
                         echo "Found IAM role, proceeding with deletion..."
                         
+                        # Remove role from all instance profiles first
+                        echo "Checking for instance profiles..."
+                        for profile_name in $(aws iam list-instance-profiles-for-role --role-name "$IAM_ROLE_NAME" --query 'InstanceProfiles[*].InstanceProfileName' --output text 2>/dev/null); do
+                          if [ -n "$profile_name" ] && [ "$profile_name" != "None" ]; then
+                            echo "Removing role from instance profile: $profile_name"
+                            aws iam remove-role-from-instance-profile --instance-profile-name "$profile_name" --role-name "$IAM_ROLE_NAME" || true
+                          fi
+                        done
+                        
                         # Detach all managed policies
+                        echo "Detaching managed policies..."
                         for policy_arn in $(aws iam list-attached-role-policies --role-name "$IAM_ROLE_NAME" --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null); do
-                          [ -n "$policy_arn" ] && [ "$policy_arn" != "None" ] && {
+                          if [ -n "$policy_arn" ] && [ "$policy_arn" != "None" ]; then
                             echo "Detaching policy: $policy_arn"
                             aws iam detach-role-policy --role-name "$IAM_ROLE_NAME" --policy-arn "$policy_arn" || true
-                          }
+                          fi
                         done
                         
                         # Delete inline policies
+                        echo "Deleting inline policies..."
                         for policy_name in $(aws iam list-role-policies --role-name "$IAM_ROLE_NAME" --query 'PolicyNames[*]' --output text 2>/dev/null); do
-                          [ -n "$policy_name" ] && [ "$policy_name" != "None" ] && {
+                          if [ -n "$policy_name" ] && [ "$policy_name" != "None" ]; then
                             echo "Deleting inline policy: $policy_name"
                             aws iam delete-role-policy --role-name "$IAM_ROLE_NAME" --policy-name "$policy_name" || true
-                          }
+                          fi
                         done
                         
                         # Delete the role
                         echo "Deleting IAM role: $IAM_ROLE_NAME"
-                        aws iam delete-role --role-name "$IAM_ROLE_NAME" && echo "✓ IAM role deleted" || echo "✗ Failed to delete"
+                        if aws iam delete-role --role-name "$IAM_ROLE_NAME"; then
+                          echo "✓ IAM role deleted successfully"
+                        else
+                          echo "✗ Failed to delete IAM role - checking if it still exists..."
+                          aws iam get-role --role-name "$IAM_ROLE_NAME" 2>/dev/null && echo "Role still exists!" || echo "Role no longer exists"
+                        fi
                       else
-                        echo "○ IAM role not found"
+                        echo "○ IAM role not found (already deleted or never existed)"
                       fi
                       
                       # === Delete K8s Namespaces ===
@@ -665,27 +681,43 @@ pipeline:
                       if aws iam get-role --role-name "$IAM_ROLE_NAME" 2>/dev/null; then
                         echo "Found IAM role, proceeding with deletion..."
                         
+                        # Remove role from all instance profiles first
+                        echo "Checking for instance profiles..."
+                        for profile_name in $(aws iam list-instance-profiles-for-role --role-name "$IAM_ROLE_NAME" --query 'InstanceProfiles[*].InstanceProfileName' --output text 2>/dev/null); do
+                          if [ -n "$profile_name" ] && [ "$profile_name" != "None" ]; then
+                            echo "Removing role from instance profile: $profile_name"
+                            aws iam remove-role-from-instance-profile --instance-profile-name "$profile_name" --role-name "$IAM_ROLE_NAME" || true
+                          fi
+                        done
+                        
                         # Detach all managed policies
+                        echo "Detaching managed policies..."
                         for policy_arn in $(aws iam list-attached-role-policies --role-name "$IAM_ROLE_NAME" --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null); do
-                          [ -n "$policy_arn" ] && [ "$policy_arn" != "None" ] && {
+                          if [ -n "$policy_arn" ] && [ "$policy_arn" != "None" ]; then
                             echo "Detaching policy: $policy_arn"
                             aws iam detach-role-policy --role-name "$IAM_ROLE_NAME" --policy-arn "$policy_arn" || true
-                          }
+                          fi
                         done
                         
                         # Delete inline policies
+                        echo "Deleting inline policies..."
                         for policy_name in $(aws iam list-role-policies --role-name "$IAM_ROLE_NAME" --query 'PolicyNames[*]' --output text 2>/dev/null); do
-                          [ -n "$policy_name" ] && [ "$policy_name" != "None" ] && {
+                          if [ -n "$policy_name" ] && [ "$policy_name" != "None" ]; then
                             echo "Deleting inline policy: $policy_name"
                             aws iam delete-role-policy --role-name "$IAM_ROLE_NAME" --policy-name "$policy_name" || true
-                          }
+                          fi
                         done
                         
                         # Delete the role
                         echo "Deleting IAM role: $IAM_ROLE_NAME"
-                        aws iam delete-role --role-name "$IAM_ROLE_NAME" && echo "✓ IAM role deleted" || echo "✗ Failed to delete"
+                        if aws iam delete-role --role-name "$IAM_ROLE_NAME"; then
+                          echo "✓ IAM role deleted successfully"
+                        else
+                          echo "✗ Failed to delete IAM role - checking if it still exists..."
+                          aws iam get-role --role-name "$IAM_ROLE_NAME" 2>/dev/null && echo "Role still exists!" || echo "Role no longer exists"
+                        fi
                       else
-                        echo "○ IAM role not found"
+                        echo "○ IAM role not found (already deleted or never existed)"
                       fi
                       
                       # === Delete K8s Namespaces ===
