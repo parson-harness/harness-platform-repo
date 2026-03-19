@@ -69,6 +69,13 @@ spec:
           type: string
           description: "Your Harness API Key (PAT) with admin permissions"
           ui:widget: password
+        
+        harness_api_key_email:
+          title: API Key Email
+          type: string
+          description: "Email address associated with the API key"
+          default: ""
+          ui:help: "The email of the user who owns this API key"
     
     - title: Destruction Options
       properties:
@@ -122,6 +129,7 @@ spec:
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
           harness_api_key: ${{ parameters.harness_api_key }}
+          harness_api_key_email: ${{ parameters.harness_api_key_email }}
           destroy_terraform: ${{ parameters.destroy_terraform }}
           delete_delegate: ${{ parameters.delete_delegate }}
           delete_workspace: ${{ parameters.delete_workspace }}
