@@ -573,6 +573,8 @@ resource "kubernetes_namespace" "app" {
   depends_on = [module.eks]
 }
 
+
+
 resource "kubernetes_secret" "har_pull_secret" {
   for_each = toset(local.har_namespaces)
 

@@ -433,6 +433,34 @@ pipeline:
                     command: init
               - step:
                   type: IACMTerraformPlugin
+                  name: Import Dev Namespace
+                  identifier: import_dev_ns
+                  timeout: 5m
+                  spec:
+                    command: import
+                    args: kubernetes_namespace.app[\"harness-demo-<+pipeline.variables.owner>\"] harness-demo-<+pipeline.variables.owner>
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Import Prod Namespace
+                  identifier: import_prod_ns
+                  timeout: 5m
+                  spec:
+                    command: import
+                    args: kubernetes_namespace.app[\"harness-demo-<+pipeline.variables.owner>-prod\"] harness-demo-<+pipeline.variables.owner>-prod
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: IACMTerraformPlugin
                   name: Plan
                   identifier: plan
                   timeout: 15m
