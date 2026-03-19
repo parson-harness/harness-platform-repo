@@ -106,11 +106,153 @@ pipeline:
       value: <+input>.default(harness-eks-parson)
 
   stages:
-    # Stage 1: Plan Destroy
+    # Stage 1: Pre-Cleanup - Force delete Harness resources that block terraform destroy
+    - stage:
+        name: Pre-Cleanup
+        identifier: pre_cleanup
+        description: "Force delete Harness resources with active instances/references before terraform destroy"
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Force Delete Blocking Resources
+                  identifier: force_delete_blocking
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    delegateSelectors:
+                      - harness-delegate
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=============================================="
+                          echo "  PRE-CLEANUP: Force Deleting Harness Resources"
+                          echo "=============================================="
+                          echo ""
+                          echo "Owner: ${OWNER}"
+                          echo "Org: ${ORG_ID}, Project: ${PROJECT_ID}"
+                          echo ""
+                          
+                          # Force delete pipelines FIRST (they reference services/environments)
+                          echo "=== Deleting Pipelines ==="
+                          for PIPELINE in ci_build k8s_canary_deploy k8s_bg_canary_deploy k8s_strategy_deploy canary_deployment blue_green_deployment strategy_choice; do
+                            echo "  Deleting pipeline: ${OWNER}_${PIPELINE}"
+                            RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_${PIPELINE}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
+                              -H "x-api-key: ${API_KEY}" \
+                              -H "Content-Type: application/json")
+                            HTTP_CODE=$(echo "$RESP" | tail -n1)
+                            echo "    Response: $HTTP_CODE"
+                          done
+                          
+                          # Force delete service (has active instances)
+                          echo ""
+                          echo "=== Deleting Service ==="
+                          echo "  Force deleting service: ${OWNER}_demo_app"
+                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/ng/api/servicesV2/${OWNER}_demo_app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true" \
+                            -H "x-api-key: ${API_KEY}" \
+                            -H "Content-Type: application/json")
+                          HTTP_CODE=$(echo "$RESP" | tail -n1)
+                          echo "    Response: $HTTP_CODE"
+                          
+                          # Force delete infrastructures (referenced by pipelines)
+                          echo ""
+                          echo "=== Deleting Infrastructures ==="
+                          for ENV in dev prod; do
+                            echo "  Force deleting infrastructure: ${OWNER}_k8s_${ENV}"
+                            RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/ng/api/infrastructures/${OWNER}_k8s_${ENV}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_${ENV}&forceDelete=true" \
+                              -H "x-api-key: ${API_KEY}" \
+                              -H "Content-Type: application/json")
+                            HTTP_CODE=$(echo "$RESP" | tail -n1)
+                            echo "    Response: $HTTP_CODE"
+                          done
+                          
+                          # Force delete environments
+                          echo ""
+                          echo "=== Deleting Environments ==="
+                          for ENV in dev prod; do
+                            echo "  Force deleting environment: ${OWNER}_${ENV}"
+                            RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/ng/api/environmentsV2/${OWNER}_${ENV}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true" \
+                              -H "x-api-key: ${API_KEY}" \
+                              -H "Content-Type: application/json")
+                            HTTP_CODE=$(echo "$RESP" | tail -n1)
+                            echo "    Response: $HTTP_CODE"
+                          done
+                          
+                          # Force delete connectors
+                          echo ""
+                          echo "=== Deleting Connectors ==="
+                          for CONN in k8s_reference_architecture aws_reference_architecture github_reference_architecture; do
+                            echo "  Force deleting connector: ${OWNER}_${CONN}"
+                            RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/ng/api/connectors/${OWNER}_${CONN}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true" \
+                              -H "x-api-key: ${API_KEY}" \
+                              -H "Content-Type: application/json")
+                            HTTP_CODE=$(echo "$RESP" | tail -n1)
+                            echo "    Response: $HTTP_CODE"
+                          done
+                          
+                          # Delete HAR registry
+                          echo ""
+                          echo "=== Deleting HAR Registry ==="
+                          echo "  Deleting registry: har-${OWNER}"
+                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/har/api/v1/registry/har-${OWNER}?space_ref=${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}" \
+                            -H "x-api-key: ${API_KEY}" \
+                            -H "Content-Type: application/json")
+                          HTTP_CODE=$(echo "$RESP" | tail -n1)
+                          echo "    Response: $HTTP_CODE"
+                          
+                          # Delete delegate token
+                          echo ""
+                          echo "=== Deleting Delegate Token ==="
+                          # List and delete any delegate tokens matching the pattern
+                          TOKENS=$(curl -s "${ENDPOINT}/ng/api/delegate-token-ng?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
+                            -H "x-api-key: ${API_KEY}" | jq -r '.resource[].name // empty' | grep "^${OWNER}-delegate-token" || true)
+                          for TOKEN in $TOKENS; do
+                            echo "  Deleting delegate token: $TOKEN"
+                            curl -s -X DELETE "${ENDPOINT}/ng/api/delegate-token-ng?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&tokenName=$TOKEN" \
+                              -H "x-api-key: ${API_KEY}" || true
+                          done
+                          
+                          echo ""
+                          echo "=============================================="
+                          echo "  Pre-cleanup complete. Terraform destroy can now proceed."
+                          echo "=============================================="
+                    environmentVariables:
+                      - name: OWNER
+                        type: String
+                        value: <+pipeline.variables.owner>
+                      - name: ACCOUNT_ID
+                        type: String
+                        value: <+pipeline.variables.harness_account_id>
+                      - name: ORG_ID
+                        type: String
+                        value: <+pipeline.variables.harness_org_id>
+                      - name: PROJECT_ID
+                        type: String
+                        value: <+pipeline.variables.harness_project_id>
+                      - name: API_KEY
+                        type: String
+                        value: <+pipeline.variables.harness_api_key>
+                      - name: ENDPOINT
+                        type: String
+                        value: <+pipeline.variables.harness_endpoint>
+                    outputVariables: []
+                  timeout: 10m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+                          spec: {}
+
+    # Stage 2: Plan Destroy (Terraform resources only - Harness resources already deleted)
     - stage:
         name: Plan Destroy
         identifier: plan_destroy
-        description: "Run tofu plan -destroy to preview destruction"
+        description: "Run tofu plan -destroy to preview remaining infrastructure destruction"
         type: IACM
         spec:
           platform:
@@ -149,7 +291,10 @@ pipeline:
                       echo "Owner: <+pipeline.variables.owner>"
                       echo "Workspace: <+pipeline.variables.owner>_pov"
                       echo ""
-                      echo "The following resources will be DESTROYED:"
+                      echo "Note: Harness resources (pipelines, services, environments, connectors)"
+                      echo "have already been force-deleted in the Pre-Cleanup stage."
+                      echo ""
+                      echo "The following INFRASTRUCTURE resources will be DESTROYED:"
                       echo ""
                       
                       if [ -f /harness/plan.json ]; then
@@ -167,11 +312,11 @@ pipeline:
                     autoApprove: false
                   timeout: 1d
 
-    # Stage 2: Execute Destroy
+    # Stage 3: Execute Destroy
     - stage:
         name: Execute Destroy
         identifier: execute_destroy
-        description: "Execute tofu destroy"
+        description: "Execute tofu destroy for remaining infrastructure"
         type: IACM
         spec:
           platform:
@@ -198,69 +343,8 @@ pipeline:
                   timeout: 30m
                   spec:
                     command: destroy
-              
-              - step:
-                  type: Run
-                  name: Force Delete Remaining Resources
-                  identifier: force_delete_remaining
-                  spec:
-                    shell: Bash
-                    envVariables:
-                      OWNER: <+pipeline.variables.owner>
-                      ACCOUNT_ID: <+pipeline.variables.harness_account_id>
-                      ORG_ID: <+pipeline.variables.harness_org_id>
-                      PROJECT_ID: <+pipeline.variables.harness_project_id>
-                      API_KEY: <+pipeline.variables.harness_api_key>
-                      ENDPOINT: <+pipeline.variables.harness_endpoint>
-                    command: |
-                      echo "=== Force Deleting Remaining Harness Resources ==="
-                      echo "Owner: ${OWNER}, Org: ${ORG_ID}, Project: ${PROJECT_ID}"
-                      
-                      # Force delete service
-                      echo "Force deleting service: ${OWNER}_demo_app"
-                      curl -s -X DELETE "${ENDPOINT}/ng/api/servicesV2/${OWNER}_demo_app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true" \
-                        -H "x-api-key: ${API_KEY}" \
-                        -H "Content-Type: application/json" || true
-                      
-                      # Force delete infrastructures
-                      for ENV in dev prod; do
-                        echo "Force deleting infrastructure: ${OWNER}_k8s_${ENV}"
-                        curl -s -X DELETE "${ENDPOINT}/ng/api/infrastructures/${OWNER}_k8s_${ENV}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_${ENV}&forceDelete=true" \
-                          -H "x-api-key: ${API_KEY}" \
-                          -H "Content-Type: application/json" || true
-                      done
-                      
-                      # Force delete environments
-                      for ENV in dev prod; do
-                        echo "Force deleting environment: ${OWNER}_${ENV}"
-                        curl -s -X DELETE "${ENDPOINT}/ng/api/environmentsV2/${OWNER}_${ENV}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true" \
-                          -H "x-api-key: ${API_KEY}" \
-                          -H "Content-Type: application/json" || true
-                      done
-                      
-                      # Force delete connectors
-                      for CONN in k8s_reference_architecture aws_reference_architecture github_reference_architecture; do
-                        echo "Force deleting connector: ${OWNER}_${CONN}"
-                        curl -s -X DELETE "${ENDPOINT}/ng/api/connectors/${OWNER}_${CONN}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true" \
-                          -H "x-api-key: ${API_KEY}" \
-                          -H "Content-Type: application/json" || true
-                      done
-                      
-                      # Force delete pipelines
-                      for PIPELINE in canary_deployment blue_green_deployment strategy_choice ci_build k8s_canary_deploy k8s_bg_canary_deploy k8s_strategy_deploy; do
-                        echo "Force deleting pipeline: ${OWNER}_${PIPELINE}"
-                        curl -s -X DELETE "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_${PIPELINE}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
-                          -H "x-api-key: ${API_KEY}" \
-                          -H "Content-Type: application/json" || true
-                      done
-                      
-                      echo ""
-                      echo "Force delete complete."
-                  timeout: 5m
-                  when:
-                    stageStatus: All
 
-    # Stage 3: Delete Workspace
+    # Stage 4: Delete Workspace
     - stage:
         name: Delete Workspace
         identifier: delete_workspace
