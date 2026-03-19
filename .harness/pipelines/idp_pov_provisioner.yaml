@@ -432,27 +432,62 @@ pipeline:
                   spec:
                     command: init
               - step:
-                  type: IACMTerraformPlugin
-                  name: Import Dev Namespace
-                  identifier: import_dev_ns
-                  timeout: 5m
+                  type: Run
+                  name: Cleanup K8s Namespaces
+                  identifier: cleanup_k8s_namespaces
                   spec:
-                    command: import
-                    args: kubernetes_namespace.app[\"harness-demo-<+pipeline.variables.owner>\"] harness-demo-<+pipeline.variables.owner>
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: IACMTerraformPlugin
-                  name: Import Prod Namespace
-                  identifier: import_prod_ns
-                  timeout: 5m
-                  spec:
-                    command: import
-                    args: kubernetes_namespace.app[\"harness-demo-<+pipeline.variables.owner>-prod\"] harness-demo-<+pipeline.variables.owner>-prod
+                    shell: Bash
+                    command: |
+                      echo "=== Cleaning up existing K8s namespaces ==="
+                      
+                      # Install kubectl if not present
+                      if ! command -v kubectl &> /dev/null; then
+                        echo "Installing kubectl..."
+                        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                        chmod +x kubectl
+                        mv kubectl /usr/local/bin/
+                      fi
+                      
+                      # Configure AWS credentials for EKS access
+                      export AWS_REGION="${AWS_REGION:-us-east-1}"
+                      
+                      # Get EKS cluster credentials
+                      CLUSTER_NAME="<+pipeline.variables.existing_cluster_name>"
+                      if [ -z "$CLUSTER_NAME" ] || [ "$CLUSTER_NAME" == "<+pipeline.variables.existing_cluster_name>" ]; then
+                        CLUSTER_NAME="harness-eks-<+pipeline.variables.owner>"
+                      fi
+                      
+                      echo "Configuring kubectl for cluster: $CLUSTER_NAME"
+                      aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION" 2>/dev/null || {
+                        echo "Warning: Could not configure kubectl for EKS cluster"
+                        echo "Namespaces will be created fresh by Terraform"
+                        exit 0
+                      }
+                      
+                      # Delete namespaces if they exist (ignore errors if they don't)
+                      OWNER="<+pipeline.variables.owner>"
+                      
+                      echo "Deleting namespace: harness-demo-$OWNER"
+                      kubectl delete namespace "harness-demo-$OWNER" --ignore-not-found=true --wait=false || true
+                      
+                      echo "Deleting namespace: harness-demo-$OWNER-prod"
+                      kubectl delete namespace "harness-demo-$OWNER-prod" --ignore-not-found=true --wait=false || true
+                      
+                      # Wait briefly for deletion to start
+                      sleep 5
+                      
+                      # Check if namespaces are terminating and wait
+                      for ns in "harness-demo-$OWNER" "harness-demo-$OWNER-prod"; do
+                        if kubectl get namespace "$ns" 2>/dev/null | grep -q Terminating; then
+                          echo "Waiting for namespace $ns to terminate..."
+                          kubectl wait --for=delete namespace/"$ns" --timeout=60s 2>/dev/null || true
+                        fi
+                      done
+                      
+                      echo "=== K8s namespace cleanup complete ==="
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.force_recreate> == "true"
                   failureStrategies:
                     - onFailure:
                         errors:
