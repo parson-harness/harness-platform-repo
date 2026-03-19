@@ -8,6 +8,10 @@ pipeline:
     idp: "true"
     pov: "true"
     iacm: "true"
+  allowStageExecutions: false
+  concurrency:
+    maxConcurrency: 1
+    label: pov_provisioner_<+pipeline.variables.owner>
   variables:
     - name: owner
       type: String
@@ -401,8 +405,67 @@ pipeline:
                           delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_k8s_strategy_deploy?$PARAMS" "Strategy Choice Pipeline"
                           delete_resource "$BASE_URL/pipeline/api/pipelines/${OWNER}_ci_build?$PARAMS" "CI Pipeline"
                           
+                          # Delete HAR registry (upstream proxy)
+                          delete_resource "$BASE_URL/har/api/v1/registry/${OWNER}_dockerhub_upstream?space_ref=accountIdentifier%3D${ACCOUNT_ID}%2ForgIdentifier%3D${ORG_ID}" "DockerHub Upstream Proxy"
+                          
                           echo ""
-                          echo "=== Cleanup Complete ==="
+                          echo "=== Harness API Cleanup Complete ==="
+                          
+                          # === Delete K8s Namespaces ===
+                          echo ""
+                          echo "=== Cleaning up K8s Namespaces ==="
+                          
+                          # Configure kubectl for EKS cluster
+                          CLUSTER_NAME="${EXISTING_CLUSTER_NAME:-harness-eks-${OWNER}}"
+                          echo "Configuring kubectl for cluster: $CLUSTER_NAME"
+                          
+                          aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "${AWS_REGION:-us-east-1}" 2>/dev/null || {
+                            echo "Warning: Could not configure kubectl for EKS cluster"
+                            echo "Skipping K8s namespace cleanup"
+                          }
+                          
+                          if command -v kubectl &> /dev/null && kubectl cluster-info &> /dev/null; then
+                            echo "Deleting namespace: harness-demo-$OWNER"
+                            kubectl delete namespace "harness-demo-$OWNER" --ignore-not-found=true --wait=false || true
+                            
+                            echo "Deleting namespace: harness-demo-$OWNER-prod"
+                            kubectl delete namespace "harness-demo-$OWNER-prod" --ignore-not-found=true --wait=false || true
+                            
+                            # Wait for namespaces to terminate
+                            sleep 5
+                            for ns in "harness-demo-$OWNER" "harness-demo-$OWNER-prod"; do
+                              if kubectl get namespace "$ns" 2>/dev/null | grep -q Terminating; then
+                                echo "Waiting for namespace $ns to terminate..."
+                                kubectl wait --for=delete namespace/"$ns" --timeout=120s 2>/dev/null || true
+                              fi
+                            done
+                            echo "K8s namespace cleanup complete"
+                          fi
+                          
+                          # === Delete IAM Role ===
+                          echo ""
+                          echo "=== Cleaning up IAM Role ==="
+                          IAM_ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
+                          echo "Checking for IAM role: $IAM_ROLE_NAME"
+                          
+                          # First detach all policies from the role
+                          for policy_arn in $(aws iam list-attached-role-policies --role-name "$IAM_ROLE_NAME" --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null); do
+                            echo "Detaching policy: $policy_arn"
+                            aws iam detach-role-policy --role-name "$IAM_ROLE_NAME" --policy-arn "$policy_arn" 2>/dev/null || true
+                          done
+                          
+                          # Delete inline policies
+                          for policy_name in $(aws iam list-role-policies --role-name "$IAM_ROLE_NAME" --query 'PolicyNames[*]' --output text 2>/dev/null); do
+                            echo "Deleting inline policy: $policy_name"
+                            aws iam delete-role-policy --role-name "$IAM_ROLE_NAME" --policy-name "$policy_name" 2>/dev/null || true
+                          done
+                          
+                          # Delete the role
+                          echo "Deleting IAM role: $IAM_ROLE_NAME"
+                          aws iam delete-role --role-name "$IAM_ROLE_NAME" 2>/dev/null && echo "✓ IAM role deleted" || echo "○ IAM role not found or already deleted"
+                          
+                          echo ""
+                          echo "=== Full Cleanup Complete ==="
                     environmentVariables:
                       - name: OWNER
                         type: String
@@ -452,69 +515,6 @@ pipeline:
                   timeout: 10m
                   spec:
                     command: init
-              - step:
-                  type: Run
-                  name: Cleanup K8s Namespaces
-                  identifier: cleanup_k8s_namespaces
-                  spec:
-                    shell: Bash
-                    command: |
-                      echo "=== Cleaning up existing K8s namespaces ==="
-                      
-                      # Install kubectl if not present
-                      if ! command -v kubectl &> /dev/null; then
-                        echo "Installing kubectl..."
-                        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-                        chmod +x kubectl
-                        mv kubectl /usr/local/bin/
-                      fi
-                      
-                      # Configure AWS credentials for EKS access
-                      export AWS_REGION="${AWS_REGION:-us-east-1}"
-                      
-                      # Get EKS cluster credentials
-                      CLUSTER_NAME="<+pipeline.variables.existing_cluster_name>"
-                      if [ -z "$CLUSTER_NAME" ] || [ "$CLUSTER_NAME" == "<+pipeline.variables.existing_cluster_name>" ]; then
-                        CLUSTER_NAME="harness-eks-<+pipeline.variables.owner>"
-                      fi
-                      
-                      echo "Configuring kubectl for cluster: $CLUSTER_NAME"
-                      aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION" 2>/dev/null || {
-                        echo "Warning: Could not configure kubectl for EKS cluster"
-                        echo "Namespaces will be created fresh by Terraform"
-                        exit 0
-                      }
-                      
-                      # Delete namespaces if they exist (ignore errors if they don't)
-                      OWNER="<+pipeline.variables.owner>"
-                      
-                      echo "Deleting namespace: harness-demo-$OWNER"
-                      kubectl delete namespace "harness-demo-$OWNER" --ignore-not-found=true --wait=false || true
-                      
-                      echo "Deleting namespace: harness-demo-$OWNER-prod"
-                      kubectl delete namespace "harness-demo-$OWNER-prod" --ignore-not-found=true --wait=false || true
-                      
-                      # Wait briefly for deletion to start
-                      sleep 5
-                      
-                      # Check if namespaces are terminating and wait
-                      for ns in "harness-demo-$OWNER" "harness-demo-$OWNER-prod"; do
-                        if kubectl get namespace "$ns" 2>/dev/null | grep -q Terminating; then
-                          echo "Waiting for namespace $ns to terminate..."
-                          kubectl wait --for=delete namespace/"$ns" --timeout=60s 2>/dev/null || true
-                        fi
-                      done
-                      
-                      echo "=== K8s namespace cleanup complete ==="
-                  when:
-                    stageStatus: Success
-                    condition: <+pipeline.variables.force_recreate> == "true"
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
               - step:
                   type: IACMTerraformPlugin
                   name: Plan
