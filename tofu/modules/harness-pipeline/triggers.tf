@@ -9,9 +9,12 @@ resource "harness_platform_triggers" "cd_webhook_trigger" {
   name        = "Auto-Deploy Webhook"
   org_id      = var.org_id
   project_id  = var.project_id
-  target_id   = var.canary_pipeline_id
+  target_id   = harness_platform_pipeline.k8s_canary[0].identifier
   description = "Custom webhook trigger for auto-deployment from CI pipeline"
   tags        = ["trigger-type:webhook", "auto-deploy:true"]
+
+  # Explicit dependency to ensure pipeline is fully created before trigger
+  depends_on = [harness_platform_pipeline.k8s_canary]
 
   yaml = <<-TRIGGER_EOT
     trigger:
@@ -24,7 +27,7 @@ resource "harness_platform_triggers" "cd_webhook_trigger" {
         auto-deploy: "true"
       orgIdentifier: ${var.org_id}
       projectIdentifier: ${var.project_id}
-      pipelineIdentifier: ${var.canary_pipeline_id}
+      pipelineIdentifier: ${harness_platform_pipeline.k8s_canary[0].identifier}
       source:
         type: Webhook
         spec:
@@ -34,7 +37,7 @@ resource "harness_platform_triggers" "cd_webhook_trigger" {
             headerConditions: []
       inputYaml: |
         pipeline:
-          identifier: ${var.canary_pipeline_id}
+          identifier: ${harness_platform_pipeline.k8s_canary[0].identifier}
           variables:
             - name: image_tag
               type: String
