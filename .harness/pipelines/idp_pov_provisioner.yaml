@@ -118,7 +118,7 @@ pipeline:
                       - key: Harness-Account
                         value: <+pipeline.variables.harness_account_id>
                       - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
+                        value: <+secrets.getValue("account.harness_api_key")>
                     outputVariables:
                       - name: workspace_exists
                         value: <+httpResponseCode>
@@ -138,7 +138,7 @@ pipeline:
                       - key: Harness-Account
                         value: <+pipeline.variables.harness_account_id>
                       - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
+                        value: <+secrets.getValue("account.harness_api_key")>
                     inputVariables: []
                     outputVariables:
                       - name: workspace_id
