@@ -32,12 +32,12 @@ pipeline:
       type: String
       description: Harness Platform API Key (PAT or SAT)
       required: true
-      value: <+input>
+      value: <+input>.default(<+secrets.getValue("account.harness_api_key")>)
     - name: harness_api_key_email
       type: String
       description: Email associated with the API key
       required: true
-      value: <+input>
+      value: <+input>.default(todd.parson@harness.io)
     - name: harness_org_id
       type: String
       description: Harness Org ID for the POV
