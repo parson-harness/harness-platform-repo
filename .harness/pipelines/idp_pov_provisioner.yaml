@@ -29,10 +29,10 @@ pipeline:
       required: true
       value: <+input>.default(https://app.harness.io/gratis)
     - name: harness_api_key
-      type: Secret
+      type: String
       description: Harness Platform API Key (PAT or SAT)
       required: true
-      value: account.harness_api_key
+      value: <+input>
     - name: harness_api_key_email
       type: String
       description: Email associated with the API key
@@ -113,7 +113,7 @@ pipeline:
                       - key: Harness-Account
                         value: <+pipeline.variables.harness_account_id>
                       - key: x-api-key
-                        value: <+secrets.getValue("account.harness_api_key")>
+                        value: <+pipeline.variables.harness_api_key>
                     outputVariables:
                       - name: workspace_exists
                         value: <+httpResponseCode>
@@ -133,7 +133,7 @@ pipeline:
                       - key: Harness-Account
                         value: <+pipeline.variables.harness_account_id>
                       - key: x-api-key
-                        value: <+secrets.getValue("account.harness_api_key")>
+                        value: <+pipeline.variables.harness_api_key>
                     inputVariables: []
                     outputVariables:
                       - name: workspace_id

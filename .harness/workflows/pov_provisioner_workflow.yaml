@@ -170,18 +170,6 @@ spec:
           description: "Git repository URL for the demo app source code"
           default: "https://github.com/parson-harness/harness-demo-app.git"
     
-    - title: Advanced Options
-      properties:
-        force_recreate:
-          title: Force Recreate?
-          type: string
-          description: "Delete existing resources before provisioning (use with caution)"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-          ui:help: "Recommended during testing. Will destroy any existing POV resources for this owner before provisioning."
-
   steps:
     - id: trigger
       name: Provisioning POV Environment
@@ -203,5 +191,4 @@ spec:
           create_prod_environment: ${{ parameters.create_prod_environment }}
           create_delegate: ${{ parameters.create_delegate }}
           git_repo_url: ${{ parameters.git_repo_url }}
-          force_recreate: ${{ parameters.force_recreate }}
         apikey: ${{ parameters.token }}
