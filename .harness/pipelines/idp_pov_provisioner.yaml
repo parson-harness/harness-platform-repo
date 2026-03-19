@@ -308,6 +308,12 @@ pipeline:
                     environmentVariables: []
                     outputVariables: []
                   timeout: 1m
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: MarkAsSuccess
     - stage:
         name: Terraform Destroy
         identifier: terraform_destroy
