@@ -327,6 +327,75 @@ pipeline:
           execution:
             steps:
               - step:
+                  type: Run
+                  name: Pre-Destroy Cleanup
+                  identifier: pre_destroy_cleanup
+                  spec:
+                    shell: Bash
+                    command: |
+                      #!/bin/bash
+                      set -x
+                      
+                      OWNER="<+pipeline.variables.owner>"
+                      CLUSTER_NAME="<+pipeline.variables.existing_cluster_name>"
+                      
+                      echo "=== Pre-Destroy Cleanup for owner: $OWNER ==="
+                      
+                      # Verify AWS credentials (IACM provides these via OIDC)
+                      echo ""
+                      echo "=== Verifying AWS credentials ==="
+                      aws sts get-caller-identity || { echo "No AWS credentials"; exit 0; }
+                      
+                      # === Delete IAM Role ===
+                      echo ""
+                      echo "=== Cleaning up IAM Role ==="
+                      IAM_ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
+                      echo "Checking for IAM role: $IAM_ROLE_NAME"
+                      
+                      if aws iam get-role --role-name "$IAM_ROLE_NAME" 2>/dev/null; then
+                        echo "Found IAM role, proceeding with deletion..."
+                        
+                        # Detach all managed policies
+                        for policy_arn in $(aws iam list-attached-role-policies --role-name "$IAM_ROLE_NAME" --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null); do
+                          [ -n "$policy_arn" ] && [ "$policy_arn" != "None" ] && {
+                            echo "Detaching policy: $policy_arn"
+                            aws iam detach-role-policy --role-name "$IAM_ROLE_NAME" --policy-arn "$policy_arn" || true
+                          }
+                        done
+                        
+                        # Delete inline policies
+                        for policy_name in $(aws iam list-role-policies --role-name "$IAM_ROLE_NAME" --query 'PolicyNames[*]' --output text 2>/dev/null); do
+                          [ -n "$policy_name" ] && [ "$policy_name" != "None" ] && {
+                            echo "Deleting inline policy: $policy_name"
+                            aws iam delete-role-policy --role-name "$IAM_ROLE_NAME" --policy-name "$policy_name" || true
+                          }
+                        done
+                        
+                        # Delete the role
+                        echo "Deleting IAM role: $IAM_ROLE_NAME"
+                        aws iam delete-role --role-name "$IAM_ROLE_NAME" && echo "✓ IAM role deleted" || echo "✗ Failed to delete"
+                      else
+                        echo "○ IAM role not found"
+                      fi
+                      
+                      # === Delete K8s Namespaces ===
+                      echo ""
+                      echo "=== Cleaning up K8s Namespaces ==="
+                      if [ -n "$CLUSTER_NAME" ]; then
+                        echo "Configuring kubectl for cluster: $CLUSTER_NAME"
+                        if aws eks update-kubeconfig --name "$CLUSTER_NAME" --region us-east-1; then
+                          kubectl delete namespace "harness-demo-$OWNER" --ignore-not-found=true --wait=false || true
+                          kubectl delete namespace "harness-demo-$OWNER-prod" --ignore-not-found=true --wait=false || true
+                          echo "✓ K8s namespace deletion initiated"
+                        else
+                          echo "⚠ Could not configure kubectl"
+                        fi
+                      fi
+                      
+                      echo ""
+                      echo "=== Pre-Destroy Cleanup Complete ==="
+                  timeout: 5m
+              - step:
                   type: IACMTerraformPlugin
                   name: Init
                   identifier: destroy_init
@@ -415,54 +484,98 @@ pipeline:
                           echo ""
                           echo "=== Cleaning up K8s Namespaces ==="
                           
-                          # Configure kubectl for EKS cluster
-                          CLUSTER_NAME="${EXISTING_CLUSTER_NAME:-harness-eks-${OWNER}}"
-                          echo "Configuring kubectl for cluster: $CLUSTER_NAME"
-                          
-                          aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "${AWS_REGION:-us-east-1}" 2>/dev/null || {
-                            echo "Warning: Could not configure kubectl for EKS cluster"
-                            echo "Skipping K8s namespace cleanup"
-                          }
-                          
-                          if command -v kubectl &> /dev/null && kubectl cluster-info &> /dev/null; then
-                            echo "Deleting namespace: harness-demo-$OWNER"
-                            kubectl delete namespace "harness-demo-$OWNER" --ignore-not-found=true --wait=false || true
-                            
-                            echo "Deleting namespace: harness-demo-$OWNER-prod"
-                            kubectl delete namespace "harness-demo-$OWNER-prod" --ignore-not-found=true --wait=false || true
-                            
-                            # Wait for namespaces to terminate
-                            sleep 5
-                            for ns in "harness-demo-$OWNER" "harness-demo-$OWNER-prod"; do
-                              if kubectl get namespace "$ns" 2>/dev/null | grep -q Terminating; then
-                                echo "Waiting for namespace $ns to terminate..."
-                                kubectl wait --for=delete namespace/"$ns" --timeout=120s 2>/dev/null || true
-                              fi
-                            done
-                            echo "K8s namespace cleanup complete"
+                          # === Verify AWS credentials ===
+                          echo ""
+                          echo "=== Verifying AWS credentials ==="
+                          if aws sts get-caller-identity; then
+                            echo "✓ AWS credentials are valid"
+                            AWS_AVAILABLE=true
+                          else
+                            echo "⚠ AWS credentials not available on this delegate"
+                            AWS_AVAILABLE=false
                           fi
                           
-                          # === Delete IAM Role ===
-                          echo ""
-                          echo "=== Cleaning up IAM Role ==="
-                          IAM_ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
-                          echo "Checking for IAM role: $IAM_ROLE_NAME"
+                          # === Delete IAM Role (do this FIRST before K8s) ===
+                          if [ "$AWS_AVAILABLE" = "true" ]; then
+                            echo ""
+                            echo "=== Cleaning up IAM Role ==="
+                            IAM_ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
+                            echo "Checking for IAM role: $IAM_ROLE_NAME"
+                            
+                            # Check if role exists
+                            if aws iam get-role --role-name "$IAM_ROLE_NAME" 2>/dev/null; then
+                              echo "Found IAM role, proceeding with deletion..."
+                              
+                              # First detach all managed policies from the role
+                              echo "Listing attached policies..."
+                              ATTACHED_POLICIES=$(aws iam list-attached-role-policies --role-name "$IAM_ROLE_NAME" --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null || echo "")
+                              for policy_arn in $ATTACHED_POLICIES; do
+                                if [ -n "$policy_arn" ] && [ "$policy_arn" != "None" ]; then
+                                  echo "Detaching policy: $policy_arn"
+                                  aws iam detach-role-policy --role-name "$IAM_ROLE_NAME" --policy-arn "$policy_arn" || echo "Failed to detach $policy_arn"
+                                fi
+                              done
+                              
+                              # Delete inline policies
+                              echo "Listing inline policies..."
+                              INLINE_POLICIES=$(aws iam list-role-policies --role-name "$IAM_ROLE_NAME" --query 'PolicyNames[*]' --output text 2>/dev/null || echo "")
+                              for policy_name in $INLINE_POLICIES; do
+                                if [ -n "$policy_name" ] && [ "$policy_name" != "None" ]; then
+                                  echo "Deleting inline policy: $policy_name"
+                                  aws iam delete-role-policy --role-name "$IAM_ROLE_NAME" --policy-name "$policy_name" || echo "Failed to delete $policy_name"
+                                fi
+                              done
+                              
+                              # Delete the role
+                              echo "Deleting IAM role: $IAM_ROLE_NAME"
+                              if aws iam delete-role --role-name "$IAM_ROLE_NAME"; then
+                                echo "✓ IAM role deleted successfully"
+                              else
+                                echo "✗ Failed to delete IAM role"
+                              fi
+                            else
+                              echo "○ IAM role not found (already deleted or doesn't exist)"
+                            fi
+                          else
+                            echo "Skipping IAM role cleanup - no AWS credentials"
+                          fi
                           
-                          # First detach all policies from the role
-                          for policy_arn in $(aws iam list-attached-role-policies --role-name "$IAM_ROLE_NAME" --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null); do
-                            echo "Detaching policy: $policy_arn"
-                            aws iam detach-role-policy --role-name "$IAM_ROLE_NAME" --policy-arn "$policy_arn" 2>/dev/null || true
-                          done
-                          
-                          # Delete inline policies
-                          for policy_name in $(aws iam list-role-policies --role-name "$IAM_ROLE_NAME" --query 'PolicyNames[*]' --output text 2>/dev/null); do
-                            echo "Deleting inline policy: $policy_name"
-                            aws iam delete-role-policy --role-name "$IAM_ROLE_NAME" --policy-name "$policy_name" 2>/dev/null || true
-                          done
-                          
-                          # Delete the role
-                          echo "Deleting IAM role: $IAM_ROLE_NAME"
-                          aws iam delete-role --role-name "$IAM_ROLE_NAME" 2>/dev/null && echo "✓ IAM role deleted" || echo "○ IAM role not found or already deleted"
+                          # === Configure kubectl for EKS cluster ===
+                          if [ "$AWS_AVAILABLE" = "true" ]; then
+                            echo ""
+                            echo "=== Cleaning up K8s Namespaces ==="
+                            CLUSTER_NAME="${EXISTING_CLUSTER_NAME:-harness-eks-${OWNER}}"
+                            echo "Configuring kubectl for cluster: $CLUSTER_NAME"
+                            
+                            if aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "${AWS_REGION:-us-east-1}"; then
+                              echo "✓ kubectl configured for EKS cluster"
+                              
+                              if kubectl cluster-info; then
+                                echo "Deleting namespace: harness-demo-$OWNER"
+                                kubectl delete namespace "harness-demo-$OWNER" --ignore-not-found=true --wait=false || true
+                                
+                                echo "Deleting namespace: harness-demo-$OWNER-prod"
+                                kubectl delete namespace "harness-demo-$OWNER-prod" --ignore-not-found=true --wait=false || true
+                                
+                                # Wait for namespaces to terminate
+                                echo "Waiting for namespaces to terminate..."
+                                sleep 10
+                                for ns in "harness-demo-$OWNER" "harness-demo-$OWNER-prod"; do
+                                  if kubectl get namespace "$ns" 2>/dev/null | grep -q Terminating; then
+                                    echo "Waiting for namespace $ns to terminate..."
+                                    kubectl wait --for=delete namespace/"$ns" --timeout=120s 2>/dev/null || true
+                                  fi
+                                done
+                                echo "✓ K8s namespace cleanup complete"
+                              else
+                                echo "⚠ Could not connect to K8s cluster"
+                              fi
+                            else
+                              echo "⚠ Could not configure kubectl for EKS cluster"
+                            fi
+                          else
+                            echo "Skipping K8s namespace cleanup - no AWS credentials"
+                          fi
                           
                           echo ""
                           echo "=== Full Cleanup Complete ==="
@@ -516,6 +629,84 @@ pipeline:
           workspace: <+pipeline.variables.owner>_pov
           execution:
             steps:
+              - step:
+                  type: Run
+                  name: Pre-Apply Cleanup
+                  identifier: pre_apply_cleanup
+                  spec:
+                    shell: Bash
+                    command: |
+                      #!/bin/bash
+                      set -x
+                      
+                      OWNER="<+pipeline.variables.owner>"
+                      CLUSTER_NAME="<+pipeline.variables.existing_cluster_name>"
+                      FORCE_RECREATE="<+pipeline.variables.force_recreate>"
+                      
+                      # Only run cleanup if force_recreate is true
+                      if [ "$FORCE_RECREATE" != "true" ]; then
+                        echo "force_recreate is not true, skipping pre-apply cleanup"
+                        exit 0
+                      fi
+                      
+                      echo "=== Pre-Apply Cleanup for owner: $OWNER ==="
+                      
+                      # Verify AWS credentials (IACM provides these via OIDC)
+                      echo ""
+                      echo "=== Verifying AWS credentials ==="
+                      aws sts get-caller-identity || { echo "No AWS credentials"; exit 0; }
+                      
+                      # === Delete IAM Role ===
+                      echo ""
+                      echo "=== Cleaning up IAM Role ==="
+                      IAM_ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
+                      echo "Checking for IAM role: $IAM_ROLE_NAME"
+                      
+                      if aws iam get-role --role-name "$IAM_ROLE_NAME" 2>/dev/null; then
+                        echo "Found IAM role, proceeding with deletion..."
+                        
+                        # Detach all managed policies
+                        for policy_arn in $(aws iam list-attached-role-policies --role-name "$IAM_ROLE_NAME" --query 'AttachedPolicies[*].PolicyArn' --output text 2>/dev/null); do
+                          [ -n "$policy_arn" ] && [ "$policy_arn" != "None" ] && {
+                            echo "Detaching policy: $policy_arn"
+                            aws iam detach-role-policy --role-name "$IAM_ROLE_NAME" --policy-arn "$policy_arn" || true
+                          }
+                        done
+                        
+                        # Delete inline policies
+                        for policy_name in $(aws iam list-role-policies --role-name "$IAM_ROLE_NAME" --query 'PolicyNames[*]' --output text 2>/dev/null); do
+                          [ -n "$policy_name" ] && [ "$policy_name" != "None" ] && {
+                            echo "Deleting inline policy: $policy_name"
+                            aws iam delete-role-policy --role-name "$IAM_ROLE_NAME" --policy-name "$policy_name" || true
+                          }
+                        done
+                        
+                        # Delete the role
+                        echo "Deleting IAM role: $IAM_ROLE_NAME"
+                        aws iam delete-role --role-name "$IAM_ROLE_NAME" && echo "✓ IAM role deleted" || echo "✗ Failed to delete"
+                      else
+                        echo "○ IAM role not found"
+                      fi
+                      
+                      # === Delete K8s Namespaces ===
+                      echo ""
+                      echo "=== Cleaning up K8s Namespaces ==="
+                      if [ -n "$CLUSTER_NAME" ]; then
+                        echo "Configuring kubectl for cluster: $CLUSTER_NAME"
+                        if aws eks update-kubeconfig --name "$CLUSTER_NAME" --region us-east-1; then
+                          kubectl delete namespace "harness-demo-$OWNER" --ignore-not-found=true --wait=false || true
+                          kubectl delete namespace "harness-demo-$OWNER-prod" --ignore-not-found=true --wait=false || true
+                          # Wait a bit for namespace deletion to propagate
+                          sleep 5
+                          echo "✓ K8s namespace deletion initiated"
+                        else
+                          echo "⚠ Could not configure kubectl"
+                        fi
+                      fi
+                      
+                      echo ""
+                      echo "=== Pre-Apply Cleanup Complete ==="
+                  timeout: 5m
               - step:
                   type: IACMTerraformPlugin
                   name: Init
