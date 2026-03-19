@@ -485,6 +485,12 @@ pipeline:
                       - name: API_KEY
                         type: String
                         value: <+pipeline.variables.harness_api_key>
+                      - name: EXISTING_CLUSTER_NAME
+                        type: String
+                        value: <+pipeline.variables.existing_cluster_name>
+                      - name: AWS_REGION
+                        type: String
+                        value: us-east-1
                     outputVariables: []
                   timeout: 10m
                   failureStrategies:
@@ -493,6 +499,8 @@ pipeline:
                           - AllErrors
                         action:
                           type: MarkAsSuccess
+        delegateSelectors:
+          - harness-delegate-ng
     - stage:
         name: Plan and Apply
         identifier: plan_and_apply
