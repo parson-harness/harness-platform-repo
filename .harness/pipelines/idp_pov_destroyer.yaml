@@ -227,7 +227,7 @@ pipeline:
                           
                           echo ""
                           echo "=============================================="
-                          echo "  Pre-cleanup complete. Terraform destroy can now proceed."
+                          echo "  Harness resource cleanup complete."
                           echo "=============================================="
                     environmentVariables:
                       - name: OWNER
@@ -250,6 +250,48 @@ pipeline:
                         value: <+pipeline.variables.harness_endpoint>
                     outputVariables: []
                   timeout: 10m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+                          spec: {}
+              - step:
+                  type: ShellScript
+                  name: Delete Delegate Namespace
+                  identifier: delete_delegate_namespace
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    delegateSelectors:
+                      - parson-eks-delegate
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Deleting Delegate Namespace ==="
+                          NAMESPACE="harness-delegate-ng-${OWNER}"
+                          echo "  Checking for namespace: ${NAMESPACE}"
+                          
+                          if kubectl get namespace "${NAMESPACE}" 2>/dev/null; then
+                            echo "  Namespace exists, deleting..."
+                            kubectl delete namespace "${NAMESPACE}" --wait=false || true
+                            echo "  Namespace deletion initiated"
+                          else
+                            echo "  Namespace does not exist, skipping"
+                          fi
+                          
+                          echo ""
+                          echo "=============================================="
+                          echo "  Pre-cleanup complete. Terraform destroy can now proceed."
+                          echo "=============================================="
+                    environmentVariables:
+                      - name: OWNER
+                        type: String
+                        value: <+pipeline.variables.owner>
+                    outputVariables: []
+                  timeout: 5m
                   failureStrategies:
                     - onFailure:
                         errors:

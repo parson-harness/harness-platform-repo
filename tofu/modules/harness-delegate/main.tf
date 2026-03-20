@@ -46,6 +46,9 @@ locals {
 
 ################################################################################
 # Namespace with Owner Label
+# Note: If namespace already exists from a previous failed run, you may need to
+# either import it (tofu import kubernetes_namespace.delegate[0] <namespace>)
+# or delete it manually (kubectl delete namespace <namespace>)
 ################################################################################
 
 resource "kubernetes_namespace" "delegate" {
