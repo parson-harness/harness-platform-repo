@@ -59,22 +59,31 @@ DNS validation CNAME was added to Route53 and validation completed automatically
 
 **Managed by:** `dns.tf` → `aws_route53_record.acm_validation` + `aws_acm_certificate_validation.wildcard`
 
-The cert ARN is set in `environments/sandbox/terraform.tfvars` as `acm_cert_arn` and flows through
-to each provisioned Harness service as a service variable, enabling HTTPS on the shared ALB.
+The cert ARN is set as the default for `acm_cert_arn` in `environments/sandbox/variables.tf`
+and flows through to each provisioned Harness service as a service variable, enabling HTTPS
+on the shared ALB. On a rebuild in the same AWS account, this cert persists and the default
+remains valid. If rebuilding in a new account, update the default after running this bootstrap.
 
 ---
 
 ## 4. Wildcard CNAME ✅
 
 - **Record:** `*.harness-demo.dev`
-- **Points to:** `a700467810e044bd98b2eab0a4904dc3-c4f3ecf0aa89fcea.elb.us-east-1.amazonaws.com`
+- **Points to:** `k8s-harnessdemo-d1317bf02a-1930780120.us-east-1.elb.amazonaws.com`
 - **Status:** Active
 
-**If the ALB DNS ever changes** (e.g. after cluster recreation), re-run:
+> ⚠️ **The ALB hostname is auto-generated per EKS cluster and changes on every rebuild.**
+> The `alb_dns_name` variable in `dns.tf` defaults to empty intentionally — you must
+> set it after the first CD pipeline run.
+
+**After first CD deployment, update the wildcard CNAME:**
 ```bash
+# Get the new ALB hostname
+kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'
+
+# Apply
 cd tofu/bootstrap
-tofu apply -var="owner=parson" \
-  -var="alb_dns_name=$(kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}')"
+tofu apply -var="alb_dns_name=<alb-hostname-from-above>"
 ```
 
 **Managed by:** `dns.tf` → `aws_route53_record.wildcard`

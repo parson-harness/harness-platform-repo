@@ -27,9 +27,9 @@
 ################################################################################
 
 variable "alb_dns_name" {
-  description = "Shared ALB DNS hostname (e.g. k8s-harnessd-xxx.us-east-1.elb.amazonaws.com). Set after first deployment to activate wildcard CNAME."
+  description = "Shared ALB DNS hostname. Get AFTER first CD deployment: kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'. ALB name is auto-generated per cluster and changes on rebuild."
   type        = string
-  default     = "k8s-harnessdemo-d1317bf02a-1930780120.us-east-1.elb.amazonaws.com"
+  default     = ""
 }
 
 ################################################################################
