@@ -33,7 +33,7 @@ resource "harness_platform_pipeline" "ci_build" {
           type: String
           description: Git repository URL
           required: true
-          value: <+input>.default(${var.use_harness_code ? "https://git.harness.io/${var.harness_account_id}/${var.harness_org_id}/${var.harness_project_id}/${var.harness_code_repo_name}.git" : "https://github.com/${var.git_repo_name}.git"})
+          value: <+input>.default(${var.use_harness_code ? (var.harness_api_key != "" ? "https://token:${var.harness_api_key}@git.harness.io/${var.harness_account_id}/${var.harness_org_id}/${var.harness_project_id}/${var.harness_code_repo_name}.git" : "https://git.harness.io/${var.harness_account_id}/${var.harness_org_id}/${var.harness_project_id}/${var.harness_code_repo_name}.git") : "https://github.com/${var.git_repo_name}.git"})
         - name: auto_deploy
           type: String
           description: Automatically trigger CD pipeline after successful build
@@ -44,11 +44,6 @@ resource "harness_platform_pipeline" "ci_build" {
           description: Harness API endpoint
           required: false
           value: <+input>.default(https://app.harness.io/gratis)
-        - name: harness_api_key
-          type: String
-          description: Harness API key for Harness Code git authentication (leave empty for public repos)
-          required: false
-          value: <+input>.default()
       stages:
         - stage:
             name: Build and Push
@@ -72,18 +67,11 @@ resource "harness_platform_pipeline" "ci_build" {
                       spec:
                         shell: Bash
                         command: |
-                          if [ -n "$HARNESS_API_KEY" ]; then
-                            git config --global credential.helper store
-                            echo "https://token:$${HARNESS_API_KEY}@git.harness.io" > ~/.git-credentials
-                            chmod 600 ~/.git-credentials
-                          fi
-                          echo "Cloning <+pipeline.variables.git_repo_url> branch <+pipeline.variables.git_branch>"
+                          echo "Cloning branch <+pipeline.variables.git_branch>"
                           git clone --depth 1 --branch <+pipeline.variables.git_branch> <+pipeline.variables.git_repo_url> /harness/demo-app
                           cd /harness/demo-app
                           echo "Cloned successfully"
                           git log -1 --oneline
-                        envVariables:
-                          HARNESS_API_KEY: <+pipeline.variables.harness_api_key>
                   - step:
                       type: Run
                       name: Build Java App

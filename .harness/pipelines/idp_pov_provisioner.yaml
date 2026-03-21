@@ -506,10 +506,7 @@ pipeline:
                             value: main
                           - name: git_repo_url
                             type: String
-                            value: https://git.harness.io/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/<+pipeline.variables.owner>-demo-app.git
-                          - name: harness_api_key
-                            type: String
-                            value: <+pipeline.variables.harness_api_key>
+                            value: https://token:<+pipeline.variables.harness_api_key>@git.harness.io/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/<+pipeline.variables.owner>-demo-app.git
                     assertion: <+httpResponseCode> == 200
                     outputVariables:
                       - name: ci_execution_id
