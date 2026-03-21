@@ -244,7 +244,7 @@ pipeline:
                           },
                           "create_dockerhub_upstream": {
                             "key": "create_dockerhub_upstream",
-                            "value": "true",
+                            "value": "false",
                             "value_type": "string"
                           },
                           "import_to_harness_code": {
@@ -255,6 +255,11 @@ pipeline:
                           "github_pat": {
                             "key": "github_pat",
                             "value": "<+pipeline.variables.github_pat>",
+                            "value_type": "string"
+                          },
+                          "github_username": {
+                            "key": "github_username",
+                            "value": "parson-harness",
                             "value_type": "string"
                           },
                           "source_github_repo": {
