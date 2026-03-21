@@ -17,6 +17,12 @@ locals {
   # Tags formatted for YAML
   tags_yaml = join("\n", [for tag in var.tags : "    ${split(":", tag)[0]}: \"${try(split(":", tag)[1], "")}\""])
 
+  # Service variables formatted for YAML
+  service_vars_yaml = length(var.service_variables) == 0 ? "      variables: []" : join("\n", concat(
+    ["      variables:"],
+    [for v in var.service_variables : "        - name: ${v.name}\n          type: ${v.type}\n          value: \"${v.value}\""]
+  ))
+
   # Determine repo name based on store type
   effective_repo_name = var.manifest_store_type == "HarnessCode" ? var.harness_code_repo_name : var.git_repo_name
 
@@ -83,7 +89,7 @@ ${local.manifest_store_spec}
                 - k8s/values.yaml
               skipResourceVersioning: false
               enableDeclarativeRollback: false
-      variables: []
+${local.service_vars_yaml}
 EOT
 
   # ECR service YAML
@@ -118,6 +124,6 @@ ${local.manifest_store_spec}
                 - k8s/values.yaml
               skipResourceVersioning: false
               enableDeclarativeRollback: false
-      variables: []
+${local.service_vars_yaml}
 EOT
 }

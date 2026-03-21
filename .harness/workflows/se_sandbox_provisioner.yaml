@@ -36,6 +36,10 @@ spec:
     links:
       - title: Pipeline Execution
         url: ${{ steps.trigger.output.PipelineUrl }}
+      - title: Demo App (Live)
+        url: http://${{ parameters.owner }}.harness-demo.dev
+      - title: Demo App - Stage URL (Blue/Green Validation)
+        url: http://${{ parameters.owner }}-stage.harness-demo.dev
       - title: CD Pipeline (Strategy Choice)
         url: https://app.harness.io/ng/account/<+account.identifier>/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_k8s_strategy_deploy/pipeline-studio
       - title: CD Pipeline (Canary)

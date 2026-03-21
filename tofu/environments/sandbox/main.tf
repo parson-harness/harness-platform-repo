@@ -470,6 +470,40 @@ module "harness_service" {
 
   tags = ["tofu-managed", var.owner, join("-", var.deployment_targets)]
 
+  service_variables = var.acm_cert_arn != "" ? [
+    {
+      name  = "ingressHost"
+      type  = "String"
+      value = "${var.owner}.harness-demo.dev"
+    },
+    {
+      name  = "ingressStageHost"
+      type  = "String"
+      value = "${var.owner}-stage.harness-demo.dev"
+    },
+    {
+      name  = "certArn"
+      type  = "String"
+      value = var.acm_cert_arn
+    }
+  ] : [
+    {
+      name  = "ingressHost"
+      type  = "String"
+      value = "${var.owner}.harness-demo.dev"
+    },
+    {
+      name  = "ingressStageHost"
+      type  = "String"
+      value = "${var.owner}-stage.harness-demo.dev"
+    },
+    {
+      name  = "certArn"
+      type  = "String"
+      value = ""
+    }
+  ]
+
   depends_on = [module.harness_connectors, module.ecr, module.har]
 }
 

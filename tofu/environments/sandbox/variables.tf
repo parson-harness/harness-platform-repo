@@ -504,3 +504,9 @@ variable "source_github_repo" {
   type        = string
   default     = "parson-harness/harness-demo-app"
 }
+
+variable "acm_cert_arn" {
+  description = "ACM wildcard certificate ARN for HTTPS on shared ALB (covers *.harness-demo.dev). Leave empty for HTTP-only until cert is provisioned."
+  type        = string
+  default     = ""
+}

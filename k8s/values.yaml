@@ -28,12 +28,10 @@ serviceType: ClusterIP
 # Deployment variant for blue/green or canary
 # Color is now computed dynamically based on harness.io/color label
 
-# Ingress configuration
-ingressEnabled: false
-ingressDomain: elb.us-east-1.amazonaws.com
-
-# ALB Target Group for automatic pod registration
-targetGroupArn: "arn:aws:elasticloadbalancing:us-east-1:759984737373:targetgroup/harness-demo-parson-eks/d020ddacef427f78"
+# Ingress configuration (set via Harness service variables by Terraform)
+ingressHost: <+serviceVariables.ingressHost>
+ingressStageHost: <+serviceVariables.ingressStageHost>
+certArn: <+serviceVariables.certArn>
 
 # Resource limits
 resources:
