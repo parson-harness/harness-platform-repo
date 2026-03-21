@@ -167,9 +167,11 @@ module "harness_code_repo" {
   repo_identifier  = "${var.owner}-demo-app"
   repo_description = "POV Demo App for ${var.owner} - imported from GitHub"
 
-  source_provider = "github"
-  source_host     = "https://github.com"
-  source_repo     = var.source_github_repo
+  source_provider  = "github"
+  source_host      = "https://github.com"
+  source_repo      = var.source_github_repo
+  source_username  = var.github_username
+  source_password  = var.github_pat
 
   depends_on = [module.harness_org_project]
 }

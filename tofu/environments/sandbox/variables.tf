@@ -247,6 +247,13 @@ variable "github_username" {
   default     = ""
 }
 
+variable "github_pat" {
+  description = "GitHub Personal Access Token for Harness Code repo import"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 ################################################################################
 # Pipeline Configuration
 ################################################################################

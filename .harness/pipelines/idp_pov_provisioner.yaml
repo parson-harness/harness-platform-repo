@@ -33,6 +33,11 @@ pipeline:
       description: Harness Platform API Key (PAT or SAT)
       required: true
       value: <+input>
+    - name: github_pat
+      type: String
+      description: GitHub Personal Access Token for Harness Code repo import
+      required: false
+      value: <+input>.default()
     - name: harness_api_key_email
       type: String
       description: Email associated with the API key
@@ -244,7 +249,12 @@ pipeline:
                           },
                           "import_to_harness_code": {
                             "key": "import_to_harness_code",
-                            "value": "false",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "github_pat": {
+                            "key": "github_pat",
+                            "value": "<+pipeline.variables.github_pat>",
                             "value_type": "string"
                           },
                           "source_github_repo": {
