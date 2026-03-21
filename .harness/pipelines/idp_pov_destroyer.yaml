@@ -144,7 +144,9 @@ pipeline:
                               -H "x-api-key: ${API_KEY}" \
                               -H "Content-Type: application/json")
                             HTTP_CODE=$(echo "$RESP" | tail -n1)
+                            BODY=$(echo "$RESP" | head -n -1)
                             echo "    Response: $HTTP_CODE"
+                            [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "404" ] && echo "    Body: $BODY"
                           done
                           
                           # Force delete service (has active instances)
@@ -155,7 +157,9 @@ pipeline:
                             -H "x-api-key: ${API_KEY}" \
                             -H "Content-Type: application/json")
                           HTTP_CODE=$(echo "$RESP" | tail -n1)
+                          BODY=$(echo "$RESP" | head -n -1)
                           echo "    Response: $HTTP_CODE"
+                          [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "404" ] && echo "    Body: $BODY"
                           
                           # Force delete infrastructures (referenced by pipelines)
                           echo ""
@@ -224,17 +228,23 @@ pipeline:
                           echo "    Response: $HTTP_CODE"
                           [ "$HTTP_CODE" != "200" ] && echo "    Body: $BODY"
                           
-                          # Delete delegate token
+                          # Delete delegate token (using grep/sed instead of jq which may not be available)
                           echo ""
                           echo "=== Deleting Delegate Token ==="
-                          # List and delete any delegate tokens matching the pattern
-                          TOKENS=$(curl -s "${ENDPOINT}/ng/api/delegate-token-ng?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
-                            -H "x-api-key: ${API_KEY}" | jq -r '.resource[].name // empty' | grep "^${OWNER}-delegate-token" || true)
-                          for TOKEN in $TOKENS; do
-                            echo "  Deleting delegate token: $TOKEN"
-                            curl -s -X DELETE "${ENDPOINT}/ng/api/delegate-token-ng?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&tokenName=$TOKEN" \
-                              -H "x-api-key: ${API_KEY}" || true
-                          done
+                          # List delegate tokens and extract names matching pattern
+                          TOKEN_RESP=$(curl -s "${ENDPOINT}/ng/api/delegate-token-ng?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
+                            -H "x-api-key: ${API_KEY}")
+                          # Extract token names using grep/sed (jq may not be available)
+                          TOKENS=$(echo "$TOKEN_RESP" | grep -o '"name":"[^"]*"' | sed 's/"name":"//g' | sed 's/"//g' | grep "^${OWNER}-delegate-token" || true)
+                          if [ -n "$TOKENS" ]; then
+                            for TOKEN in $TOKENS; do
+                              echo "  Deleting delegate token: $TOKEN"
+                              curl -s -X DELETE "${ENDPOINT}/ng/api/delegate-token-ng?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&tokenName=$TOKEN" \
+                                -H "x-api-key: ${API_KEY}" || true
+                            done
+                          else
+                            echo "  No matching delegate tokens found"
+                          fi
                           
                           echo ""
                           echo "=============================================="
