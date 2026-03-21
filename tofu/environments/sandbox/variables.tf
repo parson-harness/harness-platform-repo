@@ -514,5 +514,5 @@ variable "source_github_repo" {
 variable "acm_cert_arn" {
   description = "ACM wildcard certificate ARN for HTTPS on shared ALB (covers *.harness-demo.dev). Leave empty for HTTP-only until cert is provisioned."
   type        = string
-  default     = ""
+  default     = "arn:aws:acm:us-east-1:759984737373:certificate/9c90d4f8-208d-46cd-bdc1-bc13f1759c05"
 }
