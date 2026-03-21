@@ -147,18 +147,6 @@ spec:
             - "true"
             - "false"
     
-    - title: Advanced Options
-      properties:
-        force_recreate:
-          title: Force Recreate?
-          type: string
-          description: "Delete existing resources before provisioning"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-          ui:help: "Recommended during testing. Will destroy any existing sandbox resources for this owner."
-
   steps:
     - id: trigger
       name: Provisioning SE Sandbox
@@ -180,5 +168,4 @@ spec:
           create_prod_environment: ${{ parameters.create_prod_environment }}
           create_delegate: ${{ parameters.create_delegate }}
           git_repo_url: "https://github.com/parson-harness/harness-demo-app.git"
-          force_recreate: ${{ parameters.force_recreate }}
         apikey: ${{ parameters.token }}
