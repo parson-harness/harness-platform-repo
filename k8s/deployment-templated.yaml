@@ -27,6 +27,7 @@ metadata:
     {{- end }}
 spec:
   replicas: {{int .Values.replicas}}
+  revisionHistoryLimit: 2
   selector:
     matchLabels:
       app: {{.Values.name}}
