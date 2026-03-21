@@ -194,24 +194,35 @@ pipeline:
                           done
                           
                           # Delete HAR registries (project-level registry and org-level upstream proxy)
+                          # API format: DELETE /har/api/v1/v1/registry/{registry_ref}
+                          # registry_ref format: account_id/org_id/project_id/registry_name/+ (project-level)
+                          #                      account_id/org_id/registry_name/+ (org-level)
                           echo ""
                           echo "=== Deleting HAR Registries ==="
                           
                           # Delete project-level registry
+                          REGISTRY_REF="${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}/+"
                           echo "  Deleting project registry: har-${OWNER}"
-                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/har/api/v1/registry/har-${OWNER}?space_ref=${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}" \
+                          echo "    Registry ref: ${REGISTRY_REF}"
+                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/har/api/v1/v1/registry/${REGISTRY_REF}" \
                             -H "x-api-key: ${API_KEY}" \
                             -H "Content-Type: application/json")
                           HTTP_CODE=$(echo "$RESP" | tail -n1)
+                          BODY=$(echo "$RESP" | head -n -1)
                           echo "    Response: $HTTP_CODE"
+                          [ "$HTTP_CODE" != "200" ] && echo "    Body: $BODY"
                           
                           # Delete org-level upstream proxy
+                          UPSTREAM_REF="${ACCOUNT_ID}/${ORG_ID}/${OWNER}-dockerhub-proxy/+"
                           echo "  Deleting upstream proxy: ${OWNER}-dockerhub-proxy"
-                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/har/api/v1/registry/${OWNER}-dockerhub-proxy?space_ref=${ACCOUNT_ID}/${ORG_ID}" \
+                          echo "    Registry ref: ${UPSTREAM_REF}"
+                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/har/api/v1/v1/registry/${UPSTREAM_REF}" \
                             -H "x-api-key: ${API_KEY}" \
                             -H "Content-Type: application/json")
                           HTTP_CODE=$(echo "$RESP" | tail -n1)
+                          BODY=$(echo "$RESP" | head -n -1)
                           echo "    Response: $HTTP_CODE"
+                          [ "$HTTP_CODE" != "200" ] && echo "    Body: $BODY"
                           
                           # Delete delegate token
                           echo ""
@@ -270,10 +281,23 @@ pipeline:
                       type: Inline
                       spec:
                         script: |
-                          echo "=== Deleting Delegate Namespace ==="
+                          echo "=== Deleting Delegate Kubernetes Resources ==="
                           NAMESPACE="harness-delegate-ng-${OWNER}"
-                          echo "  Checking for namespace: ${NAMESPACE}"
+                          CRB_NAME="harness-delegate-admin-${OWNER}"
                           
+                          # Delete ClusterRoleBinding (cluster-scoped, not deleted with namespace)
+                          echo "  Checking for ClusterRoleBinding: ${CRB_NAME}"
+                          if kubectl get clusterrolebinding "${CRB_NAME}" 2>/dev/null; then
+                            echo "  ClusterRoleBinding exists, deleting..."
+                            kubectl delete clusterrolebinding "${CRB_NAME}" || true
+                            echo "  ClusterRoleBinding deleted"
+                          else
+                            echo "  ClusterRoleBinding does not exist, skipping"
+                          fi
+                          
+                          # Delete namespace
+                          echo ""
+                          echo "  Checking for namespace: ${NAMESPACE}"
                           if kubectl get namespace "${NAMESPACE}" 2>/dev/null; then
                             echo "  Namespace exists, deleting..."
                             kubectl delete namespace "${NAMESPACE}" --wait=false || true
