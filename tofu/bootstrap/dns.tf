@@ -29,7 +29,7 @@
 variable "alb_dns_name" {
   description = "Shared ALB DNS hostname (e.g. k8s-harnessd-xxx.us-east-1.elb.amazonaws.com). Set after first deployment to activate wildcard CNAME."
   type        = string
-  default     = ""
+  default     = "k8s-harnessdemo-d1317bf02a-1930780120.us-east-1.elb.amazonaws.com"
 }
 
 ################################################################################
