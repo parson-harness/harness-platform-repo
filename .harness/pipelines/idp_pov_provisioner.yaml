@@ -244,7 +244,7 @@ pipeline:
                           },
                           "import_to_harness_code": {
                             "key": "import_to_harness_code",
-                            "value": "true",
+                            "value": "false",
                             "value_type": "string"
                           },
                           "source_github_repo": {
