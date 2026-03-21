@@ -44,11 +44,6 @@ resource "harness_platform_pipeline" "ci_build" {
           description: Harness API endpoint
           required: false
           value: <+input>.default(https://app.harness.io/gratis)
-        - name: harness_api_key
-          type: String
-          description: Harness API key for triggering CD pipeline
-          required: false
-          value: <+input>
       stages:
         - stage:
             name: Build and Push
@@ -185,10 +180,9 @@ resource "harness_platform_pipeline" "ci_build" {
                             
                             echo "Webhook URL: $WEBHOOK_URL"
                             
-                            # Trigger the CD pipeline
+                            # Trigger the CD pipeline (custom webhooks don't require API key auth)
                             response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
                               -H "Content-Type: application/json" \
-                              -H "x-api-key: $API_KEY" \
                               -d "{\"image_tag\": \"$IMAGE_TAG\"}")
                             
                             http_code=$(echo "$response" | tail -n1)
@@ -213,7 +207,6 @@ resource "harness_platform_pipeline" "ci_build" {
                           ACCOUNT_ID: <+account.identifier>
                           ORG_ID: <+org.identifier>
                           PROJECT_ID: <+project.identifier>
-                          API_KEY: <+pipeline.variables.harness_api_key>
                       when:
                         stageStatus: Success
                       failureStrategies:
