@@ -246,6 +246,16 @@ pipeline:
                             "key": "create_dockerhub_upstream",
                             "value": "true",
                             "value_type": "string"
+                          },
+                          "import_to_harness_code": {
+                            "key": "import_to_harness_code",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "source_github_repo": {
+                            "key": "source_github_repo",
+                            "value": "parson-harness/harness-demo-app",
+                            "value_type": "string"
                           }
                         },
                         "environment_variables": {}

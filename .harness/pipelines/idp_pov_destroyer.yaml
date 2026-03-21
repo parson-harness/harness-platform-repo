@@ -246,6 +246,16 @@ pipeline:
                             echo "  No matching delegate tokens found"
                           fi
                           
+                          # Delete Harness Code Repository
+                          echo ""
+                          echo "=== Deleting Harness Code Repository ==="
+                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/code/api/v1/repos/${OWNER}-demo-app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
+                            -H "x-api-key: ${API_KEY}")
+                          HTTP_CODE=$(echo "$RESP" | tail -n1)
+                          echo "  Deleting HCR repo: ${OWNER}-demo-app"
+                          echo "    Response: $HTTP_CODE"
+                          [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "204" ] && [ "$HTTP_CODE" != "404" ] && echo "    Body: $(echo "$RESP" | head -n -1)"
+                          
                           echo ""
                           echo "=============================================="
                           echo "  Harness resource cleanup complete."

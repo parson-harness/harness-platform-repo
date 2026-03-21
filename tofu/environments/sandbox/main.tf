@@ -395,6 +395,27 @@ module "harness_connectors" {
 }
 
 ################################################################################
+# Harness Code Repository (imports demo app from GitHub for self-contained POV)
+################################################################################
+
+module "harness_code_repo" {
+  source = "../../modules/harness-code-repo"
+  count  = var.import_to_harness_code ? 1 : 0
+
+  harness_endpoint   = var.harness_endpoint
+  harness_account_id = var.harness_account_id
+  harness_api_key    = var.harness_api_key
+  org_id             = local.resolved_org_id
+  project_id         = local.resolved_project_id
+
+  repo_identifier  = "${var.owner}-demo-app"
+  repo_description = "Demo application for ${var.owner} POV - imported from GitHub"
+  source_repo      = var.source_github_repo
+
+  depends_on = [module.harness_org_project]
+}
+
+################################################################################
 # Harness Service Definition
 ################################################################################
 
@@ -651,9 +672,16 @@ module "harness_pipelines_dev" {
   har_registry_ref        = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""
   har_image_name          = "${var.owner}demoapp"
 
+  # Harness Code Repository (replaces GitHub as CI source when enabled)
+  use_harness_code       = var.import_to_harness_code
+  harness_code_repo_name = var.import_to_harness_code ? "${var.owner}-demo-app" : ""
+  harness_account_id     = var.harness_account_id
+  harness_org_id         = local.resolved_org_id
+  harness_project_id     = local.resolved_project_id
+
   pipeline_tags = ["tofu-managed", var.owner]
 
-  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev, module.har]
+  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev, module.har, module.harness_code_repo]
 }
 
 ################################################################################

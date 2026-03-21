@@ -227,6 +227,40 @@ variable "ci_completion_trigger_enabled" {
 }
 
 ################################################################################
+# Harness Code Repository Variables (for CI pipeline source)
+################################################################################
+
+variable "use_harness_code" {
+  description = "Use Harness Code repo as CI pipeline source instead of GitHub"
+  type        = bool
+  default     = false
+}
+
+variable "harness_code_repo_name" {
+  description = "Harness Code repo identifier (e.g., owner-demo-app)"
+  type        = string
+  default     = ""
+}
+
+variable "harness_account_id" {
+  description = "Harness account ID (needed to build HCR git URL)"
+  type        = string
+  default     = ""
+}
+
+variable "harness_org_id" {
+  description = "Harness org ID (needed to build HCR git URL)"
+  type        = string
+  default     = ""
+}
+
+variable "harness_project_id" {
+  description = "Harness project ID (needed to build HCR git URL)"
+  type        = string
+  default     = ""
+}
+
+################################################################################
 # Common Variables
 ################################################################################
 

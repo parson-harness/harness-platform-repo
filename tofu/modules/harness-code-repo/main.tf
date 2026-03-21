@@ -27,7 +27,16 @@ resource "terraform_data" "import_repo" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      curl -s -X POST \
+      # Check if repo already exists
+      EXISTING=$(curl -s -o /dev/null -w "%%{http_code}" \
+        "${var.harness_endpoint}/code/api/v1/repos/${var.repo_identifier}?accountIdentifier=${var.harness_account_id}&orgIdentifier=${var.org_id}&projectIdentifier=${var.project_id}" \
+        -H "x-api-key: ${var.harness_api_key}")
+      if [ "$EXISTING" = "200" ]; then
+        echo "Repo '${var.repo_identifier}' already exists in Harness Code, skipping import"
+        exit 0
+      fi
+      echo "Importing '${var.source_repo}' to Harness Code as '${var.repo_identifier}'..."
+      RESP=$(curl -s -w "\n%%{http_code}" -X POST \
         "${var.harness_endpoint}/code/api/v1/repos/import?accountIdentifier=${var.harness_account_id}&orgIdentifier=${var.org_id}&projectIdentifier=${var.project_id}" \
         -H "Content-Type: application/json" \
         -H "x-api-key: ${var.harness_api_key}" \
@@ -41,7 +50,14 @@ resource "terraform_data" "import_repo" {
             "password": "${var.source_password}"
           },
           "provider_repo": "${var.source_repo}"
-        }'
+        }')
+      HTTP_CODE=$(echo "$RESP" | tail -n1)
+      echo "Import response code: $HTTP_CODE"
+      if [ "$HTTP_CODE" != "200" ] && [ "$HTTP_CODE" != "201" ] && [ "$HTTP_CODE" != "202" ]; then
+        echo "Import failed: $(echo "$RESP" | head -n -1)"
+        exit 1
+      fi
+      echo "Import initiated successfully"
     EOT
   }
 }

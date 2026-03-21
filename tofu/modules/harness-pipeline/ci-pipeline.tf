@@ -33,7 +33,7 @@ resource "harness_platform_pipeline" "ci_build" {
           type: String
           description: Git repository URL
           required: true
-          value: <+input>.default(https://github.com/${var.git_repo_name}.git)
+          value: <+input>.default(${var.use_harness_code ? "https://git.harness.io/${var.harness_account_id}/${var.harness_org_id}/${var.harness_project_id}/${var.harness_code_repo_name}.git" : "https://github.com/${var.git_repo_name}.git"})
         - name: auto_deploy
           type: String
           description: Automatically trigger CD pipeline after successful build
