@@ -247,11 +247,10 @@ variable "github_username" {
   default     = ""
 }
 
-variable "github_pat" {
-  description = "GitHub Personal Access Token for Harness Code repo import"
+variable "harness_code_source_repo" {
+  description = "Source Harness Code repo path on git.harness.io (accountId/org/project/repo) to clone into the POV project"
   type        = string
-  default     = ""
-  sensitive   = true
+  default     = "EeRjnXTnS4GrLG5VNNJZUw/sandbox/parson/harness-demo-app"
 }
 
 ################################################################################
