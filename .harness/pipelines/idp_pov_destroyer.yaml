@@ -123,7 +123,7 @@ pipeline:
                     shell: Bash
                     executionTarget: {}
                     delegateSelectors:
-                      - harness-delegate
+                      - parson-eks-delegate
                     source:
                       type: Inline
                       spec:

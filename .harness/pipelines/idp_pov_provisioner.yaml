@@ -241,6 +241,11 @@ pipeline:
                             "key": "existing_cluster_name",
                             "value": "<+pipeline.variables.existing_cluster_name>",
                             "value_type": "string"
+                          },
+                          "create_dockerhub_upstream": {
+                            "key": "create_dockerhub_upstream",
+                            "value": "false",
+                            "value_type": "string"
                           }
                         },
                         "environment_variables": {}
@@ -303,6 +308,68 @@ pipeline:
                     environmentVariables: []
                     outputVariables: []
                   timeout: 1m
+    # Stage 2: Pre-Apply Cleanup - Remove orphaned K8s resources that may exist outside Terraform state
+    - stage:
+        name: Pre-Apply Cleanup
+        identifier: pre_apply_cleanup
+        description: "Clean up orphaned Kubernetes resources before Terraform apply"
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Cleanup Orphaned K8s Resources
+                  identifier: cleanup_orphaned_k8s
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    delegateSelectors:
+                      - parson-eks-delegate
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Pre-Apply Cleanup: Removing Orphaned K8s Resources ==="
+                          OWNER="<+pipeline.variables.owner>"
+                          CRB_NAME="harness-delegate-admin-${OWNER}"
+                          NAMESPACE="harness-delegate-ng-${OWNER}"
+                          
+                          # Delete ClusterRoleBinding if exists (cluster-scoped, causes "already exists" errors)
+                          echo "Checking for orphaned ClusterRoleBinding: ${CRB_NAME}"
+                          if kubectl get clusterrolebinding "${CRB_NAME}" 2>/dev/null; then
+                            echo "  Found orphaned ClusterRoleBinding, deleting..."
+                            kubectl delete clusterrolebinding "${CRB_NAME}" || true
+                            echo "  Deleted"
+                          else
+                            echo "  Not found, skipping"
+                          fi
+                          
+                          # Delete delegate namespace if exists (may be orphaned from previous failed run)
+                          echo ""
+                          echo "Checking for orphaned delegate namespace: ${NAMESPACE}"
+                          if kubectl get namespace "${NAMESPACE}" 2>/dev/null; then
+                            echo "  Found orphaned namespace, deleting..."
+                            kubectl delete namespace "${NAMESPACE}" --wait=false || true
+                            echo "  Deletion initiated"
+                          else
+                            echo "  Not found, skipping"
+                          fi
+                          
+                          echo ""
+                          echo "=== Pre-Apply Cleanup Complete ==="
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 5m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+                          spec: {}
+
+    # Stage 3: Plan and Apply
     - stage:
         name: Plan and Apply
         identifier: plan_and_apply
