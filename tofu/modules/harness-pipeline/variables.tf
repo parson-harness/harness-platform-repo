@@ -260,6 +260,13 @@ variable "harness_project_id" {
   default     = ""
 }
 
+variable "harness_api_key" {
+  description = "Harness API key for authenticating git clone from Harness Code"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
 ################################################################################
 # Common Variables
 ################################################################################

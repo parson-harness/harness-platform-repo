@@ -690,6 +690,7 @@ module "harness_pipelines_dev" {
   harness_account_id     = var.harness_account_id
   harness_org_id         = local.resolved_org_id
   harness_project_id     = local.resolved_project_id
+  harness_api_key        = var.harness_api_key
 
   pipeline_tags = ["tofu-managed", var.owner]
 

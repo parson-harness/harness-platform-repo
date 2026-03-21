@@ -44,6 +44,11 @@ resource "harness_platform_pipeline" "ci_build" {
           description: Harness API endpoint
           required: false
           value: <+input>.default(https://app.harness.io/gratis)
+        - name: harness_api_key
+          type: String
+          description: Harness API key for Harness Code git authentication (leave empty for public repos)
+          required: false
+          value: <+input>.default()
       stages:
         - stage:
             name: Build and Push
@@ -67,11 +72,18 @@ resource "harness_platform_pipeline" "ci_build" {
                       spec:
                         shell: Bash
                         command: |
+                          if [ -n "$HARNESS_API_KEY" ]; then
+                            git config --global credential.helper store
+                            echo "https://token:$${HARNESS_API_KEY}@git.harness.io" > ~/.git-credentials
+                            chmod 600 ~/.git-credentials
+                          fi
                           echo "Cloning <+pipeline.variables.git_repo_url> branch <+pipeline.variables.git_branch>"
                           git clone --depth 1 --branch <+pipeline.variables.git_branch> <+pipeline.variables.git_repo_url> /harness/demo-app
                           cd /harness/demo-app
                           echo "Cloned successfully"
                           git log -1 --oneline
+                        envVariables:
+                          HARNESS_API_KEY: <+pipeline.variables.harness_api_key>
                   - step:
                       type: Run
                       name: Build Java App
