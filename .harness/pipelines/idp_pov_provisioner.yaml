@@ -88,11 +88,6 @@ pipeline:
       description: Create Harness delegate
       required: false
       value: <+input>.default(true).allowedValues(true,false)
-    - name: git_repo_url
-      type: String
-      description: Git repository URL for the demo app
-      required: true
-      value: <+input>.default(https://github.com/parson-harness/harness-demo-app.git)
   stages:
     - stage:
         name: Create Workspace from Template

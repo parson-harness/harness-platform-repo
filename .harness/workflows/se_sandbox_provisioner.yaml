@@ -12,7 +12,7 @@ metadata:
     Quick provisioning for SE sandbox environments in the Harness demo account.
     
     What gets created:
-    - Harness CI pipeline (builds from GitHub, pushes to HAR)
+    - Harness CI pipeline (builds from Harness Code Repo, pushes to HAR)
     - Harness CD pipelines (Canary, Blue-Green, Strategy Choice)
     - Harness Service and Environments (Dev, Prod)
     - K8s namespaces in shared EKS cluster

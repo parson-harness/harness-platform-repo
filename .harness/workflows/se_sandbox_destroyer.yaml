@@ -77,45 +77,6 @@ spec:
           default: ""
           ui:help: "The email of the user who owns this API key"
     
-    - title: Destruction Options
-      properties:
-        destroy_terraform:
-          title: Destroy Terraform Resources?
-          type: string
-          description: "Run terraform destroy to remove infrastructure (K8s namespaces, IAM roles, HAR registry)"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-        
-        delete_delegate:
-          title: Delete Delegate?
-          type: string
-          description: "Delete the Harness delegate from the cluster"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-        
-        delete_workspace:
-          title: Delete IACM Workspace?
-          type: string
-          description: "Delete the IACM workspace (loses Terraform state)"
-          default: "false"
-          enum:
-            - "true"
-            - "false"
-          ui:help: "Warning: Deleting the workspace loses Terraform state. Only do this if you're sure."
-        
-        force_delete:
-          title: Force Delete?
-          type: string
-          description: "Force delete resources even if they have dependencies"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-
   steps:
     - id: trigger
       name: Destroying SE Sandbox
@@ -130,8 +91,4 @@ spec:
           harness_project_id: ${{ parameters.harness_project_id }}
           harness_api_key: ${{ parameters.harness_api_key }}
           harness_api_key_email: ${{ parameters.harness_api_key_email }}
-          destroy_terraform: ${{ parameters.destroy_terraform }}
-          delete_delegate: ${{ parameters.delete_delegate }}
-          delete_workspace: ${{ parameters.delete_workspace }}
-          force_delete: ${{ parameters.force_delete }}
         apikey: ${{ parameters.token }}

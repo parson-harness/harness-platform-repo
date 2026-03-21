@@ -99,45 +99,6 @@ spec:
           description: "Email address associated with the API key"
           ui:help: "The email of the user who owns the API key"
     
-    - title: Destruction Options
-      properties:
-        destroy_terraform:
-          title: Destroy Terraform Resources?
-          type: string
-          description: "Run terraform destroy to remove infrastructure (K8s namespaces, IAM roles, HAR registry)"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-        
-        delete_harness_resources:
-          title: Delete Harness Resources?
-          type: string
-          description: "Delete Harness pipelines, environments, services, and connectors"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-        
-        delete_delegate:
-          title: Delete Delegate?
-          type: string
-          description: "Delete the Harness delegate from the cluster"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-        
-        delete_workspace:
-          title: Delete IACM Workspace?
-          type: string
-          description: "Delete the IACM workspace after destruction"
-          default: "false"
-          enum:
-            - "true"
-            - "false"
-          ui:help: "Warning: This permanently removes the workspace and its state"
-
   steps:
     - id: trigger
       name: Destroying POV Environment
@@ -152,8 +113,4 @@ spec:
           harness_project_id: ${{ parameters.harness_project_id }}
           harness_api_key: ${{ parameters.harness_api_key }}
           harness_api_key_email: ${{ parameters.harness_api_key_email }}
-          destroy_terraform: ${{ parameters.destroy_terraform }}
-          delete_harness_resources: ${{ parameters.delete_harness_resources }}
-          delete_delegate: ${{ parameters.delete_delegate }}
-          delete_workspace: ${{ parameters.delete_workspace }}
         apikey: ${{ parameters.token }}
