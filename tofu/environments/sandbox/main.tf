@@ -589,17 +589,18 @@ locals {
   })
 }
 
-resource "kubernetes_namespace" "app" {
+resource "terraform_data" "app_namespace" {
   for_each = toset(local.har_namespaces)
 
-  metadata {
-    name = each.value
+  input = each.value
 
-    labels = {
-      "app.kubernetes.io/managed-by" = "tofu"
-      "harness.io/component"         = "demo-app"
-      "owner"                        = var.owner
-    }
+  provisioner "local-exec" {
+    command = "kubectl get namespace '${each.value}' >/dev/null 2>&1 || kubectl create namespace '${each.value}'"
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "kubectl delete namespace '${self.output}' --ignore-not-found=true"
   }
 
   depends_on = [module.eks]
@@ -627,7 +628,7 @@ resource "kubernetes_secret" "har_pull_secret" {
     ".dockercfg" = local.har_dockercfg
   }
 
-  depends_on = [kubernetes_namespace.app]
+  depends_on = [terraform_data.app_namespace]
 }
 
 ################################################################################
