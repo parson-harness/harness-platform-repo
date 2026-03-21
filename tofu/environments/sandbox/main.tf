@@ -395,27 +395,6 @@ module "harness_connectors" {
 }
 
 ################################################################################
-# Harness Code Repository (imports demo app from GitHub for self-contained POV)
-################################################################################
-
-module "harness_code_repo" {
-  source = "../../modules/harness-code-repo"
-  count  = var.import_to_harness_code ? 1 : 0
-
-  harness_endpoint   = var.harness_endpoint
-  harness_account_id = var.harness_account_id
-  harness_api_key    = var.harness_api_key
-  org_id             = local.resolved_org_id
-  project_id         = local.resolved_project_id
-
-  repo_identifier  = "${var.owner}-demo-app"
-  repo_description = "Demo application for ${var.owner} POV - imported from GitHub"
-  source_repo      = var.source_github_repo
-
-  depends_on = [module.harness_org_project]
-}
-
-################################################################################
 # Harness Service Definition
 ################################################################################
 
