@@ -692,6 +692,8 @@ module "harness_pipelines_dev" {
   harness_project_id     = local.resolved_project_id
   harness_api_key        = var.harness_api_key
 
+  delegate_selector = "delegate-${var.owner}"
+
   pipeline_tags = ["tofu-managed", var.owner]
 
   depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev, module.har, module.harness_code_repo]

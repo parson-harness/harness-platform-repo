@@ -277,6 +277,115 @@ spec:
 5. **Rollback Triggered** - CV fails, pipeline executes rollback steps
 6. **Canary Deleted** - Traffic returns to stable deployment
 
+---
+
+## How Harness Tracks K8s Deployment State (Under the Hood)
+
+This section is useful for SEs explaining **why** Harness B/G and canary work the way they do, and why switching strategies on the same namespace requires a cleanup step.
+
+### The Release ConfigMap
+
+Every time Harness deploys to a Kubernetes namespace, it creates (or updates) a `ConfigMap` named:
+
+```
+release-<releaseName>
+```
+
+where `releaseName` is configured in the Harness infrastructure definition (defaults to the service name, e.g., `release-parsondemoapp`).
+
+This ConfigMap acts as Harness's **"source of truth"** for what it owns in that namespace. It records:
+- Which Kubernetes resources were deployed (Deployments, Services, ConfigMaps, etc.)
+- The **deployment strategy type** used (BlueGreen, Canary, Rolling)
+- The previous and current release state for rollback
+
+```bash
+# Inspect the release tracking ConfigMap
+kubectl get configmap release-<releaseName> -n <namespace> -o yaml
+```
+
+### Strategy-Specific "Leave Behinds"
+
+Each deployment strategy leaves a distinct set of K8s resources behind after it completes:
+
+| Strategy | Resources Left in Cluster | Purpose |
+|---|---|---|
+| **Blue/Green** | `<name>-service` (primary), `<name>-service-stage` (stage), pods labeled `harness.io/color: blue` or `green` | Stage service receives new version traffic before swap; color label tracks which deployment is active |
+| **Canary** | `<name>-service` (stable), `<name>-deployment-canary` (canary pods) labeled `harness.io/track: canary` | Canary deployment runs alongside stable; Harness counts pods per track to calculate traffic % |
+| **Rolling** | `<name>-service` (standard), updated Deployment | Standard K8s rolling update — no additional Harness-managed resources |
+
+### What Happens When You Switch Strategies
+
+When you run **Strategy A** then switch to **Strategy B** on the same namespace:
+
+1. Strategy A's resources and ConfigMap entry persist in the cluster
+2. Strategy B reads the release ConfigMap and sees it was last managed by Strategy A
+3. Strategy B tries to create or claim ownership of a Service that already exists under a different strategy type → **conflict**
+
+The most common error:
+```
+Found conflicting service [<name>-service] in the cluster
+```
+
+This means Harness found the primary service but can't reconcile it with the expected strategy ownership in the release ConfigMap.
+
+### The Fix: Reset Strategy State Before Each Deploy
+
+To safely switch between strategies on the same namespace, delete the strategy-owned resources before deploying:
+
+```bash
+NAMESPACE="<your-namespace>"
+RELEASE="<your-release-name>"   # e.g. parsondemoapp
+
+# 1. Remove Harness release ownership tracking (root cause of all cross-strategy conflicts)
+kubectl delete configmap "release-${RELEASE}" -n $NAMESPACE --ignore-not-found=true
+
+# 2. Remove primary service — B/G requires harness.io/color in the selector, which only
+#    gets added when Harness creates the service fresh under B/G ownership. A service
+#    created by rolling/canary won't have this label and will cause a conflict error.
+kubectl delete service "${RELEASE}-service" -n $NAMESPACE --ignore-not-found=true
+
+# 3. Remove B/G stage service (blocks canary/rolling from starting after a B/G run)
+kubectl delete service "${RELEASE}-service-stage" -n $NAMESPACE --ignore-not-found=true
+
+# 4. Remove canary deployment (blocks B/G/rolling from starting after a canary run)
+kubectl delete deployment "${RELEASE}-deployment-canary" -n $NAMESPACE --ignore-not-found=true
+```
+
+All commands use `--ignore-not-found=true` so they are safe to run regardless of what strategy ran previously.
+
+In the `parson_k8s_strategy_deploy` pipeline, this is implemented as a **`Reset Strategy State` ShellScript step** — the first step in each of the three strategy stages — so any strategy can be run after any other without manual cleanup.
+
+### Visual: K8s Resources Per Strategy
+
+```
+After Blue/Green:
+  parsondemoapp-service          ← primary (points to active color)
+  parsondemoapp-service-stage    ← stage (points to inactive color)
+  parsondemoapp-deployment       ← labeled harness.io/color=blue (or green)
+  release-parsondemoapp (CM)     ← strategy: BlueGreen
+
+After Canary:
+  parsondemoapp-service          ← stable service
+  parsondemoapp-deployment       ← stable pods (harness.io/track=stable)
+  parsondemoapp-deployment-canary← canary pods (harness.io/track=canary)
+  release-parsondemoapp (CM)     ← strategy: Canary
+
+After Rolling:
+  parsondemoapp-service          ← standard service
+  parsondemoapp-deployment       ← all pods on new version
+  release-parsondemoapp (CM)     ← strategy: Rolling
+```
+
+### Key Expressions in Pipeline
+
+| Harness Expression | Resolves To | Example |
+|---|---|---|
+| `<+infra.namespace>` | K8s namespace from infra definition | `parson-dev` |
+| `<+infra.releaseName>` | Release name from infra definition | `parsondemoapp` |
+| `<+artifacts.primary.image>` | Full image URI with tag | `123456.dkr.ecr.us-east-1.amazonaws.com/parsondemoapp:1.2.3` |
+
+---
+
 ## Troubleshooting
 
 ### Chaos not activating

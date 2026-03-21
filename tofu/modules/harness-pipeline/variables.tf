@@ -271,6 +271,12 @@ variable "harness_api_key" {
 # Common Variables
 ################################################################################
 
+variable "delegate_selector" {
+  description = "Delegate selector tag/name to pin all K8s pipeline stages to the correct EKS delegate (e.g. delegate-alice)"
+  type        = string
+  default     = ""
+}
+
 variable "pipeline_tags" {
   description = "Tags to apply to pipelines"
   type        = list(string)
