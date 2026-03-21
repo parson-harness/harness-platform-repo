@@ -59,10 +59,20 @@ DNS validation CNAME was added to Route53 and validation completed automatically
 
 **Managed by:** `dns.tf` → `aws_route53_record.acm_validation` + `aws_acm_certificate_validation.wildcard`
 
-The cert ARN is set as the default for `acm_cert_arn` in `environments/sandbox/variables.tf`
-and flows through to each provisioned Harness service as a service variable, enabling HTTPS
-on the shared ALB. On a rebuild in the same AWS account, this cert persists and the default
-remains valid. If rebuilding in a new account, update the default after running this bootstrap.
+**Automated propagation:** `dns.tf` includes a `terraform_data.push_cert_arn_to_harness`
+resource that automatically calls `update_harness_template.py` to push `acm_cert_arn`
+into the `POV_Provisioner` IACM workspace template's `terraform_variables`. Every workspace
+provisioned from that template will receive the cert ARN automatically — no manual copy needed.
+
+**Required for automation** — pass these to `tofu apply`:
+```bash
+tofu apply \
+  -var="owner=parson" \
+  -var="harness_account_id=EeRjnXTnS4GrLG5VNNJZUw" \
+  -var="harness_api_key=<your-api-key>"
+```
+`harness_org_id` (default: `sandbox`), `harness_project_id` (default: `parson`), and
+`harness_template_id` (default: `POV_Provisioner`) can be overridden if needed.
 
 ---
 

@@ -26,6 +26,48 @@
 # Variables
 ################################################################################
 
+################################################################################
+# Harness Integration Variables
+# Required to automatically push cert ARN into the POV_Provisioner IACM template
+################################################################################
+
+variable "harness_endpoint" {
+  description = "Harness API endpoint"
+  type        = string
+  default     = "https://app.harness.io/gratis"
+}
+
+variable "harness_account_id" {
+  description = "Harness account ID"
+  type        = string
+  default     = ""
+}
+
+variable "harness_org_id" {
+  description = "Harness org where the POV_Provisioner template lives"
+  type        = string
+  default     = "sandbox"
+}
+
+variable "harness_project_id" {
+  description = "Harness project where the POV_Provisioner template lives"
+  type        = string
+  default     = "parson"
+}
+
+variable "harness_api_key" {
+  description = "Harness API key — used to push acm_cert_arn into the POV_Provisioner template"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "harness_template_id" {
+  description = "IACM workspace template identifier to update with the cert ARN"
+  type        = string
+  default     = "POV_Provisioner"
+}
+
 variable "alb_dns_name" {
   description = "Shared ALB DNS hostname. Get AFTER first CD deployment: kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'. ALB name is auto-generated per cluster and changes on rebuild."
   type        = string
@@ -83,6 +125,31 @@ resource "aws_route53_record" "acm_validation" {
 resource "aws_acm_certificate_validation" "wildcard" {
   certificate_arn         = data.aws_acm_certificate.wildcard.arn
   validation_record_fqdns = [aws_route53_record.acm_validation.fqdn]
+}
+
+################################################################################
+# Push cert ARN into POV_Provisioner IACM template
+# Runs whenever the cert ARN changes (effectively once per account).
+# Requires harness_api_key and harness_account_id to be set.
+################################################################################
+
+resource "terraform_data" "push_cert_arn_to_harness" {
+  triggers_replace = [data.aws_acm_certificate.wildcard.arn]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      python3 ${path.module}/update_harness_template.py \
+        "${var.harness_endpoint}" \
+        "${var.harness_account_id}" \
+        "${var.harness_org_id}" \
+        "${var.harness_project_id}" \
+        "${var.harness_api_key}" \
+        "${var.harness_template_id}" \
+        "${data.aws_acm_certificate.wildcard.arn}"
+    EOT
+  }
+
+  depends_on = [aws_acm_certificate_validation.wildcard]
 }
 
 ################################################################################
