@@ -8,11 +8,46 @@ locals {
   # Placed at the stage level to pin ALL steps (K8sDelete, deploy, shell) to the right delegate.
   strategy_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
 
-  # ShellScript Reset Strategy State step - cleans up cross-strategy K8s resource conflicts.
-  # Uses ShellScript (not K8sDelete) because K8sDelete does NOT evaluate Harness expressions
-  # like <+infra.releaseName> in its resourceNames field — it treats them as literal strings.
-  # ShellScript DOES evaluate expressions in script content, and with delegateSelectors
-  # pinning execution to the owner's EKS delegate (which has cluster-admin), kubectl works.
+  # Blue-Green reset: only deletes services if they lack the harness.io/color selector.
+  # A missing color selector means the service was left by a canary/rolling run — it will block
+  # K8sBlueGreenDeploy with "conflicting service". If the color selector already exists this is
+  # a B/G re-run: keep the service so prod traffic stays up during staging (deleting it causes 503).
+  reset_strategy_step_bg = <<-RESET_BG_EOT
+                  - step:
+                      type: ShellScript
+                      name: Reset Strategy State
+                      identifier: reset_strategy_state
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              #!/bin/bash
+                              NAMESPACE="<+infra.namespace>"
+                              RELEASE="<+infra.releaseName>"
+                              SVC="<+service.name.replace(" ", "").toLowerCase()>"
+                              echo "Resetting B/G strategy state: svc=$${SVC} release=$${RELEASE} namespace=$${NAMESPACE}"
+                              COLOR=$(kubectl get service "$${SVC}-service" -n "$${NAMESPACE}" -o jsonpath='{.spec.selector.harness\.io/color}' 2>/dev/null)
+                              if [ -z "$${COLOR}" ]; then
+                                echo "No B/G color selector — removing services for fresh B/G setup"
+                                kubectl delete service "$${SVC}-service" -n "$${NAMESPACE}" --ignore-not-found=true
+                                kubectl delete service "$${SVC}-service-stage" -n "$${NAMESPACE}" --ignore-not-found=true
+                              else
+                                echo "B/G services exist (color=$${COLOR}) — preserving for zero-downtime re-run"
+                              fi
+                              kubectl delete deployment "$${SVC}-deployment-canary" -n "$${NAMESPACE}" --ignore-not-found=true
+                              kubectl delete configmap "$${RELEASE}" -n "$${NAMESPACE}" --ignore-not-found=true
+                              echo "Done."
+                        environmentVariables: []
+                        outputVariables: []
+  RESET_BG_EOT
+
+  # Canary/Rolling reset: unconditionally deletes services and canary deployment.
+  # K8sCanaryDeploy and K8sRollingDeploy both recreate services from the manifest, so deleting
+  # them first is safe. This also clears B/G color-selector services that would confuse canary/rolling.
   reset_strategy_step = <<-RESET_EOT
                   - step:
                       type: ShellScript
@@ -31,7 +66,6 @@ locals {
                               RELEASE="<+infra.releaseName>"
                               SVC="<+service.name.replace(" ", "").toLowerCase()>"
                               echo "Resetting strategy state: svc=$${SVC} release=$${RELEASE} namespace=$${NAMESPACE}"
-                              kubectl delete deployment "$${SVC}-deployment" -n "$${NAMESPACE}" --ignore-not-found=true
                               kubectl delete deployment "$${SVC}-deployment-canary" -n "$${NAMESPACE}" --ignore-not-found=true
                               kubectl delete service "$${SVC}-service" -n "$${NAMESPACE}" --ignore-not-found=true
                               kubectl delete service "$${SVC}-service-stage" -n "$${NAMESPACE}" --ignore-not-found=true
@@ -92,7 +126,7 @@ ${local.strategy_delegate_yaml}            spec:
                   - identifier: ${var.infrastructure_ref}
               execution:
                 steps:
-${local.reset_strategy_step}                  - step:
+${local.reset_strategy_step_bg}                  - step:
                       type: ShellScript
                       name: Print Variables
                       identifier: print_variables
