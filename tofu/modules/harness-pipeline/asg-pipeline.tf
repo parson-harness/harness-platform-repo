@@ -99,16 +99,13 @@ resource "harness_platform_pipeline" "asg_strategy" {
                       identifier: asg_blue_green_deploy
                       type: AsgBlueGreenDeploy
                       timeout: 20m
-                      infrastructure: {}
-                      execution: {}
                       spec:
                         useAlreadyRunningInstances: false
-                        loadBalancers:
-                          - loadBalancer: <+infra.loadBalancers[0].loadBalancerName>
-                            prodListener: <+infra.loadBalancers[0].prodListenerArn>
-                            prodListenerRuleArn: ""
-                            stageListener: <+infra.loadBalancers[0].stageListenerArn>
-                            stageListenerRuleArn: ""
+                        loadBalancer: <+infra.loadBalancers[0].loadBalancerName>
+                        prodListener: <+infra.loadBalancers[0].prodListenerArn>
+                        prodListenerRuleArn: ""
+                        stageListener: <+infra.loadBalancers[0].stageListenerArn>
+                        stageListenerRuleArn: ""
                   - step:
                       name: Validate Stage
                       identifier: validate_stage_bg
