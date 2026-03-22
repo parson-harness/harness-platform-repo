@@ -625,7 +625,7 @@ resource "kubernetes_secret" "har_pull_secret" {
     ".dockercfg" = local.har_dockercfg
   }
 
-  depends_on = [terraform_data.app_namespace]
+  depends_on = [kubernetes_namespace.app_namespace]
 }
 
 ################################################################################
