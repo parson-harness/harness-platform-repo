@@ -102,11 +102,9 @@ resource "harness_platform_pipeline" "asg_strategy" {
                       spec:
                         useAlreadyRunningInstances: false
                         loadBalancers:
-                          - loadBalancerName: <+infra.loadBalancers[0].loadBalancerName>
-                            prodListenerArn: <+infra.loadBalancers[0].prodListenerArn>
+                          - loadBalancer: <+infra.loadBalancers[0].loadBalancerName>
+                            prodListener: <+infra.loadBalancers[0].prodListenerArn>
                             stageListenerArn: <+infra.loadBalancers[0].stageListenerArn>
-                            prodListenerRuleArn: ""
-                            stageListenerRuleArn: ""
                   - step:
                       name: Validate Stage
                       identifier: validate_stage_bg
@@ -262,7 +260,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
                       timeout: 20m
                       spec: {}
                   - step:
-                      name: Rolling Deploy (Promote)
+                      name: Rolling Deploy Promote
                       identifier: asg_canary_promote
                       type: AsgRollingDeploy
                       timeout: 20m
@@ -294,7 +292,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
                         outputVariables: []
                 rollbackSteps:
                   - step:
-                      name: Canary Delete (Rollback)
+                      name: Canary Delete Rollback
                       identifier: asg_canary_delete_rollback
                       type: AsgCanaryDelete
                       timeout: 20m
