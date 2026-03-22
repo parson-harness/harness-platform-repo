@@ -82,6 +82,7 @@ locals {
     Environment = var.environment
     ManagedBy   = "tofu"
     Owner       = var.owner
+    Contact     = "todd.parson@harness.io"
   }
 
   # Delegate selector includes owner for uniqueness
@@ -320,7 +321,7 @@ resource "harness_platform_secret_text" "packer_aws_access_key" {
   count = local.enable_asg ? 1 : 0
 
   identifier = "aws_access_key_id"
-  name       = "AWS Access Key ID (Packer)"
+  name       = "AWS-Access-Key-ID-Packer"
   org_id     = local.resolved_org_id
   project_id = local.resolved_project_id
 
@@ -335,7 +336,7 @@ resource "harness_platform_secret_text" "packer_aws_secret_key" {
   count = local.enable_asg ? 1 : 0
 
   identifier = "aws_secret_access_key"
-  name       = "AWS Secret Access Key (Packer)"
+  name       = "AWS-Secret-Access-Key-Packer"
   org_id     = local.resolved_org_id
   project_id = local.resolved_project_id
 
