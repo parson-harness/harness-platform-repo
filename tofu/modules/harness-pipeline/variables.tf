@@ -210,6 +210,12 @@ variable "har_image_name" {
   default     = "demo-app"
 }
 
+variable "har_upstream_proxy_ref" {
+  description = "Reference to the HAR upstream proxy registry (for pulling base images like maven through HAR)"
+  type        = string
+  default     = ""
+}
+
 ################################################################################
 # Trigger Variables
 ################################################################################

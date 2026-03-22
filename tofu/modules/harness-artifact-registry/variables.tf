@@ -37,7 +37,7 @@ variable "registry_description" {
 ################################################################################
 
 variable "create_dockerhub_upstream" {
-  description = "Whether to create a DockerHub upstream proxy at org level"
+  description = "Whether to create a DockerHub upstream proxy at project level"
   type        = bool
   default     = true
 }

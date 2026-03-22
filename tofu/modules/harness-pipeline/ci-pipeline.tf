@@ -61,8 +61,8 @@ resource "harness_platform_pipeline" "ci_build" {
                       name: Build Java App
                       identifier: build_java
                       spec:
-                        connectorRef: account.harnessImage
-                        image: maven:3.9-eclipse-temurin-17
+                        connectorRef: ${var.har_upstream_proxy_ref != "" ? var.har_upstream_proxy_ref : "account.harnessImage"}
+                        image: ${var.har_upstream_proxy_ref != "" ? "library/maven:3.9-eclipse-temurin-17" : "maven:3.9-eclipse-temurin-17"}
                         shell: Bash
                         command: |
                           echo "========================================"

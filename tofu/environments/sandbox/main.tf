@@ -679,6 +679,7 @@ module "harness_pipelines_dev" {
   git_connector_ref       = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   git_repo_name           = var.github_repo_name
   har_registry_ref        = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""
+  har_upstream_proxy_ref  = var.artifact_registry_type == "har" && var.create_dockerhub_upstream ? "${var.owner}-dockerhub-proxy" : ""
   har_image_name          = "${var.owner}demoapp"
 
   # Harness Code Repository (replaces GitHub as CI source when enabled)

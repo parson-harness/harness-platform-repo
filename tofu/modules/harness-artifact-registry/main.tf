@@ -14,15 +14,15 @@ terraform {
 }
 
 ################################################################################
-# DockerHub Upstream Proxy (org-level, created once per org)
+# DockerHub Upstream Proxy (project-level, for isolated POV environments)
 ################################################################################
 
 resource "harness_platform_har_registry" "dockerhub_upstream" {
   count = var.create_dockerhub_upstream ? 1 : 0
 
   identifier   = var.dockerhub_upstream_id
-  description  = "DockerHub upstream proxy for ${var.org_id}"
-  space_ref    = "${var.account_id}/${var.org_id}"
+  description  = "DockerHub upstream proxy for ${var.project_id}"
+  space_ref    = "${var.account_id}/${var.org_id}/${var.project_id}"
   package_type = "DOCKER"
 
   config {
@@ -38,7 +38,7 @@ resource "harness_platform_har_registry" "dockerhub_upstream" {
     }
   }
 
-  parent_ref = "${var.account_id}/${var.org_id}"
+  parent_ref = "${var.account_id}/${var.org_id}/${var.project_id}"
 
   lifecycle {
     prevent_destroy = false
@@ -46,7 +46,7 @@ resource "harness_platform_har_registry" "dockerhub_upstream" {
 }
 
 ################################################################################
-# Project-Level Docker Registry (VIRTUAL type with upstream proxy)
+# Project-Level Docker Registry (VIRTUAL type with project-level upstream proxy)
 ################################################################################
 
 resource "harness_platform_har_registry" "registry" {
@@ -57,8 +57,10 @@ resource "harness_platform_har_registry" "registry" {
 
   config {
     type             = "VIRTUAL"
-    upstream_proxies = var.create_dockerhub_upstream ? [harness_platform_har_registry.dockerhub_upstream[0].identifier] : var.upstream_proxy_ids
+    upstream_proxies = var.create_dockerhub_upstream ? [var.dockerhub_upstream_id] : var.upstream_proxy_ids
   }
+
+  depends_on = [harness_platform_har_registry.dockerhub_upstream]
 
   parent_ref = "${var.account_id}/${var.org_id}/${var.project_id}"
 
