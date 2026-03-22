@@ -562,7 +562,7 @@ module "harness_service_asg" {
 
 module "harness_service" {
   source = "../../modules/harness-service"
-  count  = var.create_harness_service ? 1 : 0
+  count  = var.create_harness_service && (local.enable_eks || local.enable_ecs || local.enable_lambda) ? 1 : 0
 
   service_id          = "${var.owner}_demo_app"
   service_name        = "${title(var.owner)} Demo App"
