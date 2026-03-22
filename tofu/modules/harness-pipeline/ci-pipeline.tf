@@ -127,7 +127,7 @@ resource "harness_platform_pipeline" "ci_build" {
 %{if var.asg_packer_build_enabled~}
                   - step:
                       type: Run
-                      name: Build AMI with Packer (ASG)
+                      name: Build AMI with Packer ASG
                       identifier: packer_build_ami
                       spec:
                         connectorRef: ${var.har_upstream_proxy_ref != "" ? var.har_upstream_proxy_ref : "account.harnessImage"}

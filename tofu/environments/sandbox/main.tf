@@ -520,7 +520,7 @@ module "harness_service_asg" {
   count  = local.enable_asg && var.create_harness_service ? 1 : 0
 
   service_id          = "${var.owner}_demo_app_asg"
-  service_name        = "${title(var.owner)} Demo App (ASG)"
+  service_name        = "${title(var.owner)} Demo App ASG"
   service_description = "ASG demo application for ${var.owner} - Blue/Green, Canary, Rolling on EC2"
   org_id              = local.resolved_org_id
   project_id          = local.resolved_project_id
@@ -846,7 +846,23 @@ module "harness_pipelines_asg" {
   create_canary_pipeline     = false
   create_blue_green_pipeline = false
   create_strategy_pipeline   = false
-  create_ci_pipeline         = false
+
+  # CI pipeline: create here when ASG-only; harness_pipelines_dev handles it for mixed targets
+  create_ci_pipeline      = (local.enable_asg && !(local.enable_eks || local.enable_ecs || local.enable_lambda)) ? var.create_ci_pipeline : false
+  ci_pipeline_id          = "${var.owner}_ci_build"
+  ci_pipeline_name        = "${title(var.owner)} CI Build"
+  ci_pipeline_description = "Builds JAR and Packer AMI, pushes to Harness Artifact Registry"
+  git_connector_ref       = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+  git_repo_name           = var.github_repo_name
+  har_registry_ref        = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""
+  har_upstream_proxy_ref  = var.artifact_registry_type == "har" && var.create_dockerhub_upstream ? "${var.owner}-dockerhub-proxy" : ""
+  har_image_name          = "${var.owner}demoapp"
+  use_harness_code        = var.import_to_harness_code
+  harness_code_repo_name  = var.import_to_harness_code ? "${var.owner}-demo-app" : ""
+  harness_account_id      = var.harness_account_id
+  harness_org_id          = local.resolved_org_id
+  harness_project_id      = local.resolved_project_id
+  harness_api_key         = var.harness_api_key
 
   delegate_selector = "delegate-${var.owner}"
   pipeline_tags     = ["tofu-managed", var.owner, "asg"]
@@ -856,7 +872,7 @@ module "harness_pipelines_asg" {
 
 module "harness_pipelines_dev" {
   source = "../../modules/harness-pipeline"
-  count  = var.create_harness_service && var.create_harness_environment ? 1 : 0
+  count  = var.create_harness_service && var.create_harness_environment && (local.enable_eks || local.enable_ecs || local.enable_lambda) ? 1 : 0
 
   org_id             = local.resolved_org_id
   project_id         = local.resolved_project_id
@@ -923,7 +939,7 @@ module "harness_pipelines_dev" {
 
   pipeline_tags = ["tofu-managed", var.owner]
 
-  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev, module.har, module.harness_code_repo, module.asg]
+  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev, module.har, module.harness_code_repo, module.asg, module.harness_service_asg]
 }
 
 ################################################################################
