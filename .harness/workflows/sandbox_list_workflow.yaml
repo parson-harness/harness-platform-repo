@@ -1,0 +1,76 @@
+apiVersion: harness.io/v1
+kind: Workflow
+name: SE Sandbox Manager
+identifier: se_sandbox_manager
+type: workflow
+scope: project
+projectIdentifier: parson
+orgIdentifier: sandbox
+owner: todd.parson@harness.io
+metadata:
+  description: "View and manage SE sandbox environments with TTL status"
+  tags:
+    - sandbox
+    - ttl
+    - self-service
+spec:
+  presentation:
+    customTitle: SE Sandbox Manager
+    customSubTitle: View sandbox status, extend TTL, or destroy your sandbox
+    customCreateButtonText: View Sandboxes
+  
+  output:
+    links:
+      - title: IACM Workspaces
+        url: https://app.harness.io/ng/account/<+account.identifier>/module/iacm/orgs/sandbox/projects/parson/workspaces
+  
+  lifecycle: production
+  
+  parameters:
+    - title: Authentication
+      required:
+        - token
+      properties:
+        token:
+          title: Harness Token
+          type: string
+          ui:widget: password
+          ui:field: HarnessAuthToken
+    
+    - title: Action
+      required:
+        - action
+      properties:
+        action:
+          title: What would you like to do?
+          type: string
+          description: "Select an action"
+          default: "list"
+          enum:
+            - "list"
+            - "extend"
+            - "protect"
+            - "destroy"
+          enumNames:
+            - "List all sandboxes with TTL status"
+            - "Extend my sandbox TTL by 30 days"
+            - "Protect my sandbox (disable TTL)"
+            - "Destroy my sandbox"
+        
+        owner:
+          title: Sandbox Owner
+          type: string
+          description: "Your sandbox owner name (e.g., 'todd')"
+          pattern: "^[a-z][a-z0-9]*$"
+          ui:help: "Required for extend, protect, or destroy actions"
+  
+  steps:
+    - id: trigger
+      name: Managing Sandbox
+      action: trigger:harness-custom-pipeline
+      input:
+        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/sandbox_manager/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
+        inputset:
+          action: ${{ parameters.action }}
+          owner: ${{ parameters.owner }}
+        apikey: ${{ parameters.token }}

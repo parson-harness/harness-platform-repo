@@ -1,0 +1,30 @@
+trigger:
+  name: Weekly Sandbox TTL Cleanup
+  identifier: weekly_sandbox_ttl_cleanup
+  enabled: true
+  description: "Runs every Sunday at 2 AM UTC to clean up expired SE sandboxes"
+  tags:
+    automation: "true"
+    cleanup: "true"
+  orgIdentifier: sandbox
+  projectIdentifier: parson
+  pipelineIdentifier: sandbox_ttl_cleanup
+  source:
+    type: Scheduled
+    spec:
+      type: Cron
+      spec:
+        expression: "0 2 * * 0"
+  inputYaml: |
+    pipeline:
+      identifier: sandbox_ttl_cleanup
+      variables:
+        - name: dry_run
+          type: String
+          value: "false"
+        - name: harness_api_key
+          type: Secret
+          value: <+secrets.getValue("account.harness_api_key")>
+        - name: harness_api_key_email
+          type: String
+          value: "automation@harness.io"

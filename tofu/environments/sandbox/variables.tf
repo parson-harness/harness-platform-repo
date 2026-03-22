@@ -516,3 +516,24 @@ variable "acm_cert_arn" {
   type        = string
   default     = "arn:aws:acm:us-east-1:759984737373:certificate/9c90d4f8-208d-46cd-bdc1-bc13f1759c05"
 }
+
+################################################################################
+# Sandbox TTL Configuration
+################################################################################
+
+variable "ttl_days" {
+  description = "Number of days before sandbox is eligible for cleanup. Set to 0 to disable TTL (never auto-cleanup)."
+  type        = number
+  default     = 45
+
+  validation {
+    condition     = var.ttl_days >= 0
+    error_message = "ttl_days must be 0 (disabled) or a positive number"
+  }
+}
+
+variable "created_at" {
+  description = "ISO8601 timestamp when sandbox was created (auto-set by provisioner pipeline, do not modify)"
+  type        = string
+  default     = ""
+}

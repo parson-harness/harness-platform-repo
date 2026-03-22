@@ -1,0 +1,295 @@
+pipeline:
+  name: Sandbox TTL Cleanup
+  identifier: sandbox_ttl_cleanup
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: "Scheduled cleanup of expired SE sandboxes based on TTL settings"
+  tags:
+    automation: "true"
+    cleanup: "true"
+    ttl: "true"
+  
+  variables:
+    - name: dry_run
+      type: String
+      description: "If true, only report expired sandboxes without destroying them"
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
+    
+    - name: harness_api_key
+      type: Secret
+      description: "Harness Platform API Key for IACM operations"
+      required: true
+      value: <+input>
+    
+    - name: harness_api_key_email
+      type: String
+      description: "Email associated with the API key"
+      required: true
+      value: <+input>
+
+  stages:
+    - stage:
+        name: Identify Expired Sandboxes
+        identifier: identify_expired
+        description: "Query IACM workspaces and identify those past TTL"
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: List IACM Workspaces
+                  identifier: list_workspaces
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          
+                          echo "=== Sandbox TTL Cleanup ==="
+                          echo "Dry Run: ${DRY_RUN}"
+                          echo "Current Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                          echo ""
+                          
+                          ACCOUNT_ID="<+account.identifier>"
+                          ORG_ID="<+org.identifier>"
+                          PROJECT_ID="<+project.identifier>"
+                          API_KEY="${HARNESS_API_KEY}"
+                          ENDPOINT="https://app.harness.io"
+                          
+                          # List all IACM workspaces in the project
+                          echo "Fetching IACM workspaces..."
+                          WORKSPACES=$(curl -s -X GET \
+                            "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces?accountIdentifier=${ACCOUNT_ID}" \
+                            -H "x-api-key: ${API_KEY}" \
+                            -H "Harness-Account: ${ACCOUNT_ID}" \
+                            -H "Content-Type: application/json")
+                          
+                          # Parse workspaces and check TTL
+                          EXPIRED_WORKSPACES=""
+                          PROTECTED_WORKSPACES=""
+                          ACTIVE_WORKSPACES=""
+                          
+                          CURRENT_EPOCH=$(date +%s)
+                          
+                          # Extract workspace identifiers that match SE sandbox pattern
+                          for WS_ID in $(echo "$WORKSPACES" | jq -r '.content[]?.identifier // empty' | grep -E '_sandbox$|_pov$' || true); do
+                            echo "Checking workspace: $WS_ID"
+                            
+                            # Get workspace details including tfvars
+                            WS_DETAILS=$(curl -s -X GET \
+                              "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces/${WS_ID}?accountIdentifier=${ACCOUNT_ID}" \
+                              -H "x-api-key: ${API_KEY}" \
+                              -H "Harness-Account: ${ACCOUNT_ID}" \
+                              -H "Content-Type: application/json")
+                            
+                            # Extract TTL and created_at from terraform_variable_files or environment_variables
+                            TTL_DAYS=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "ttl_days") | .value // "45"' 2>/dev/null || echo "45")
+                            CREATED_AT=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "created_at") | .value // empty' 2>/dev/null || echo "")
+                            OWNER=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "owner") | .value // empty' 2>/dev/null || echo "unknown")
+                            
+                            # If no created_at, use workspace created timestamp
+                            if [ -z "$CREATED_AT" ]; then
+                              CREATED_AT=$(echo "$WS_DETAILS" | jq -r '.created // empty' 2>/dev/null || echo "")
+                            fi
+                            
+                            # TTL of 0 means never expire
+                            if [ "$TTL_DAYS" = "0" ]; then
+                              echo "  → TTL disabled (protected)"
+                              PROTECTED_WORKSPACES="${PROTECTED_WORKSPACES}${WS_ID}|${OWNER}|protected\n"
+                              continue
+                            fi
+                            
+                            # Calculate expiry
+                            if [ -n "$CREATED_AT" ]; then
+                              CREATED_EPOCH=$(date -d "$CREATED_AT" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "$CREATED_AT" +%s 2>/dev/null || echo "0")
+                              EXPIRY_EPOCH=$((CREATED_EPOCH + TTL_DAYS * 86400))
+                              DAYS_REMAINING=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
+                              
+                              if [ $CURRENT_EPOCH -gt $EXPIRY_EPOCH ]; then
+                                echo "  → EXPIRED (${DAYS_REMAINING} days past TTL)"
+                                EXPIRED_WORKSPACES="${EXPIRED_WORKSPACES}${WS_ID}|${OWNER}|${DAYS_REMAINING}\n"
+                              else
+                                echo "  → Active (${DAYS_REMAINING} days remaining)"
+                                ACTIVE_WORKSPACES="${ACTIVE_WORKSPACES}${WS_ID}|${OWNER}|${DAYS_REMAINING}\n"
+                              fi
+                            else
+                              echo "  → No created_at timestamp, skipping"
+                            fi
+                          done
+                          
+                          echo ""
+                          echo "=== Summary ==="
+                          echo "Protected (TTL=0): $(echo -e "$PROTECTED_WORKSPACES" | grep -c '|' || echo 0)"
+                          echo "Active: $(echo -e "$ACTIVE_WORKSPACES" | grep -c '|' || echo 0)"
+                          echo "Expired: $(echo -e "$EXPIRED_WORKSPACES" | grep -c '|' || echo 0)"
+                          echo ""
+                          
+                          # Output for next steps
+                          echo "$EXPIRED_WORKSPACES" | tr -d '\n' > /tmp/expired_workspaces.txt
+                    environmentVariables:
+                      - name: DRY_RUN
+                        type: String
+                        value: <+pipeline.variables.dry_run>
+                      - name: HARNESS_API_KEY
+                        type: String
+                        value: <+pipeline.variables.harness_api_key>
+                    outputVariables:
+                      - name: EXPIRED_WORKSPACES
+                        type: String
+                        value: EXPIRED_WORKSPACES
+                  timeout: 10m
+
+              - step:
+                  type: ShellScript
+                  name: Report Expired Sandboxes
+                  identifier: report_expired
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          
+                          echo "=== Expired Sandboxes Report ==="
+                          echo ""
+                          
+                          if [ -f /tmp/expired_workspaces.txt ]; then
+                            EXPIRED=$(cat /tmp/expired_workspaces.txt)
+                            
+                            if [ -z "$EXPIRED" ]; then
+                              echo "✓ No expired sandboxes found!"
+                              echo "DESTROY_COUNT=0" >> $HARNESS_OUTPUT_FILE
+                              exit 0
+                            fi
+                            
+                            echo "The following sandboxes have exceeded their TTL:"
+                            echo ""
+                            echo "| Workspace ID | Owner | Days Past TTL |"
+                            echo "|--------------|-------|---------------|"
+                            
+                            COUNT=0
+                            echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER DAYS; do
+                              if [ -n "$WS_ID" ]; then
+                                echo "| $WS_ID | $OWNER | $DAYS |"
+                                COUNT=$((COUNT + 1))
+                              fi
+                            done
+                            
+                            echo ""
+                            echo "Total: $COUNT workspace(s) to be destroyed"
+                            echo "DESTROY_COUNT=$COUNT" >> $HARNESS_OUTPUT_FILE
+                          else
+                            echo "No workspace data found"
+                            echo "DESTROY_COUNT=0" >> $HARNESS_OUTPUT_FILE
+                          fi
+                    outputVariables:
+                      - name: DESTROY_COUNT
+                        type: String
+                        value: DESTROY_COUNT
+                  timeout: 5m
+
+    - stage:
+        name: Destroy Expired Sandboxes
+        identifier: destroy_expired
+        description: "Trigger destroy for each expired sandbox"
+        type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.dry_run> == "false" && <+pipeline.stages.identify_expired.spec.execution.steps.report_expired.output.outputVariables.DESTROY_COUNT> != "0"
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Trigger Destroy Pipelines
+                  identifier: trigger_destroys
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          
+                          echo "=== Triggering Destroy for Expired Sandboxes ==="
+                          echo ""
+                          
+                          ACCOUNT_ID="<+account.identifier>"
+                          ORG_ID="<+org.identifier>"
+                          PROJECT_ID="<+project.identifier>"
+                          API_KEY="${HARNESS_API_KEY}"
+                          ENDPOINT="https://app.harness.io"
+                          
+                          if [ ! -f /tmp/expired_workspaces.txt ]; then
+                            echo "No expired workspaces file found"
+                            exit 0
+                          fi
+                          
+                          EXPIRED=$(cat /tmp/expired_workspaces.txt)
+                          
+                          echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER DAYS; do
+                            if [ -n "$WS_ID" ]; then
+                              echo "Destroying workspace: $WS_ID (owner: $OWNER)"
+                              
+                              # Trigger the POV destroy pipeline for this workspace
+                              RESPONSE=$(curl -s -X POST \
+                                "${ENDPOINT}/pipeline/api/pipeline/execute/pov_destroy?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
+                                -H "x-api-key: ${API_KEY}" \
+                                -H "Content-Type: application/json" \
+                                -d "{
+                                  \"owner\": \"${OWNER}\",
+                                  \"harness_account_id\": \"${ACCOUNT_ID}\",
+                                  \"harness_org_id\": \"${ORG_ID}\",
+                                  \"harness_project_id\": \"${PROJECT_ID}\",
+                                  \"harness_endpoint\": \"${ENDPOINT}\",
+                                  \"harness_api_key\": \"${API_KEY}\",
+                                  \"harness_api_key_email\": \"${API_KEY_EMAIL}\"
+                                }")
+                              
+                              EXEC_ID=$(echo "$RESPONSE" | jq -r '.data.planExecution.uuid // "unknown"')
+                              echo "  → Triggered execution: $EXEC_ID"
+                              echo ""
+                            fi
+                          done
+                          
+                          echo "All destroy pipelines triggered."
+                    environmentVariables:
+                      - name: HARNESS_API_KEY
+                        type: String
+                        value: <+pipeline.variables.harness_api_key>
+                      - name: API_KEY_EMAIL
+                        type: String
+                        value: <+pipeline.variables.harness_api_key_email>
+                  timeout: 15m
+
+              - step:
+                  type: ShellScript
+                  name: Cleanup Summary
+                  identifier: cleanup_summary
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== TTL Cleanup Complete ==="
+                          echo ""
+                          echo "Destroy pipelines have been triggered for all expired sandboxes."
+                          echo "Check individual pipeline executions for status."
+                          echo ""
+                          echo "To prevent a sandbox from being cleaned up:"
+                          echo "  1. Go to the IACM workspace"
+                          echo "  2. Set ttl_days = 0 in terraform variables"
+                          echo "  3. Run a plan/apply to update the workspace"
+                  timeout: 1m

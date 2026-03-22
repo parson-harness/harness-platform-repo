@@ -131,3 +131,27 @@ output "harness_k8s_prod_infra_id" {
   description = "Harness K8s Prod Infrastructure ID"
   value       = var.create_harness_environment && var.create_prod_environment ? module.harness_environment_prod[0].k8s_infrastructure_id : null
 }
+
+################################################################################
+# TTL Outputs (for cleanup automation)
+################################################################################
+
+output "ttl_days" {
+  description = "TTL in days (0 = never auto-cleanup)"
+  value       = var.ttl_days
+}
+
+output "ttl_enabled" {
+  description = "Whether TTL-based cleanup is enabled for this sandbox"
+  value       = var.ttl_days > 0
+}
+
+output "created_at" {
+  description = "ISO8601 timestamp when sandbox was created"
+  value       = var.created_at != "" ? var.created_at : timestamp()
+}
+
+output "expires_at" {
+  description = "ISO8601 timestamp when sandbox expires (null if TTL disabled)"
+  value       = var.ttl_days > 0 ? timeadd(var.created_at != "" ? var.created_at : timestamp(), "${var.ttl_days * 24}h") : null
+}
