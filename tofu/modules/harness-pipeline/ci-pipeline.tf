@@ -1,7 +1,7 @@
 ################################################################################
 # CI Pipeline for Demo App
 # Builds Docker image and pushes to Harness Artifact Registry (HAR)
-# Uses GitClone step for public repos (no connector required)
+# Uses native cloneCodebase with Harness Code repository
 ################################################################################
 
 resource "harness_platform_pipeline" "ci_build" {
@@ -24,16 +24,6 @@ resource "harness_platform_pipeline" "ci_build" {
         pipeline-type: ci
         build: docker
       variables:
-        - name: git_branch
-          type: String
-          description: Git branch to build
-          required: true
-          value: <+input>.default(main)
-        - name: git_repo_url
-          type: String
-          description: Git repository URL
-          required: true
-          value: <+input>.default(${var.use_harness_code ? (var.harness_api_key != "" ? "https://token:${var.harness_api_key}@git.harness.io/${var.harness_account_id}/${var.harness_org_id}/${var.harness_project_id}/${var.harness_code_repo_name}.git" : "https://git.harness.io/${var.harness_account_id}/${var.harness_org_id}/${var.harness_project_id}/${var.harness_code_repo_name}.git") : "https://github.com/${var.git_repo_name}.git"})
         - name: auto_deploy
           type: String
           description: Automatically trigger CD pipeline after successful build
@@ -44,6 +34,12 @@ resource "harness_platform_pipeline" "ci_build" {
           description: Harness API endpoint
           required: false
           value: <+input>.default(https://app.harness.io/gratis)
+      properties:
+        ci:
+          codebase:
+            repoName: ${var.harness_code_repo_name}
+            build: <+input>
+            sparseCheckout: []
       stages:
         - stage:
             name: Build and Push
@@ -51,7 +47,7 @@ resource "harness_platform_pipeline" "ci_build" {
             description: Build Docker image and push to Harness Artifact Registry
             type: CI
             spec:
-              cloneCodebase: false
+              cloneCodebase: true
               platform:
                 os: Linux
                 arch: Amd64
@@ -62,18 +58,6 @@ resource "harness_platform_pipeline" "ci_build" {
                 steps:
                   - step:
                       type: Run
-                      name: Clone Repository
-                      identifier: clone_repo
-                      spec:
-                        shell: Bash
-                        command: |
-                          echo "Cloning branch <+pipeline.variables.git_branch>"
-                          git clone --depth 1 --branch <+pipeline.variables.git_branch> <+pipeline.variables.git_repo_url> /harness/demo-app
-                          cd /harness/demo-app
-                          echo "Cloned successfully"
-                          git log -1 --oneline
-                  - step:
-                      type: Run
                       name: Build Java App
                       identifier: build_java
                       spec:
@@ -81,7 +65,6 @@ resource "harness_platform_pipeline" "ci_build" {
                         image: maven:3.9-eclipse-temurin-17
                         shell: Bash
                         command: |
-                          cd /harness/demo-app
                           echo "========================================"
                           echo "  BUILDING JAVA APPLICATION"
                           echo "========================================"
@@ -106,21 +89,20 @@ resource "harness_platform_pipeline" "ci_build" {
                       spec:
                         shell: Bash
                         command: |
-                          cd /harness/demo-app
                           echo "========================================"
                           echo "  BUILD INFORMATION"
                           echo "========================================"
                           echo "Pipeline: <+pipeline.name>"
                           echo "Build Number: <+pipeline.sequenceId>"
-                          echo "Branch: <+pipeline.variables.git_branch>"
-                          echo "Repo: <+pipeline.variables.git_repo_url>"
+                          echo "Branch: <+codebase.branch>"
+                          echo "Commit: <+codebase.commitSha>"
                           echo "========================================"
 
                           # Set image tag based on branch and build number
-                          if [ "<+pipeline.variables.git_branch>" = "main" ]; then
+                          if [ "<+codebase.branch>" = "main" ]; then
                             IMAGE_TAG="<+pipeline.sequenceId>"
                           else
-                            BRANCH_SAFE=$(echo "<+pipeline.variables.git_branch>" | sed 's/[^a-zA-Z0-9]/-/g')
+                            BRANCH_SAFE=$(echo "<+codebase.branch>" | sed 's/[^a-zA-Z0-9]/-/g')
                             IMAGE_TAG="$${BRANCH_SAFE}-<+pipeline.sequenceId>"
                           fi
                           echo "Image Tag: $IMAGE_TAG"
@@ -138,8 +120,8 @@ resource "harness_platform_pipeline" "ci_build" {
                           - <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
                           - latest
                         caching: true
-                        dockerfile: /harness/demo-app/Dockerfile
-                        context: /harness/demo-app
+                        dockerfile: Dockerfile
+                        context: .
                         optimize: true
                         registryRef: ${var.har_registry_ref}
                   - step:
