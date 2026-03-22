@@ -34,7 +34,7 @@ resource "harness_platform_pipeline" "k8s_canary" {
       identifier: ${var.canary_pipeline_id}
       projectIdentifier: ${var.project_id}
       orgIdentifier: ${var.org_id}
-      description: "DEPRECATED: Use ${var.strategy_pipeline_id} with deployment_strategy=canary instead"
+      description: "DEPRECATED: Use ${var.strategy_pipeline_id} with deployment_strategy=canary instead. ${var.canary_pipeline_description}"
       tags:
         deployment-type: kubernetes
         strategy: canary

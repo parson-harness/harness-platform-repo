@@ -7,86 +7,6 @@ locals {
   # Emits a delegateSelectors YAML block when delegate_selector is set.
   # Placed at the stage level to pin ALL steps (K8sDelete, deploy, shell) to the right delegate.
   strategy_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
-
-  # Blue-Green reset:
-  # - If the primary service has a harness.io/color selector → B/G re-run:
-  #     preserve BOTH services and the ConfigMap. The ConfigMap is required by
-  #     K8sBlueGreenStageScaleDown to locate the old color's ReplicaSet; deleting
-  #     it causes the scale-down step to silently no-op and leaves old-color pods running.
-  # - If no color selector → coming from canary/rolling:
-  #     delete both services (wrong selector type would block K8sBlueGreenDeploy)
-  #     and delete the ConfigMap (stale non-B/G release state).
-  # Always delete any leftover canary deployment.
-  reset_strategy_step_bg = <<-RESET_BG_EOT
-                  - step:
-                      type: ShellScript
-                      name: Reset Strategy State
-                      identifier: reset_strategy_state
-                      timeout: 5m
-                      spec:
-                        shell: Bash
-                        executionTarget: {}
-                        source:
-                          type: Inline
-                          spec:
-                            script: |
-                              #!/bin/bash
-                              NAMESPACE="<+infra.namespace>"
-                              RELEASE="<+infra.releaseName>"
-                              SVC="<+service.name.replace(" ", "").toLowerCase()>"
-                              echo "Resetting B/G strategy state: svc=$${SVC} release=$${RELEASE} namespace=$${NAMESPACE}"
-                              COLOR=$(kubectl get service "$${SVC}-service" -n "$${NAMESPACE}" -o jsonpath='{.spec.selector.harness\.io/color}' 2>/dev/null)
-                              if [ -z "$${COLOR}" ]; then
-                                echo "No B/G color selector — removing non-B/G resources for fresh B/G setup"
-                                kubectl delete service "$${SVC}-service" -n "$${NAMESPACE}" --ignore-not-found=true
-                                kubectl delete service "$${SVC}-service-stage" -n "$${NAMESPACE}" --ignore-not-found=true
-                                kubectl delete configmap "$${RELEASE}" -n "$${NAMESPACE}" --ignore-not-found=true
-                                kubectl delete deployment "$${SVC}-deployment" -n "$${NAMESPACE}" --ignore-not-found=true
-                              else
-                                echo "B/G services exist (color=$${COLOR}) — preserving services and ConfigMap for zero-downtime re-run"
-                              fi
-                              kubectl delete deployment "$${SVC}-deployment-canary" -n "$${NAMESPACE}" --ignore-not-found=true
-                              echo "Done."
-                        environmentVariables: []
-                        outputVariables: []
-
-  RESET_BG_EOT
-
-  # Canary/Rolling reset:
-  # - Do NOT delete the primary service — K8sCanaryDeploy and K8sRollingDeploy apply it
-  #   in-place via manifest, updating selectors without a delete/recreate cycle. Deleting
-  #   it here causes a 503 window while the deploy step runs.
-  # - Delete service-stage: leftover from a prior B/G run, not used by canary/rolling.
-  # - Delete the canary deployment: cleanup in case a previous canary was aborted mid-run.
-  # - Delete the ConfigMap: resets Harness release tracking to a clean state for the new strategy.
-  reset_strategy_step = <<-RESET_EOT
-                  - step:
-                      type: ShellScript
-                      name: Reset Strategy State
-                      identifier: reset_strategy_state
-                      timeout: 5m
-                      spec:
-                        shell: Bash
-                        executionTarget: {}
-                        source:
-                          type: Inline
-                          spec:
-                            script: |
-                              #!/bin/bash
-                              NAMESPACE="<+infra.namespace>"
-                              RELEASE="<+infra.releaseName>"
-                              SVC="<+service.name.replace(" ", "").toLowerCase()>"
-                              echo "Resetting strategy state: svc=$${SVC} release=$${RELEASE} namespace=$${NAMESPACE}"
-                              kubectl delete deployment "$${SVC}-deployment-canary" -n "$${NAMESPACE}" --ignore-not-found=true
-                              kubectl delete deployment "$${SVC}-deployment-blue" -n "$${NAMESPACE}" --ignore-not-found=true
-                              kubectl delete deployment "$${SVC}-deployment-green" -n "$${NAMESPACE}" --ignore-not-found=true
-                              kubectl delete service "$${SVC}-service-stage" -n "$${NAMESPACE}" --ignore-not-found=true
-                              kubectl delete configmap "$${RELEASE}" -n "$${NAMESPACE}" --ignore-not-found=true
-                              echo "Done."
-                        environmentVariables: []
-                        outputVariables: []
-
-  RESET_EOT
 }
 
 resource "harness_platform_pipeline" "k8s_strategy" {
@@ -139,7 +59,38 @@ ${local.strategy_delegate_yaml}            spec:
                   - identifier: ${var.infrastructure_ref}
               execution:
                 steps:
-${local.reset_strategy_step_bg}                  - step:
+                  - step:
+                      type: ShellScript
+                      name: Reset Strategy State
+                      identifier: reset_strategy_state
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              #!/bin/bash
+                              NAMESPACE="<+infra.namespace>"
+                              RELEASE="<+infra.releaseName>"
+                              SVC="<+service.name.replace(" ", "").toLowerCase()>"
+                              echo "Resetting B/G strategy state: svc=$${SVC} release=$${RELEASE} namespace=$${NAMESPACE}"
+                              COLOR=$(kubectl get service "$${SVC}-service" -n "$${NAMESPACE}" -o jsonpath='{.spec.selector.harness\.io/color}' 2>/dev/null)
+                              if [ -z "$${COLOR}" ]; then
+                                echo "No B/G color selector - removing non-B/G resources for fresh B/G setup"
+                                kubectl delete service "$${SVC}-service" -n "$${NAMESPACE}" --ignore-not-found=true
+                                kubectl delete service "$${SVC}-service-stage" -n "$${NAMESPACE}" --ignore-not-found=true
+                                kubectl delete configmap "$${RELEASE}" -n "$${NAMESPACE}" --ignore-not-found=true
+                                kubectl delete deployment "$${SVC}-deployment" -n "$${NAMESPACE}" --ignore-not-found=true
+                              else
+                                echo "B/G services exist (color=$${COLOR}) - preserving services and ConfigMap for zero-downtime re-run"
+                              fi
+                              kubectl delete deployment "$${SVC}-deployment-canary" -n "$${NAMESPACE}" --ignore-not-found=true
+                              echo "Done."
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
                       type: ShellScript
                       name: Print Variables
                       identifier: print_variables
@@ -257,7 +208,32 @@ ${local.strategy_delegate_yaml}            spec:
                   - identifier: ${var.infrastructure_ref}
               execution:
                 steps:
-${local.reset_strategy_step}                  - step:
+                  - step:
+                      type: ShellScript
+                      name: Reset Strategy State
+                      identifier: reset_strategy_state
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              #!/bin/bash
+                              NAMESPACE="<+infra.namespace>"
+                              RELEASE="<+infra.releaseName>"
+                              SVC="<+service.name.replace(" ", "").toLowerCase()>"
+                              echo "Resetting strategy state: svc=$${SVC} release=$${RELEASE} namespace=$${NAMESPACE}"
+                              kubectl delete deployment "$${SVC}-deployment-canary" -n "$${NAMESPACE}" --ignore-not-found=true
+                              kubectl delete deployment "$${SVC}-deployment-blue" -n "$${NAMESPACE}" --ignore-not-found=true
+                              kubectl delete deployment "$${SVC}-deployment-green" -n "$${NAMESPACE}" --ignore-not-found=true
+                              kubectl delete service "$${SVC}-service-stage" -n "$${NAMESPACE}" --ignore-not-found=true
+                              kubectl delete configmap "$${RELEASE}" -n "$${NAMESPACE}" --ignore-not-found=true
+                              echo "Done."
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
                       type: ShellScript
                       name: Print Variables
                       identifier: print_variables
@@ -414,7 +390,32 @@ ${local.strategy_delegate_yaml}            spec:
                   - identifier: ${var.infrastructure_ref}
               execution:
                 steps:
-${local.reset_strategy_step}                  - step:
+                  - step:
+                      type: ShellScript
+                      name: Reset Strategy State
+                      identifier: reset_strategy_state
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              #!/bin/bash
+                              NAMESPACE="<+infra.namespace>"
+                              RELEASE="<+infra.releaseName>"
+                              SVC="<+service.name.replace(" ", "").toLowerCase()>"
+                              echo "Resetting strategy state: svc=$${SVC} release=$${RELEASE} namespace=$${NAMESPACE}"
+                              kubectl delete deployment "$${SVC}-deployment-canary" -n "$${NAMESPACE}" --ignore-not-found=true
+                              kubectl delete deployment "$${SVC}-deployment-blue" -n "$${NAMESPACE}" --ignore-not-found=true
+                              kubectl delete deployment "$${SVC}-deployment-green" -n "$${NAMESPACE}" --ignore-not-found=true
+                              kubectl delete service "$${SVC}-service-stage" -n "$${NAMESPACE}" --ignore-not-found=true
+                              kubectl delete configmap "$${RELEASE}" -n "$${NAMESPACE}" --ignore-not-found=true
+                              echo "Done."
+                        environmentVariables: []
+                        outputVariables: []
+                  - step:
                       type: ShellScript
                       name: Print Variables
                       identifier: print_variables
