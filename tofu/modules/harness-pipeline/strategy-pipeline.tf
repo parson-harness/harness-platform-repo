@@ -205,6 +205,30 @@ ${local.reset_strategy_step_bg}                  - step:
                       type: K8sBlueGreenStageScaleDown
                       timeout: 10m
                       spec: {}
+                  - step:
+                      type: ShellScript
+                      name: Deployment Complete
+                      identifier: deployment_complete
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              echo "========================================"
+                              echo "  BLUE-GREEN DEPLOYMENT COMPLETE"
+                              echo "========================================"
+                              echo ""
+                              echo "Production URL: https://<+serviceVariables.ingressHost>"
+                              echo "Stage URL:      https://<+serviceVariables.ingressStageHost>"
+                              echo ""
+                              echo "Traffic has been swapped to the new version."
+                              echo "The old version has been scaled down."
+                              echo "========================================"
+                        environmentVariables: []
+                        outputVariables: []
+                      timeout: 1m
                 rollbackSteps: []
             failureStrategies:
               - onFailure:
