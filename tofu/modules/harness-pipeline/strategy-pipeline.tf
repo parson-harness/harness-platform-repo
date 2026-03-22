@@ -49,6 +49,7 @@ locals {
                               echo "Done."
                         environmentVariables: []
                         outputVariables: []
+
   RESET_BG_EOT
 
   # Canary/Rolling reset:
@@ -84,6 +85,7 @@ locals {
                               echo "Done."
                         environmentVariables: []
                         outputVariables: []
+
   RESET_EOT
 }
 

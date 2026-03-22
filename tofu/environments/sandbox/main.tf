@@ -589,18 +589,15 @@ locals {
   })
 }
 
-resource "terraform_data" "app_namespace" {
+resource "kubernetes_namespace" "app_namespace" {
   for_each = toset(local.har_namespaces)
 
-  input = each.value
-
-  provisioner "local-exec" {
-    command = "kubectl get namespace '${each.value}' >/dev/null 2>&1 || kubectl create namespace '${each.value}'"
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = "kubectl delete namespace '${self.output}' --ignore-not-found=true"
+  metadata {
+    name = each.value
+    labels = {
+      "app.kubernetes.io/managed-by" = "tofu"
+      "harness.io/owner"             = var.owner
+    }
   }
 
   depends_on = [module.eks]

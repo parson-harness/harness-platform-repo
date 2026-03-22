@@ -22,7 +22,7 @@ terraform {
 resource "harness_platform_pipeline" "k8s_canary" {
   count       = var.create_canary_pipeline ? 1 : 0
   identifier  = var.canary_pipeline_id
-  name        = "${var.canary_pipeline_name} (Deprecated)"
+  name        = "${var.canary_pipeline_name} - Deprecated"
   org_id      = var.org_id
   project_id  = var.project_id
   description = "DEPRECATED: Use ${var.strategy_pipeline_id} with deployment_strategy=canary instead. ${var.canary_pipeline_description}"
@@ -30,7 +30,7 @@ resource "harness_platform_pipeline" "k8s_canary" {
 
   yaml = <<-EOT
     pipeline:
-      name: ${var.canary_pipeline_name} (Deprecated)
+      name: ${var.canary_pipeline_name} - Deprecated
       identifier: ${var.canary_pipeline_id}
       projectIdentifier: ${var.project_id}
       orgIdentifier: ${var.org_id}
