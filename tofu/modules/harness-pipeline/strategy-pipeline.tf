@@ -37,10 +37,11 @@ locals {
                               echo "Resetting B/G strategy state: svc=$${SVC} release=$${RELEASE} namespace=$${NAMESPACE}"
                               COLOR=$(kubectl get service "$${SVC}-service" -n "$${NAMESPACE}" -o jsonpath='{.spec.selector.harness\.io/color}' 2>/dev/null)
                               if [ -z "$${COLOR}" ]; then
-                                echo "No B/G color selector — removing non-B/G services and stale ConfigMap"
+                                echo "No B/G color selector — removing non-B/G resources for fresh B/G setup"
                                 kubectl delete service "$${SVC}-service" -n "$${NAMESPACE}" --ignore-not-found=true
                                 kubectl delete service "$${SVC}-service-stage" -n "$${NAMESPACE}" --ignore-not-found=true
                                 kubectl delete configmap "$${RELEASE}" -n "$${NAMESPACE}" --ignore-not-found=true
+                                kubectl delete deployment "$${SVC}-deployment" -n "$${NAMESPACE}" --ignore-not-found=true
                               else
                                 echo "B/G services exist (color=$${COLOR}) — preserving services and ConfigMap for zero-downtime re-run"
                               fi
@@ -76,6 +77,8 @@ locals {
                               SVC="<+service.name.replace(" ", "").toLowerCase()>"
                               echo "Resetting strategy state: svc=$${SVC} release=$${RELEASE} namespace=$${NAMESPACE}"
                               kubectl delete deployment "$${SVC}-deployment-canary" -n "$${NAMESPACE}" --ignore-not-found=true
+                              kubectl delete deployment "$${SVC}-deployment-blue" -n "$${NAMESPACE}" --ignore-not-found=true
+                              kubectl delete deployment "$${SVC}-deployment-green" -n "$${NAMESPACE}" --ignore-not-found=true
                               kubectl delete service "$${SVC}-service-stage" -n "$${NAMESPACE}" --ignore-not-found=true
                               kubectl delete configmap "$${RELEASE}" -n "$${NAMESPACE}" --ignore-not-found=true
                               echo "Done."
