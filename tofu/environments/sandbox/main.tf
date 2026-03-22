@@ -262,6 +262,117 @@ locals {
 }
 
 ################################################################################
+# IAM User + Harness Secrets for ASG Packer CI Builds
+# Creates a dedicated IAM user with minimal AMI-build permissions, generates an
+# access key, and stores both values as project-scoped Harness secrets.
+# Fully automated - no manual credential handling required.
+################################################################################
+
+resource "aws_iam_user" "packer_ci" {
+  count = local.enable_asg ? 1 : 0
+  name  = "harness-packer-ci-${var.owner}"
+  tags  = local.common_tags
+}
+
+resource "aws_iam_user_policy" "packer_ci" {
+  count  = local.enable_asg ? 1 : 0
+  name   = "harness-packer-ci-policy"
+  user   = aws_iam_user.packer_ci[0].name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "PackerAMIBuild"
+        Effect = "Allow"
+        Action = [
+          "ec2:RunInstances",
+          "ec2:StopInstances",
+          "ec2:TerminateInstances",
+          "ec2:CreateImage",
+          "ec2:CreateTags",
+          "ec2:DeleteTags",
+          "ec2:ModifyImageAttribute",
+          "ec2:DescribeImages",
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceStatus",
+          "ec2:DescribeRegions",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeVpcs",
+          "ec2:DescribeVolumes",
+          "ec2:CreateSecurityGroup",
+          "ec2:DeleteSecurityGroup",
+          "ec2:AuthorizeSecurityGroupIngress",
+          "ec2:RevokeSecurityGroupIngress"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_access_key" "packer_ci" {
+  count = local.enable_asg ? 1 : 0
+  user  = aws_iam_user.packer_ci[0].name
+}
+
+resource "harness_platform_secret_text" "packer_aws_access_key" {
+  count = local.enable_asg ? 1 : 0
+
+  identifier = "aws_access_key_id"
+  name       = "AWS Access Key ID (Packer)"
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
+
+  secret_manager_identifier = "harnessSecretManager"
+  value_type                = "Inline"
+  value                     = aws_iam_access_key.packer_ci[0].id
+
+  depends_on = [aws_iam_access_key.packer_ci]
+}
+
+resource "harness_platform_secret_text" "packer_aws_secret_key" {
+  count = local.enable_asg ? 1 : 0
+
+  identifier = "aws_secret_access_key"
+  name       = "AWS Secret Access Key (Packer)"
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
+
+  secret_manager_identifier = "harnessSecretManager"
+  value_type                = "Inline"
+  value                     = aws_iam_access_key.packer_ci[0].secret
+
+  depends_on = [aws_iam_access_key.packer_ci]
+}
+
+################################################################################
+# ASG Infrastructure (created when deployment_targets includes "asg")
+# Provides: VPC, ALB, target groups, Launch Template, seed ASG
+# Packer builds the AMI; no ECR or Docker required
+################################################################################
+
+module "asg" {
+  source = "../../modules/asg"
+  count  = local.enable_asg ? 1 : 0
+
+  name_prefix   = local.name_prefix
+  owner         = var.owner
+  aws_region    = var.aws_region
+  vpc_cidr      = var.asg_vpc_cidr
+  instance_type = var.asg_instance_type
+
+  asg_desired_capacity = var.asg_desired_capacity
+  asg_max_size         = var.asg_max_size
+
+  create_dns_record  = var.asg_create_dns_record
+  route53_zone_name  = var.route53_zone_name
+  acm_cert_arn       = var.acm_cert_arn
+
+  tags = local.common_tags
+}
+
+################################################################################
 # IRSA Role for Delegate (AWS permissions via service account)
 ################################################################################
 
@@ -281,6 +392,7 @@ module "irsa_delegate_role" {
 
   enable_ecs_permissions    = var.enable_ecs_permissions
   enable_lambda_permissions = var.enable_lambda_permissions
+  enable_asg_permissions    = local.enable_asg || var.enable_asg_permissions
 
   tags = local.common_tags
 
@@ -395,6 +507,58 @@ module "harness_connectors" {
 ################################################################################
 # Harness Service Definition
 ################################################################################
+
+################################################################################
+# Harness ASG Service Definition
+# Separate service required - Harness services are single-deployment-type.
+# Uses AmazonMachineImage artifact; JAR is baked into the AMI by Packer CI.
+################################################################################
+
+module "harness_service_asg" {
+  source = "../../modules/harness-service"
+  count  = local.enable_asg && var.create_harness_service ? 1 : 0
+
+  service_id          = "${var.owner}_demo_app_asg"
+  service_name        = "${title(var.owner)} Demo App (ASG)"
+  service_description = "ASG demo application for ${var.owner} - Blue/Green, Canary, Rolling on EC2"
+  org_id              = local.resolved_org_id
+  project_id          = local.resolved_project_id
+
+  deployment_type = "Asg"
+
+  # ASG artifact = Packer-built AMI; AWS connector used to query AMI by name/tag
+  artifact_registry_type = "ecr"
+  artifact_connector_ref = var.create_connectors ? "${var.owner}_aws_reference_architecture" : var.aws_connector_ref
+  aws_region             = var.aws_region
+  asg_ami_owner_tag      = var.owner
+
+  # Startup script in repo (Harness renders expressions at deploy time)
+  asg_startup_script_path = "asg/user-data.sh"
+  manifest_store_type     = var.import_to_harness_code ? "HarnessCode" : "Github"
+  git_connector_ref       = var.import_to_harness_code ? "" : (
+    var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+  )
+  git_repo_name          = var.import_to_harness_code ? "" : element(split("/", var.source_github_repo), length(split("/", var.source_github_repo)) - 1)
+  harness_code_repo_name = var.import_to_harness_code ? "${var.owner}-demo-app" : ""
+  git_branch             = var.service_git_branch
+
+  tags = ["tofu-managed", var.owner, "asg"]
+
+  service_variables = [
+    {
+      name  = "appUrl"
+      type  = "String"
+      value = length(module.asg) > 0 ? module.asg[0].app_url : ""
+    },
+    {
+      name  = "stageUrl"
+      type  = "String"
+      value = length(module.asg) > 0 ? module.asg[0].stage_url : ""
+    }
+  ]
+
+  depends_on = [module.harness_connectors, module.asg]
+}
 
 module "harness_service" {
   source = "../../modules/harness-service"
@@ -521,9 +685,18 @@ module "harness_environment_dev" {
   lambda_infra_name            = "${title(var.owner)} Lambda Dev"
   lambda_stage                 = "dev"
 
+  # ASG infrastructure (created if asg in deployment_targets)
+  create_asg_infrastructure = local.enable_asg
+  asg_infra_id              = "${var.owner}_asg_dev"
+  asg_infra_name            = "${title(var.owner)} ASG Dev"
+  asg_base_asg_name         = local.enable_asg && length(module.asg) > 0 ? module.asg[0].base_asg_name : ""
+  asg_load_balancer_name    = local.enable_asg && length(module.asg) > 0 ? module.asg[0].alb_name : ""
+  asg_prod_listener_arn     = local.enable_asg && length(module.asg) > 0 ? module.asg[0].prod_listener_arn : ""
+  asg_stage_listener_arn    = local.enable_asg && length(module.asg) > 0 ? module.asg[0].stage_listener_arn : ""
+
   tags = ["tofu-managed", var.owner, join("-", var.deployment_targets)]
 
-  depends_on = [module.harness_connectors]
+  depends_on = [module.harness_connectors, module.asg]
 }
 
 module "harness_environment_prod" {
@@ -559,9 +732,19 @@ module "harness_environment_prod" {
   lambda_infra_name            = "${title(var.owner)} Lambda Prod"
   lambda_stage                 = "prod"
 
+  # ASG infrastructure (created if asg in deployment_targets)
+  # Shares the same ASG/ALB as dev (single ALB with prod:80 + stage:8080 listeners)
+  create_asg_infrastructure = local.enable_asg
+  asg_infra_id              = "${var.owner}_asg_prod"
+  asg_infra_name            = "${title(var.owner)} ASG Prod"
+  asg_base_asg_name         = local.enable_asg && length(module.asg) > 0 ? module.asg[0].base_asg_name : ""
+  asg_load_balancer_name    = local.enable_asg && length(module.asg) > 0 ? module.asg[0].alb_name : ""
+  asg_prod_listener_arn     = local.enable_asg && length(module.asg) > 0 ? module.asg[0].prod_listener_arn : ""
+  asg_stage_listener_arn    = local.enable_asg && length(module.asg) > 0 ? module.asg[0].stage_listener_arn : ""
+
   tags = ["tofu-managed", var.owner, join("-", var.deployment_targets)]
 
-  depends_on = [module.harness_connectors]
+  depends_on = [module.harness_connectors, module.asg]
 }
 
 ################################################################################
@@ -632,6 +815,44 @@ resource "kubernetes_secret" "har_pull_secret" {
 # Harness Pipelines
 ################################################################################
 
+################################################################################
+# Harness ASG Pipelines
+################################################################################
+
+module "harness_pipelines_asg" {
+  source = "../../modules/harness-pipeline"
+  count  = local.enable_asg && var.create_harness_service && var.create_harness_environment ? 1 : 0
+
+  org_id             = local.resolved_org_id
+  project_id         = local.resolved_project_id
+
+  # Required by module but unused for ASG-only pipelines
+  service_ref        = ""
+  environment_ref    = var.create_harness_environment ? "${var.owner}_dev" : ""
+  environment_name   = "Dev"
+  infrastructure_ref = ""
+
+  # ASG strategy pipeline
+  create_asg_strategy_pipeline      = var.create_asg_strategy_pipeline
+  asg_strategy_pipeline_id          = "${var.owner}_asg_strategy_deploy"
+  asg_strategy_pipeline_name        = "${title(var.owner)} ASG Deploy with Strategy Choice"
+  asg_strategy_pipeline_description = "Single pipeline with runtime strategy selection for ASG - Blue/Green, Canary, or Rolling"
+  asg_service_ref                   = "${var.owner}_demo_app_asg"
+  asg_infrastructure_ref            = "${var.owner}_asg_dev"
+  asg_canary_instance_count         = var.asg_canary_instance_count
+
+  # Disable all K8s pipelines for this ASG-only module
+  create_canary_pipeline     = false
+  create_blue_green_pipeline = false
+  create_strategy_pipeline   = false
+  create_ci_pipeline         = false
+
+  delegate_selector = "delegate-${var.owner}"
+  pipeline_tags     = ["tofu-managed", var.owner, "asg"]
+
+  depends_on = [module.harness_service_asg, module.harness_environment_dev]
+}
+
 module "harness_pipelines_dev" {
   source = "../../modules/harness-pipeline"
   count  = var.create_harness_service && var.create_harness_environment ? 1 : 0
@@ -690,11 +911,18 @@ module "harness_pipelines_dev" {
   harness_project_id     = local.resolved_project_id
   harness_api_key        = var.harness_api_key
 
+  # ASG Packer AMI build (added to CI pipeline when asg is a deployment target)
+  asg_packer_build_enabled    = local.enable_asg
+  asg_packer_owner            = var.owner
+  asg_packer_region           = var.aws_region
+  asg_aws_access_key_secret   = var.asg_packer_aws_access_key_secret
+  asg_aws_secret_key_secret   = var.asg_packer_aws_secret_key_secret
+
   delegate_selector = "delegate-${var.owner}"
 
   pipeline_tags = ["tofu-managed", var.owner]
 
-  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev, module.har, module.harness_code_repo]
+  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev, module.har, module.harness_code_repo, module.asg]
 }
 
 ################################################################################

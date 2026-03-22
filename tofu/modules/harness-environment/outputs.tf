@@ -22,3 +22,8 @@ output "lambda_infrastructure_id" {
   description = "Lambda infrastructure identifier"
   value       = var.create_lambda_infrastructure ? harness_platform_infrastructure.lambda[0].identifier : null
 }
+
+output "asg_infrastructure_id" {
+  description = "ASG infrastructure identifier"
+  value       = var.create_asg_infrastructure ? harness_platform_infrastructure.asg[0].identifier : null
+}

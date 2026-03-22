@@ -133,6 +133,35 @@ output "harness_k8s_prod_infra_id" {
 }
 
 ################################################################################
+# ASG Outputs (when deployment_targets includes "asg")
+################################################################################
+
+output "asg_app_url" {
+  description = "ASG demo app production URL (HTTPS port 443, or raw ALB if no DNS record)"
+  value       = local.enable_asg && length(module.asg) > 0 ? module.asg[0].app_url : null
+}
+
+output "asg_stage_url" {
+  description = "ASG stage URL for B/G validation (HTTP port 8080)"
+  value       = local.enable_asg && length(module.asg) > 0 ? module.asg[0].stage_url : null
+}
+
+output "asg_alb_dns_name" {
+  description = "Raw ALB DNS name for the ASG demo app"
+  value       = local.enable_asg && length(module.asg) > 0 ? module.asg[0].alb_dns_name : null
+}
+
+output "asg_base_asg_name" {
+  description = "Base/seed ASG name (referenced in Harness infrastructure definition)"
+  value       = local.enable_asg && length(module.asg) > 0 ? module.asg[0].base_asg_name : null
+}
+
+output "asg_pipeline_id" {
+  description = "ID of the ASG strategy pipeline"
+  value       = local.enable_asg && var.create_harness_service && var.create_harness_environment && var.create_asg_strategy_pipeline ? module.harness_pipelines_asg[0].asg_strategy_pipeline_identifier : null
+}
+
+################################################################################
 # TTL Outputs (for cleanup automation)
 ################################################################################
 

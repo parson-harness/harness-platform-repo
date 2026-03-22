@@ -274,6 +274,88 @@ variable "harness_api_key" {
 }
 
 ################################################################################
+# ASG CI Integration - Packer AMI Build Variables
+# When enabled, CI pipeline adds a Packer build step after the JAR build.
+# The resulting AMI name is passed as image_tag to the ASG CD pipeline.
+################################################################################
+
+variable "asg_packer_build_enabled" {
+  description = "Add Packer AMI build step to CI pipeline for ASG deployments"
+  type        = bool
+  default     = false
+}
+
+variable "asg_packer_owner" {
+  description = "Owner value baked into AMI tags and name (e.g., SE username)"
+  type        = string
+  default     = ""
+}
+
+variable "asg_packer_region" {
+  description = "AWS region in which to build and register the AMI"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "asg_aws_access_key_secret" {
+  description = "Name of the Harness secret holding AWS_ACCESS_KEY_ID for Packer builds"
+  type        = string
+  default     = "aws_access_key_id"
+}
+
+variable "asg_aws_secret_key_secret" {
+  description = "Name of the Harness secret holding AWS_SECRET_ACCESS_KEY for Packer builds"
+  type        = string
+  default     = "aws_secret_access_key"
+}
+
+################################################################################
+# ASG Strategy Pipeline Variables
+################################################################################
+
+variable "create_asg_strategy_pipeline" {
+  description = "Create ASG strategy pipeline (Blue-Green, Canary, Rolling)"
+  type        = bool
+  default     = false
+}
+
+variable "asg_strategy_pipeline_id" {
+  description = "Identifier for the ASG strategy pipeline"
+  type        = string
+  default     = "asg_strategy_deploy"
+}
+
+variable "asg_strategy_pipeline_name" {
+  description = "Name for the ASG strategy pipeline"
+  type        = string
+  default     = "ASG Deploy with Strategy Choice"
+}
+
+variable "asg_strategy_pipeline_description" {
+  description = "Description for the ASG strategy pipeline"
+  type        = string
+  default     = "Single pipeline with runtime strategy selection for ASG - Blue/Green, Canary, or Rolling"
+}
+
+variable "asg_service_ref" {
+  description = "Reference to the Harness ASG service"
+  type        = string
+  default     = ""
+}
+
+variable "asg_infrastructure_ref" {
+  description = "Reference to the ASG infrastructure definition"
+  type        = string
+  default     = ""
+}
+
+variable "asg_canary_instance_count" {
+  description = "Number of canary instances to deploy in the canary ASG"
+  type        = number
+  default     = 1
+}
+
+################################################################################
 # Common Variables
 ################################################################################
 

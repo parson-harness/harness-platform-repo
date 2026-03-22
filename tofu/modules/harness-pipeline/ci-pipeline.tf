@@ -124,6 +124,50 @@ resource "harness_platform_pipeline" "ci_build" {
                         context: .
                         optimize: true
                         registryRef: ${var.har_registry_ref}
+%{if var.asg_packer_build_enabled~}
+                  - step:
+                      type: Run
+                      name: Build AMI with Packer (ASG)
+                      identifier: packer_build_ami
+                      spec:
+                        connectorRef: ${var.har_upstream_proxy_ref != "" ? var.har_upstream_proxy_ref : "account.harnessImage"}
+                        image: ${var.har_upstream_proxy_ref != "" ? "library/hashicorp/packer:1.11" : "hashicorp/packer:1.11"}
+                        shell: Sh
+                        command: |
+                          echo "======================================="
+                          echo "  PACKER AMI BUILD"
+                          echo "======================================="
+                          echo "App Version: $APP_VERSION"
+                          echo "Owner:       $OWNER"
+                          echo "Region:      $AWS_DEFAULT_REGION"
+                          echo ""
+
+                          cd asg/packer
+                          packer init ami.pkr.hcl
+                          packer build \
+                            -var "app_version=$$APP_VERSION" \
+                            -var "owner=$$OWNER" \
+                            -var "ami_name_prefix=harness-demo-app-$$OWNER" \
+                            -var "aws_region=$$AWS_DEFAULT_REGION" \
+                            -var "jar_source=../../target/harness-demo-app-1.0-SNAPSHOT.jar" \
+                            ami.pkr.hcl
+
+                          AMI_ID=$$(aws ec2 describe-images \
+                            --owners self \
+                            --filters "Name=tag:Application,Values=harness-demo-app-$$OWNER" \
+                                      "Name=tag:Version,Values=$$APP_VERSION" \
+                            --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
+                            --output text)
+                          echo "AMI_ID: $$AMI_ID"
+                        envVariables:
+                          APP_VERSION: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
+                          OWNER: ${var.asg_packer_owner}
+                          AWS_ACCESS_KEY_ID: <+secrets.getValue("${var.asg_aws_access_key_secret}")>
+                          AWS_SECRET_ACCESS_KEY: <+secrets.getValue("${var.asg_aws_secret_key_secret}")>
+                          AWS_DEFAULT_REGION: ${var.asg_packer_region}
+                        outputVariables:
+                          - name: AMI_ID
+%{endif~}
                   - step:
                       type: Run
                       name: Build Summary

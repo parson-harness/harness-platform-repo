@@ -55,6 +55,12 @@ variable "enable_lambda_permissions" {
   default     = false
 }
 
+variable "enable_asg_permissions" {
+  description = "Enable ASG/EC2/ALB deployment permissions (required for ASG deployment target)"
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags to apply to resources"
   type        = map(string)

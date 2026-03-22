@@ -10,7 +10,9 @@ resource "harness_platform_service" "main" {
   org_id      = var.org_id
   project_id  = var.project_id
 
-  yaml = var.artifact_registry_type == "har" ? local.har_service_yaml : local.ecr_service_yaml
+  yaml = var.deployment_type == "Asg" ? local.asg_service_yaml : (
+    var.artifact_registry_type == "har" ? local.har_service_yaml : local.ecr_service_yaml
+  )
 }
 
 locals {
@@ -89,6 +91,50 @@ ${local.manifest_store_spec}
                 - k8s/values.yaml
               skipResourceVersioning: false
               enableDeclarativeRollback: false
+${local.service_vars_yaml}
+EOT
+
+  # ASG service YAML
+  # Uses AmazonMachineImage artifact - Packer bakes the JAR into the AMI.
+  # image_tag = AMI name (e.g., harness-demo-app-owner-42) from CI Packer build.
+  # The startupScript is stored in git and rendered by Harness at deploy time.
+  asg_service_yaml = <<-EOT
+service:
+  name: ${var.service_name}
+  identifier: ${var.service_id}
+  description: ${var.service_description}
+  tags:
+${local.tags_yaml}
+  serviceDefinition:
+    type: Asg
+    spec:
+      artifacts:
+        primary:
+          primaryArtifactRef: primary
+          sources:
+            - identifier: primary
+              type: AmazonMachineImage
+              spec:
+                connectorRef: ${var.artifact_connector_ref}
+                region: ${var.aws_region}
+                filters:
+                  - name: tag:Application
+                    value: harness-demo-app-${var.asg_ami_owner_tag}
+                version: <+pipeline.variables.image_tag>
+      startupScript:
+        store:
+          type: ${var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github"}
+          spec:
+            gitFetchType: Branch
+            branch: ${var.git_branch}
+            paths:
+              - ${var.asg_startup_script_path}
+%{if var.manifest_store_type == "HarnessCode"~}
+            repoName: ${local.effective_repo_name}
+%{else~}
+            connectorRef: ${var.git_connector_ref}
+            repoName: ${local.effective_repo_name}
+%{endif~}
 ${local.service_vars_yaml}
 EOT
 

@@ -41,7 +41,8 @@ locals {
   enable_lambda = contains(var.deployment_targets, "lambda")
   enable_asg    = contains(var.deployment_targets, "asg")
 
-  # Primary deployment type for Service definition
+  # Primary deployment type for the K8s/ECS/Lambda service definition
+  # Note: ASG uses a separate service (owner_demo_app_asg) - not this one
   primary_deployment_type = (
     local.enable_eks ? "Kubernetes" :
     local.enable_ecs ? "ECS" :
@@ -327,6 +328,12 @@ variable "enable_lambda_permissions" {
   default     = false
 }
 
+variable "enable_asg_permissions" {
+  description = "Enable ASG/EC2/ALB permissions for delegate (auto-enabled when asg in deployment_targets)"
+  type        = bool
+  default     = false
+}
+
 ################################################################################
 # Cross-Account STS Access (for AWS Connector)
 ################################################################################
@@ -516,6 +523,71 @@ variable "acm_cert_arn" {
   type        = string
   default     = "arn:aws:acm:us-east-1:759984737373:certificate/9c90d4f8-208d-46cd-bdc1-bc13f1759c05"
 }
+
+variable "route53_zone_name" {
+  description = "Route53 hosted zone name used for DNS records (e.g., harness-demo.dev)"
+  type        = string
+  default     = "harness-demo.dev"
+}
+
+################################################################################
+# ASG Configuration (used when deployment_targets includes "asg")
+################################################################################
+
+variable "asg_instance_type" {
+  description = "EC2 instance type for ASG instances"
+  type        = string
+  default     = "t3.small"
+}
+
+variable "asg_vpc_cidr" {
+  description = "CIDR block for the ASG VPC (separate from EKS VPC)"
+  type        = string
+  default     = "10.2.0.0/16"
+}
+
+variable "asg_desired_capacity" {
+  description = "Desired ASG instance count for the base/seed ASG (0 = no instances until first Harness deploy)"
+  type        = number
+  default     = 0
+}
+
+variable "asg_max_size" {
+  description = "Maximum instances per deployed ASG"
+  type        = number
+  default     = 4
+}
+
+variable "create_asg_strategy_pipeline" {
+  description = "Create ASG strategy pipeline (Blue-Green, Canary, Rolling)"
+  type        = bool
+  default     = true
+}
+
+variable "asg_canary_instance_count" {
+  description = "Number of canary instances for ASG canary deployments"
+  type        = number
+  default     = 1
+}
+
+variable "asg_create_dns_record" {
+  description = "Create Route53 CNAME <owner>.asg.harness-demo.dev pointing to the ASG ALB"
+  type        = bool
+  default     = false
+}
+
+variable "asg_packer_aws_access_key_secret" {
+  description = "Name of the Harness secret storing AWS_ACCESS_KEY_ID for Packer AMI builds"
+  type        = string
+  default     = "aws_access_key_id"
+}
+
+variable "asg_packer_aws_secret_key_secret" {
+  description = "Name of the Harness secret storing AWS_SECRET_ACCESS_KEY for Packer AMI builds"
+  type        = string
+  default     = "aws_secret_access_key"
+}
+
 
 ################################################################################
 # Sandbox TTL Configuration

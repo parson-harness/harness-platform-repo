@@ -51,3 +51,13 @@ output "cd_webhook_trigger_identifier" {
   description = "Identifier of the CD webhook trigger for auto-deploy"
   value       = var.create_ci_completion_trigger && var.create_ci_pipeline && var.create_canary_pipeline ? harness_platform_triggers.cd_webhook_trigger[0].identifier : null
 }
+
+output "asg_strategy_pipeline_id" {
+  description = "ID of the ASG strategy pipeline"
+  value       = var.create_asg_strategy_pipeline ? harness_platform_pipeline.asg_strategy[0].id : null
+}
+
+output "asg_strategy_pipeline_identifier" {
+  description = "Identifier of the ASG strategy pipeline"
+  value       = var.create_asg_strategy_pipeline ? harness_platform_pipeline.asg_strategy[0].identifier : null
+}

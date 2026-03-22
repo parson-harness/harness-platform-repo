@@ -124,6 +124,51 @@ resource "harness_platform_infrastructure" "ecs" {
 }
 
 ################################################################################
+# ASG (Auto Scaling Group) Infrastructure Definition
+################################################################################
+
+resource "harness_platform_infrastructure" "asg" {
+  count = var.create_asg_infrastructure ? 1 : 0
+
+  identifier      = var.asg_infra_id
+  name            = var.asg_infra_name
+  org_id          = var.org_id
+  project_id      = var.project_id
+  env_id          = harness_platform_environment.main.identifier
+  type            = "Asg"
+  deployment_type = "Asg"
+
+  yaml = yamlencode({
+    infrastructureDefinition = {
+      name        = var.asg_infra_name
+      identifier  = var.asg_infra_id
+      description = "ASG infrastructure for ${var.environment_name}"
+      tags        = { for tag in var.tags : split(":", tag)[0] => try(split(":", tag)[1], "") }
+      orgIdentifier     = var.org_id
+      projectIdentifier = var.project_id
+      environmentRef    = harness_platform_environment.main.identifier
+      deploymentType    = "Asg"
+      type              = "Asg"
+      spec = {
+        connectorRef = var.aws_connector_ref
+        region       = var.aws_region
+        baseAsgName  = var.asg_base_asg_name
+        loadBalancers = var.asg_prod_listener_arn != "" ? [
+          {
+            loadBalancerName     = var.asg_load_balancer_name
+            prodListenerArn      = var.asg_prod_listener_arn
+            stageListenerArn     = var.asg_stage_listener_arn
+            prodListenerRuleArn  = ""
+            stageListenerRuleArn = ""
+          }
+        ] : []
+      }
+      allowSimultaneousDeployments = var.allow_simultaneous_deployments
+    }
+  })
+}
+
+################################################################################
 # Serverless Lambda Infrastructure Definition
 ################################################################################
 

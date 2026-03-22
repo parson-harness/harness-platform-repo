@@ -33,13 +33,13 @@ variable "service_description" {
 }
 
 variable "deployment_type" {
-  description = "Deployment type: Kubernetes, ECS, NativeHelm, ServerlessAwsLambda"
+  description = "Deployment type: Kubernetes, ECS, NativeHelm, ServerlessAwsLambda, Asg"
   type        = string
   default     = "Kubernetes"
 
   validation {
-    condition     = contains(["Kubernetes", "ECS", "NativeHelm", "ServerlessAwsLambda"], var.deployment_type)
-    error_message = "deployment_type must be one of: Kubernetes, ECS, NativeHelm, ServerlessAwsLambda"
+    condition     = contains(["Kubernetes", "ECS", "NativeHelm", "ServerlessAwsLambda", "Asg"], var.deployment_type)
+    error_message = "deployment_type must be one of: Kubernetes, ECS, NativeHelm, ServerlessAwsLambda, Asg"
   }
 }
 
@@ -197,6 +197,22 @@ variable "har_registry_ref" {
 
 variable "har_image_path" {
   description = "Image path within HAR registry"
+  type        = string
+  default     = ""
+}
+
+################################################################################
+# ASG Configuration
+################################################################################
+
+variable "asg_startup_script_path" {
+  description = "Path to the ASG startup script (user data) in the git repository"
+  type        = string
+  default     = "asg/user-data.sh"
+}
+
+variable "asg_ami_owner_tag" {
+  description = "Value of the 'Application' AMI tag used to filter Packer-built AMIs (e.g., harness-demo-app-owner)"
   type        = string
   default     = ""
 }

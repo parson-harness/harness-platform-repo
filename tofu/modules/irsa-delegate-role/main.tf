@@ -208,6 +208,95 @@ resource "aws_iam_role_policy" "delegate_ecs" {
 }
 
 ################################################################################
+# Optional: ASG Permissions (for ASG deployments)
+################################################################################
+
+resource "aws_iam_role_policy" "delegate_asg" {
+  count = var.enable_asg_permissions ? 1 : 0
+
+  name = "delegate-asg-permissions"
+  role = aws_iam_role.delegate.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "ASGDeployment"
+        Effect = "Allow"
+        Action = [
+          "autoscaling:CreateAutoScalingGroup",
+          "autoscaling:UpdateAutoScalingGroup",
+          "autoscaling:DeleteAutoScalingGroup",
+          "autoscaling:DescribeAutoScalingGroups",
+          "autoscaling:DescribeAutoScalingInstances",
+          "autoscaling:DescribeScalingActivities",
+          "autoscaling:DescribeLaunchConfigurations",
+          "autoscaling:PutScalingPolicy",
+          "autoscaling:DeletePolicy",
+          "autoscaling:SetDesiredCapacity",
+          "autoscaling:TerminateInstanceInAutoScalingGroup",
+          "autoscaling:AttachLoadBalancerTargetGroups",
+          "autoscaling:DetachLoadBalancerTargetGroups",
+          "autoscaling:DescribeLoadBalancerTargetGroups",
+          "autoscaling:CreateOrUpdateTags",
+          "autoscaling:DeleteTags"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "LaunchTemplateManagement"
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateLaunchTemplate",
+          "ec2:CreateLaunchTemplateVersion",
+          "ec2:DescribeLaunchTemplates",
+          "ec2:DescribeLaunchTemplateVersions",
+          "ec2:DeleteLaunchTemplate",
+          "ec2:DeleteLaunchTemplateVersions",
+          "ec2:ModifyLaunchTemplate",
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceTypes",
+          "ec2:DescribeImages",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeVpcs",
+          "ec2:RunInstances",
+          "ec2:TerminateInstances"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "ALBManagement"
+        Effect = "Allow"
+        Action = [
+          "elasticloadbalancing:DescribeLoadBalancers",
+          "elasticloadbalancing:DescribeListeners",
+          "elasticloadbalancing:DescribeRules",
+          "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeTargetHealth",
+          "elasticloadbalancing:ModifyListener",
+          "elasticloadbalancing:ModifyRule",
+          "elasticloadbalancing:RegisterTargets",
+          "elasticloadbalancing:DeregisterTargets"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "ASGPassRole"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = "*"
+        Condition = {
+          StringLike = {
+            "iam:PassedToService" = "ec2.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+}
+
+################################################################################
 # Optional: Lambda Permissions (for Lambda deployments)
 ################################################################################
 

@@ -180,6 +180,52 @@ variable "lambda_stage" {
 }
 
 ################################################################################
+# ASG Infrastructure
+################################################################################
+
+variable "create_asg_infrastructure" {
+  description = "Create ASG infrastructure definition"
+  type        = bool
+  default     = false
+}
+
+variable "asg_infra_id" {
+  description = "Identifier for ASG infrastructure"
+  type        = string
+  default     = "asg_infra"
+}
+
+variable "asg_infra_name" {
+  description = "Display name for ASG infrastructure"
+  type        = string
+  default     = "ASG Infrastructure"
+}
+
+variable "asg_base_asg_name" {
+  description = "Name of the base/seed AWS Auto Scaling Group (Harness uses as config template)"
+  type        = string
+  default     = ""
+}
+
+variable "asg_load_balancer_name" {
+  description = "Name of the ALB for B/G traffic shifting"
+  type        = string
+  default     = ""
+}
+
+variable "asg_prod_listener_arn" {
+  description = "ARN of the ALB production listener (port 80)"
+  type        = string
+  default     = ""
+}
+
+variable "asg_stage_listener_arn" {
+  description = "ARN of the ALB stage listener (port 8080, for B/G validation)"
+  type        = string
+  default     = ""
+}
+
+################################################################################
 # AWS Configuration (shared by ECS/Lambda)
 ################################################################################
 
