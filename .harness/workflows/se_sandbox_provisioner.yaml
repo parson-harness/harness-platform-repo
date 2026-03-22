@@ -19,7 +19,6 @@ metadata:
     - Harness Artifact Registry for Docker images
     
     Prerequisites:
-    - Your Harness API key with admin permissions
     - Access to sandbox org (you're already here!)
   tags:
     - se-sandbox
@@ -75,8 +74,6 @@ spec:
       required:
         - harness_org_id
         - harness_project_id
-        - harness_api_key
-        - harness_api_key_email
       properties:
         harness_org_id:
           title: Organization
@@ -91,18 +88,6 @@ spec:
           description: "Select the project for your sandbox"
           default: parson
           ui:field: HarnessProjectPicker
-        
-        harness_api_key:
-          title: Harness API Key
-          type: string
-          description: "Your Harness API Key (PAT) with admin permissions"
-          ui:widget: password
-        
-        harness_api_key_email:
-          title: Your Email
-          type: string
-          description: "Email associated with your API key"
-          format: email
     
     - title: Infrastructure Options
       properties:
@@ -163,8 +148,6 @@ spec:
           harness_endpoint: "https://app.harness.io/gratis"
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
-          harness_api_key: ${{ parameters.harness_api_key }}
-          harness_api_key_email: ${{ parameters.harness_api_key_email }}
           deployment_targets: ${{ parameters.deployment_targets }}
           create_eks_cluster: "false"
           existing_cluster_name: ${{ parameters.existing_cluster_name }}

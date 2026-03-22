@@ -77,8 +77,8 @@ spec:
         - harness_account_id
         - harness_org_id
         - harness_project_id
-        - harness_api_key
-        - harness_api_key_email
+        - target_api_key
+        - target_api_key_email
       properties:
         harness_account_id:
           title: Target Account ID
@@ -115,16 +115,16 @@ spec:
           default: parson
           ui:help: "For cross-account provisioning, type the project ID manually"
         
-        harness_api_key:
-          title: Harness API Key
+        target_api_key:
+          title: Target Account API Key
           type: string
-          description: "Harness Platform API Key (PAT or SAT) with admin permissions"
+          description: "API Key (PAT or SAT) for the target Harness account with admin permissions"
           ui:widget: password
         
-        harness_api_key_email:
+        target_api_key_email:
           title: API Key Email
           type: string
-          description: "Email associated with the API key"
+          description: "Email associated with the target account API key"
           format: email
     
     - title: Infrastructure
@@ -178,8 +178,8 @@ spec:
           harness_endpoint: ${{ parameters.harness_cluster }}
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
-          harness_api_key: ${{ parameters.harness_api_key }}
-          harness_api_key_email: ${{ parameters.harness_api_key_email }}
+          target_api_key: ${{ parameters.target_api_key }}
+          target_api_key_email: ${{ parameters.target_api_key_email }}
           deployment_targets: "eks"
           create_eks_cluster: "false"
           existing_cluster_name: ${{ parameters.existing_cluster_name }}

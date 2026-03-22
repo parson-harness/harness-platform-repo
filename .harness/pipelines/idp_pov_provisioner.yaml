@@ -28,16 +28,21 @@ pipeline:
       description: Harness platform endpoint
       required: true
       value: <+input>.default(https://app.harness.io/gratis)
-    - name: harness_api_key
-      type: String
-      description: Harness Platform API Key (PAT or SAT)
+    - name: provisioner_api_key
+      type: Secret
+      description: SAT for IACM workspace management in provisioner account (sandbox/parson)
       required: true
-      value: <+input>
-    - name: harness_api_key_email
+      value: acct-automation-svc-acct
+    - name: target_api_key
       type: String
-      description: Email associated with the API key
-      required: true
-      value: <+input>.default(todd.parson@harness.io)
+      description: API Key for target Harness account (where resources are provisioned). Defaults to provisioner SAT for same-account use.
+      required: false
+      value: <+input>.default(<+pipeline.variables.provisioner_api_key>)
+    - name: target_api_key_email
+      type: String
+      description: Email associated with the target account API key. Defaults to service account email.
+      required: false
+      value: <+input>.default(accountautomation@service.harness.io)
     - name: harness_org_id
       type: String
       description: Harness Org ID for the POV
@@ -108,7 +113,7 @@ pipeline:
                       - key: Harness-Account
                         value: <+pipeline.variables.harness_account_id>
                       - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
+                        value: <+pipeline.variables.provisioner_api_key>
                     outputVariables:
                       - name: workspace_exists
                         value: <+httpResponseCode>
@@ -128,7 +133,7 @@ pipeline:
                       - key: Harness-Account
                         value: <+pipeline.variables.harness_account_id>
                       - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
+                        value: <+pipeline.variables.provisioner_api_key>
                     inputVariables: []
                     outputVariables:
                       - name: workspace_id
@@ -179,12 +184,12 @@ pipeline:
                           },
                           "harness_api_key": {
                             "key": "harness_api_key",
-                            "value": "<+pipeline.variables.harness_api_key>",
+                            "value": "<+pipeline.variables.target_api_key>",
                             "value_type": "string"
                           },
                           "harness_api_key_email": {
                             "key": "harness_api_key_email",
-                            "value": "<+pipeline.variables.harness_api_key_email>",
+                            "value": "<+pipeline.variables.target_api_key_email>",
                             "value_type": "string"
                           },
                           "harness_org_id": {
@@ -273,7 +278,7 @@ pipeline:
                       - key: Harness-Account
                         value: <+pipeline.variables.harness_account_id>
                       - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
+                        value: <+pipeline.variables.provisioner_api_key>
                     requestBody: |
                       {
                         "template_id": "POV_Provisioner",
@@ -494,7 +499,7 @@ pipeline:
                     method: POST
                     headers:
                       - key: x-api-key
-                        value: <+pipeline.variables.harness_api_key>
+                        value: <+pipeline.variables.target_api_key>
                       - key: Content-Type
                         value: application/yaml
                     requestBody: |
@@ -506,7 +511,7 @@ pipeline:
                             value: main
                           - name: git_repo_url
                             type: String
-                            value: https://token:<+pipeline.variables.harness_api_key>@git.harness.io/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/<+pipeline.variables.owner>-demo-app.git
+                            value: https://token:<+pipeline.variables.target_api_key>@git.harness.io/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/<+pipeline.variables.owner>-demo-app.git
                     assertion: <+httpResponseCode> == 200
                     outputVariables:
                       - name: ci_execution_id
