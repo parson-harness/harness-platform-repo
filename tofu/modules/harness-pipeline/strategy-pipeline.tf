@@ -357,6 +357,29 @@ ${local.reset_strategy_step}                  - step:
                       timeout: 10m
                       spec:
                         skipDryRun: false
+                  - step:
+                      type: ShellScript
+                      name: Deployment Complete
+                      identifier: deployment_complete
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              echo "========================================"
+                              echo "  CANARY DEPLOYMENT COMPLETE"
+                              echo "========================================"
+                              echo ""
+                              echo "App URL: https://<+serviceVariables.ingressHost>"
+                              echo ""
+                              echo "Canary validated and promoted to 100%."
+                              echo "All pods now running the new version."
+                              echo "========================================"
+                        environmentVariables: []
+                        outputVariables: []
+                      timeout: 1m
                 rollbackSteps:
                   - step:
                       name: Canary Delete

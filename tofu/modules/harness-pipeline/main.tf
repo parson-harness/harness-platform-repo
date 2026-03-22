@@ -13,28 +13,32 @@ terraform {
 }
 
 ################################################################################
-# Kubernetes Canary Pipeline
+# Kubernetes Canary Pipeline (DEPRECATED)
+# Use the Strategy Choice pipeline with deployment_strategy=canary instead.
+# This resource is kept for backward compatibility but create_canary_pipeline
+# should be set to false for new deployments.
 ################################################################################
 
 resource "harness_platform_pipeline" "k8s_canary" {
   count       = var.create_canary_pipeline ? 1 : 0
   identifier  = var.canary_pipeline_id
-  name        = var.canary_pipeline_name
+  name        = "${var.canary_pipeline_name} (Deprecated)"
   org_id      = var.org_id
   project_id  = var.project_id
-  description = var.canary_pipeline_description
-  tags        = ["deployment-type:kubernetes", "strategy:canary"]
+  description = "DEPRECATED: Use ${var.strategy_pipeline_id} with deployment_strategy=canary instead. ${var.canary_pipeline_description}"
+  tags        = ["deployment-type:kubernetes", "strategy:canary", "deprecated:true"]
 
   yaml = <<-EOT
     pipeline:
-      name: ${var.canary_pipeline_name}
+      name: ${var.canary_pipeline_name} (Deprecated)
       identifier: ${var.canary_pipeline_id}
       projectIdentifier: ${var.project_id}
       orgIdentifier: ${var.org_id}
-      description: ${var.canary_pipeline_description}
+      description: "DEPRECATED: Use ${var.strategy_pipeline_id} with deployment_strategy=canary instead"
       tags:
         deployment-type: kubernetes
         strategy: canary
+        deprecated: "true"
       variables:
         - name: image_tag
           type: String
@@ -43,88 +47,42 @@ resource "harness_platform_pipeline" "k8s_canary" {
           value: <+input>
       stages:
         - stage:
-            name: Deploy to ${var.environment_name}
-            identifier: deploy_to_${replace(lower(var.environment_name), " ", "_")}
-            description: Canary deployment to Kubernetes
-            type: Deployment
+            name: Redirect to Strategy Pipeline
+            identifier: redirect_notice
+            description: This pipeline is deprecated
+            type: Custom
             spec:
-              deploymentType: Kubernetes
-              service:
-                serviceRef: ${var.service_ref}
-              environment:
-                environmentRef: ${var.environment_ref}
-                deployToAll: false
-                infrastructureDefinitions:
-                  - identifier: ${var.infrastructure_ref}
               execution:
                 steps:
-                  - stepGroup:
-                      name: Canary Deployment
-                      identifier: canary_deployment
-                      steps:
-                        - step:
-                            name: Canary Deployment
-                            identifier: canary_deploy
-                            type: K8sCanaryDeploy
-                            timeout: 10m
-                            spec:
-                              instanceSelection:
-                                type: Count
-                                spec:
-                                  count: ${var.canary_instance_count}
-                              skipDryRun: false
-                        - step:
-                            name: Approval
-                            identifier: approval
-                            type: HarnessApproval
-                            timeout: 1d
-                            spec:
-                              approvalMessage: |
-                                Canary deployment complete.
-                                Review metrics and logs before proceeding to full rollout.
-                                Approve to deploy to all instances.
-                              includePipelineExecutionHistory: true
-                              approvers:
-                                userGroups:
-                                  - _project_all_users
-                                minimumCount: 1
-                                disallowPipelineExecutor: false
-                  - stepGroup:
-                      name: Primary Deployment
-                      identifier: primary_deployment
-                      steps:
-                        - step:
-                            name: Canary Delete
-                            identifier: canary_delete
-                            type: K8sCanaryDelete
-                            timeout: 10m
-                            spec: {}
-                        - step:
-                            name: Rolling Deployment
-                            identifier: rolling_deploy
-                            type: K8sRollingDeploy
-                            timeout: 10m
-                            spec:
-                              skipDryRun: false
-                rollbackSteps:
                   - step:
-                      name: Canary Delete
-                      identifier: rollback_canary_delete
-                      type: K8sCanaryDelete
-                      timeout: 10m
-                      spec: {}
-                  - step:
-                      name: Rolling Rollback
-                      identifier: rolling_rollback
-                      type: K8sRollingRollback
-                      timeout: 10m
-                      spec: {}
-            failureStrategies:
-              - onFailure:
-                  errors:
-                    - AllErrors
-                  action:
-                    type: StageRollback
+                      type: ShellScript
+                      name: Deprecation Notice
+                      identifier: deprecation_notice
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              echo "========================================"
+                              echo "  THIS PIPELINE IS DEPRECATED"
+                              echo "========================================"
+                              echo ""
+                              echo "Please use the Strategy Choice pipeline instead:"
+                              echo "  Pipeline: ${var.strategy_pipeline_id}"
+                              echo "  Set deployment_strategy = canary"
+                              echo ""
+                              echo "The Strategy Choice pipeline includes:"
+                              echo "  - Reset strategy state (handles B/G leftovers)"
+                              echo "  - Traffic split calculation"
+                              echo "  - Enhanced approval messages"
+                              echo "  - Deployment complete summary"
+                              echo "========================================"
+                              exit 1
+                        environmentVariables: []
+                        outputVariables: []
+                      timeout: 1m
   EOT
 }
 

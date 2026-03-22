@@ -33,13 +33,13 @@ variable "infrastructure_ref" {
 }
 
 ################################################################################
-# Canary Pipeline Variables
+# Canary Pipeline Variables (DEPRECATED - use Strategy Pipeline instead)
 ################################################################################
 
 variable "create_canary_pipeline" {
-  description = "Create Canary deployment pipeline"
+  description = "DEPRECATED: Create standalone Canary pipeline. Use create_strategy_pipeline instead with deployment_strategy=canary"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "canary_pipeline_id" {
