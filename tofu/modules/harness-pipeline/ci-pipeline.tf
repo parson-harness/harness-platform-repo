@@ -171,19 +171,20 @@ resource "harness_platform_pipeline" "ci_build" {
                         command: |
                           if [ "$AUTO_DEPLOY" = "true" ]; then
                             echo "========================================"
-                            echo "  AUTO-DEPLOYING TO DEV"
+                            echo "  AUTO-DEPLOYING TO DEV (Canary Strategy)"
                             echo "========================================"
-                            echo "Triggering Canary deployment with image tag: $IMAGE_TAG"
+                            echo "Triggering deployment with image tag: $IMAGE_TAG"
                             
-                            # Get the webhook URL from the trigger
-                            WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.canary_pipeline_id}&triggerIdentifier=auto_deploy_webhook"
+                            # Get the webhook URL for the strategy pipeline trigger
+                            WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.strategy_pipeline_id}&triggerIdentifier=auto_deploy_webhook"
                             
                             echo "Webhook URL: $WEBHOOK_URL"
                             
                             # Trigger the CD pipeline (custom webhooks don't require API key auth)
+                            # Strategy pipeline uses canary by default for CI-triggered deployments
                             response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
                               -H "Content-Type: application/json" \
-                              -d "{\"image_tag\": \"$IMAGE_TAG\"}")
+                              -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\"}")
                             
                             http_code=$(echo "$response" | tail -n1)
                             body=$(echo "$response" | sed '$d')
