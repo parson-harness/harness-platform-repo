@@ -99,7 +99,7 @@ output "harness_project_created" {
 
 output "harness_service_id" {
   description = "ID of the Harness service"
-  value       = var.create_harness_service ? module.harness_service[0].service_id : null
+  value       = var.create_harness_service && (local.enable_eks || local.enable_ecs || local.enable_lambda) ? module.harness_service[0].service_id : null
 }
 
 output "canary_pipeline_id" {
