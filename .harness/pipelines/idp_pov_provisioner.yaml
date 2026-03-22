@@ -505,13 +505,13 @@ pipeline:
                     requestBody: |
                       pipeline:
                         identifier: <+pipeline.variables.owner>_ci_build
-                        variables:
-                          - name: git_branch
-                            type: String
-                            value: main
-                          - name: git_repo_url
-                            type: String
-                            value: https://token:<+pipeline.variables.target_api_key>@git.harness.io/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/<+pipeline.variables.owner>-demo-app.git
+                        properties:
+                          ci:
+                            codebase:
+                              build:
+                                type: branch
+                                spec:
+                                  branch: main
                     assertion: <+httpResponseCode> == 200
                     outputVariables:
                       - name: ci_execution_id

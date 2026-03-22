@@ -864,6 +864,12 @@ module "harness_pipelines_asg" {
   harness_project_id      = local.resolved_project_id
   harness_api_key         = var.harness_api_key
 
+  asg_packer_build_enabled  = local.enable_asg
+  asg_packer_owner          = var.owner
+  asg_packer_region         = "us-east-1"
+  asg_aws_access_key_secret = "aws_access_key_id"
+  asg_aws_secret_key_secret = "aws_secret_access_key"
+
   delegate_selector = "delegate-${var.owner}"
   pipeline_tags     = ["tofu-managed", var.owner, "asg"]
 
