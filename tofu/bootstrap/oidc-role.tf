@@ -141,6 +141,7 @@ resource "aws_iam_role_policy" "harness_iacm_permissions" {
           "ec2:DescribeLaunchTemplateVersions",
           "ec2:ModifyLaunchTemplate",
           "ec2:CreateLaunchTemplateVersion",
+          "ec2:RunInstances",
           "ec2:DescribeImages",
           "ec2:DescribeInstanceTypes",
           "ec2:DescribeKeyPairs",
