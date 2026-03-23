@@ -215,7 +215,9 @@ resource "aws_iam_role_policy" "harness_iacm_permissions" {
           "route53:ListHostedZonesByName",
           "route53:ChangeResourceRecordSets",
           "route53:ListResourceRecordSets",
-          "route53:GetChange"
+          "route53:GetChange",
+          "route53:ListTagsForResource",
+          "route53:ListTagsForResources"
         ]
         Resource = "*"
       },
