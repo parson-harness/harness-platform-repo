@@ -110,6 +110,13 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                           echo "Region:      $AWS_DEFAULT_REGION"
                           echo ""
 
+                          echo "=== WORKSPACE DIAGNOSTICS ==="
+                          echo "PWD: $PWD"
+                          ls -la /harness/ 2>&1 || echo "CANNOT LIST /harness"
+                          ls -la /harness/target/ 2>&1 || echo "NO /harness/target DIR"
+                          find / -name "harness-demo-app-*.jar" 2>/dev/null || echo "NO JARS FOUND ANYWHERE"
+                          echo "=== END DIAGNOSTICS ==="
+
                           JAR_PATH=$PWD/target/harness-demo-app-1.0-SNAPSHOT.jar
                           echo "JAR path: $JAR_PATH"
                           ls -la "$JAR_PATH"
