@@ -133,11 +133,18 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                             -var "ami_name_prefix=harness-demo-app-$OWNER" \
                             -var "aws_region=$AWS_DEFAULT_REGION" \
                             -var "jar_source=$JAR_PATH" \
-                            ami.pkr.hcl | tee /tmp/packer_output.txt
+                            ami.pkr.hcl > /tmp/packer_output.txt 2>&1
+                          PACKER_EXIT=$?
+                          cat /tmp/packer_output.txt
+                          if [ $PACKER_EXIT -ne 0 ]; then
+                            echo "ERROR: Packer build failed with exit code $PACKER_EXIT"
+                            exit 1
+                          fi
 
-                          AMI_ID=$(grep -oE 'ami-[0-9a-f]+' /tmp/packer_output.txt | tail -1)
+                          AMI_ID=$(grep -A2 'AMIs were created' /tmp/packer_output.txt | grep -oE 'ami-[0-9a-f]+' | head -1)
                           if [ -z "$AMI_ID" ]; then
-                            echo "ERROR: Packer build failed or AMI ID not found in output"
+                            echo "ERROR: AMI ID not found in Packer output"
+                            cat /tmp/packer_output.txt
                             exit 1
                           fi
                           echo "AMI_ID: $AMI_ID"
