@@ -122,14 +122,13 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                             -var "ami_name_prefix=harness-demo-app-$OWNER" \
                             -var "aws_region=$AWS_DEFAULT_REGION" \
                             -var "jar_source=$JAR_PATH" \
-                            ami.pkr.hcl
+                            ami.pkr.hcl | tee /tmp/packer_output.txt
 
-                          AMI_ID=$(aws ec2 describe-images \
-                            --owners self \
-                            --filters "Name=tag:Application,Values=harness-demo-app-$OWNER" \
-                                      "Name=tag:Version,Values=$APP_VERSION" \
-                            --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
-                            --output text)
+                          AMI_ID=$(grep -oE 'ami-[0-9a-f]+' /tmp/packer_output.txt | tail -1)
+                          if [ -z "$AMI_ID" ]; then
+                            echo "ERROR: Packer build failed or AMI ID not found in output"
+                            exit 1
+                          fi
                           echo "AMI_ID: $AMI_ID"
                         envVariables:
                           APP_VERSION: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
