@@ -187,7 +187,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                             echo "========================================"
                             echo "  AUTO-DEPLOYING (Rolling Strategy)"
                             echo "========================================"
-                            AMI_NAME="harness-demo-app-${PACKER_OWNER}-${IMAGE_TAG}"
+                            AMI_NAME="harness-demo-app-$${PACKER_OWNER}-$${IMAGE_TAG}"
                             echo "Triggering ASG deployment with AMI name: $AMI_NAME"
 
                             WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.asg_strategy_pipeline_id}&triggerIdentifier=asg_auto_deploy_webhook"
