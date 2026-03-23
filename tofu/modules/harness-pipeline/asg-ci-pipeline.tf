@@ -110,7 +110,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                           echo "Region:      $AWS_DEFAULT_REGION"
                           echo ""
 
-                          JAR_PATH=$$(pwd)/target/harness-demo-app-1.0-SNAPSHOT.jar
+                          JAR_PATH=$$PWD/target/harness-demo-app-1.0-SNAPSHOT.jar
                           echo "JAR path: $$JAR_PATH"
                           ls -la "$$JAR_PATH"
 
