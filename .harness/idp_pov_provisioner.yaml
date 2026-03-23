@@ -270,11 +270,11 @@ pipeline:
                           type: MarkAsSuccess
               - step:
                   type: Http
-                  name: Update Workspace Variables
-                  identifier: update_workspace_vars
+                  name: Update deployment_targets Variable
+                  identifier: update_deployment_targets_var
                   spec:
-                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces/<+pipeline.variables.owner>_pov
-                    method: PATCH
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces/<+pipeline.variables.owner>_pov/variables/tf/deployment_targets
+                    method: PUT
                     headers:
                       - key: Content-Type
                         value: application/json
@@ -284,18 +284,35 @@ pipeline:
                         value: <+pipeline.variables.provisioner_api_key>
                     requestBody: |
                       {
-                        "terraform_variables": {
-                          "deployment_targets": {
-                            "key": "deployment_targets",
-                            "value": "[\"<+pipeline.variables.deployment_targets>\"]",
-                            "value_type": "string"
-                          },
-                          "asg_create_dns_record": {
-                            "key": "asg_create_dns_record",
-                            "value": "<+pipeline.variables.asg_create_dns_record>",
-                            "value_type": "string"
-                          }
-                        }
+                        "value": "[\"<+pipeline.variables.deployment_targets>\"]",
+                        "value_type": "string"
+                      }
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Http
+                  name: Update asg_create_dns_record Variable
+                  identifier: update_asg_create_dns_record_var
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces/<+pipeline.variables.owner>_pov/variables/tf/asg_create_dns_record
+                    method: PUT
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    requestBody: |
+                      {
+                        "value": "<+pipeline.variables.asg_create_dns_record>",
+                        "value_type": "string"
                       }
                     assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201
                   timeout: 1m
