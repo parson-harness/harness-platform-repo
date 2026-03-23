@@ -50,9 +50,18 @@ resource "terraform_data" "import_repo" {
         exit 1
       fi
 
-      echo "Cloning from Harness Code source '${var.source_repo}'..."
+      echo "Cloning from ${var.source_provider} source '${var.source_repo}'..."
       TEMP_DIR=$(mktemp -d)
-      git clone "https://token:${var.harness_api_key}@git.harness.io/${var.source_repo}.git" "$TEMP_DIR/source" --quiet
+      if [ "${var.source_provider}" = "github" ]; then
+        if [ -n "${var.source_password}" ]; then
+          CLONE_URL="https://${var.source_username}:${var.source_password}@github.com/${var.source_repo}.git"
+        else
+          CLONE_URL="https://github.com/${var.source_repo}.git"
+        fi
+      else
+        CLONE_URL="https://token:${var.harness_api_key}@git.harness.io/${var.source_repo}.git"
+      fi
+      git clone "$CLONE_URL" "$TEMP_DIR/source" --quiet
       if [ $? -ne 0 ]; then
         echo "Failed to clone source repo '${var.source_repo}'"
         rm -rf "$TEMP_DIR"

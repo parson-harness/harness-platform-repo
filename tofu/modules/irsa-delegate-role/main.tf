@@ -223,24 +223,7 @@ resource "aws_iam_role_policy" "delegate_asg" {
       {
         Sid    = "ASGDeployment"
         Effect = "Allow"
-        Action = [
-          "autoscaling:CreateAutoScalingGroup",
-          "autoscaling:UpdateAutoScalingGroup",
-          "autoscaling:DeleteAutoScalingGroup",
-          "autoscaling:DescribeAutoScalingGroups",
-          "autoscaling:DescribeAutoScalingInstances",
-          "autoscaling:DescribeScalingActivities",
-          "autoscaling:DescribeLaunchConfigurations",
-          "autoscaling:PutScalingPolicy",
-          "autoscaling:DeletePolicy",
-          "autoscaling:SetDesiredCapacity",
-          "autoscaling:TerminateInstanceInAutoScalingGroup",
-          "autoscaling:AttachLoadBalancerTargetGroups",
-          "autoscaling:DetachLoadBalancerTargetGroups",
-          "autoscaling:DescribeLoadBalancerTargetGroups",
-          "autoscaling:CreateOrUpdateTags",
-          "autoscaling:DeleteTags"
-        ]
+        Action = ["autoscaling:*"]
         Resource = "*"
       },
       {
@@ -261,7 +244,8 @@ resource "aws_iam_role_policy" "delegate_asg" {
           "ec2:DescribeSubnets",
           "ec2:DescribeVpcs",
           "ec2:RunInstances",
-          "ec2:TerminateInstances"
+          "ec2:TerminateInstances",
+          "ec2:CreateTags"
         ]
         Resource = "*"
       },
@@ -288,7 +272,7 @@ resource "aws_iam_role_policy" "delegate_asg" {
         Resource = "*"
         Condition = {
           StringLike = {
-            "iam:PassedToService" = "ec2.amazonaws.com"
+            "iam:PassedToService" = "*.amazonaws.com"
           }
         }
       }

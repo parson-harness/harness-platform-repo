@@ -166,9 +166,10 @@ module "harness_code_repo" {
   project_id         = local.resolved_project_id
 
   repo_identifier  = "${var.owner}-demo-app"
-  repo_description = "POV Demo App for ${var.owner} - cloned from Harness Code"
+  repo_description = "POV Demo App for ${var.owner} - cloned from GitHub (${var.source_github_repo})"
 
-  source_repo = var.harness_code_source_repo
+  source_provider = "github"
+  source_repo     = var.source_github_repo
 
   depends_on = [module.harness_org_project]
 }
