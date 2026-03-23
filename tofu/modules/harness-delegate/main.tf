@@ -15,6 +15,11 @@ locals {
   delegate_image = var.delegate_image != "" ? var.delegate_image : (
     var.delegate_version != "" ? "${var.delegate_image_prefix}:${var.delegate_version}" : null
   )
+
+  # IRSA annotation for service account - included in Helm values to survive upgrades
+  irsa_sa_annotations = var.enable_irsa_annotations && var.irsa_role_arn != "" ? {
+    "eks.amazonaws.com/role-arn" = var.irsa_role_arn
+  } : {}
 }
 
 ################################################################################
@@ -162,6 +167,9 @@ resource "helm_release" "delegate" {
       
       # Service account created by the Helm chart (same name used for IRSA)
       k8sServiceAccount   = local.service_account_name
+
+      # IRSA annotation - set here so it survives Helm upgrades (not just post-apply kubectl patch)
+      serviceAccountAnnotations = local.irsa_sa_annotations
       
       upgrader = {
         enabled = var.enable_upgrader
