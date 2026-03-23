@@ -127,6 +127,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
 
                           cd asg/packer
                           packer init ami.pkr.hcl
+                          set +e
                           packer build \
                             -var "app_version=$APP_VERSION" \
                             -var "owner=$OWNER" \
@@ -135,6 +136,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                             -var "jar_source=$JAR_PATH" \
                             ami.pkr.hcl > /tmp/packer_output.txt 2>&1
                           PACKER_EXIT=$?
+                          set -e
                           cat /tmp/packer_output.txt
                           if [ $PACKER_EXIT -ne 0 ]; then
                             echo "ERROR: Packer build failed with exit code $PACKER_EXIT"
