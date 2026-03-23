@@ -282,15 +282,10 @@ resource "aws_iam_role_policy" "delegate_asg" {
         Resource = "*"
       },
       {
-        Sid    = "ASGPassRole"
-        Effect = "Allow"
-        Action = "iam:PassRole"
+        Sid      = "ASGPassRole"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
         Resource = "*"
-        Condition = {
-          StringLike = {
-            "iam:PassedToService" = "*.amazonaws.com"
-          }
-        }
       }
     ]
   })
