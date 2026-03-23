@@ -1,0 +1,58 @@
+# ASG Stack - Example Configuration
+# Copy this file to terraform.tfvars and fill in your values
+
+################################################################################
+# Required Variables
+################################################################################
+
+owner              = "yourname"
+harness_account_id = "your-harness-account-id"
+harness_api_key    = "your-harness-api-key"
+
+################################################################################
+# Harness Organization and Project
+################################################################################
+
+# Use existing org/project (default)
+create_harness_org     = false
+harness_org_id         = "sandbox"
+create_harness_project = false
+harness_project_id     = "parson"
+
+################################################################################
+# AWS Configuration
+################################################################################
+
+aws_region    = "us-east-1"
+vpc_cidr      = "10.1.0.0/16"
+instance_type = "t3.small"
+
+################################################################################
+# ASG Configuration
+################################################################################
+
+asg_min_size         = 1
+asg_desired_capacity = 1
+asg_max_size         = 4
+
+################################################################################
+# DNS and SSL (optional)
+################################################################################
+
+create_dns_record = true
+route53_zone_name = "harness-demo.dev"
+# acm_cert_arn    = "arn:aws:acm:us-east-1:123456789012:certificate/abc123"
+
+################################################################################
+# GitHub (if using GitHub connector)
+################################################################################
+
+# github_token_ref = "account.github_pat"
+# github_username  = "your-github-username"
+
+################################################################################
+# Pipelines
+################################################################################
+
+create_asg_strategy_pipeline = true
+create_asg_ci_pipeline       = true

@@ -1,0 +1,52 @@
+# EKS Stack - Example Configuration
+# Copy this file to terraform.tfvars and fill in your values
+
+################################################################################
+# Required Variables
+################################################################################
+
+owner              = "yourname"
+eks_cluster_name   = "harness-demo-shared-eks"
+harness_account_id = "your-harness-account-id"
+harness_api_key    = "your-harness-api-key"
+harness_api_key_email = "your-email@example.com"
+
+################################################################################
+# Harness Organization and Project
+################################################################################
+
+# Use existing org/project (default)
+create_harness_org     = false
+harness_org_id         = "sandbox"
+create_harness_project = false
+harness_project_id     = "parson"
+
+# Or create new org/project
+# create_harness_org       = true
+# new_harness_org_id       = "my_org"
+# new_harness_org_name     = "My Organization"
+# create_harness_project   = true
+# new_harness_project_id   = "my_project"
+# new_harness_project_name = "My Project"
+
+################################################################################
+# Optional Configuration
+################################################################################
+
+# AWS
+aws_region = "us-east-1"
+
+# GitHub (if using GitHub connector)
+# github_token_ref = "account.github_pat"
+# github_username  = "your-github-username"
+
+# Artifact Registry
+artifact_registry_type    = "har"
+create_dockerhub_upstream = false
+
+# Pipelines
+create_strategy_pipeline = true
+create_ci_pipeline       = true
+
+# HTTPS Ingress (optional)
+# acm_cert_arn = "arn:aws:acm:us-east-1:123456789012:certificate/abc123"
