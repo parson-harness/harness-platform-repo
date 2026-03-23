@@ -865,6 +865,7 @@ module "harness_pipelines_asg" {
   asg_service_ref                   = "${var.owner}_demo_app_asg"
   asg_infrastructure_ref            = "${var.owner}_asg_dev"
   asg_canary_instance_count         = var.asg_canary_instance_count
+  asg_prod_asg_name                 = local.enable_asg && length(module.asg) > 0 ? replace(module.asg[0].base_asg_name, "-base", "") : ""
 
   # Disable all K8s pipelines for this ASG-only module
   create_canary_pipeline     = false

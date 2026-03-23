@@ -100,6 +100,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
                       type: AsgBlueGreenDeploy
                       timeout: 20m
                       spec:
+                        asgName: ${var.asg_prod_asg_name}
                         useAlreadyRunningInstances: false
                         loadBalancer: <+infra.loadBalancers[0].loadBalancerName>
                         prodListener: <+infra.loadBalancers[0].prodListenerArn>
@@ -227,6 +228,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
                       type: AsgCanaryDeploy
                       timeout: 20m
                       spec:
+                        asgName: ${var.asg_prod_asg_name}
                         instanceSelection:
                           type: Count
                           spec:
@@ -266,6 +268,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
                       type: AsgRollingDeploy
                       timeout: 20m
                       spec:
+                        asgName: ${var.asg_prod_asg_name}
                         useAlreadyRunningInstances: false
                         skipMatching: true
                   - step:
@@ -356,6 +359,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
                       type: AsgRollingDeploy
                       timeout: 20m
                       spec:
+                        asgName: ${var.asg_prod_asg_name}
                         useAlreadyRunningInstances: false
                         skipMatching: true
                   - step:

@@ -383,6 +383,12 @@ variable "asg_canary_instance_count" {
   default     = 1
 }
 
+variable "asg_prod_asg_name" {
+  description = "Name of the Harness-managed production ASG (required when baseAsgName is set in infrastructure). Typically the base ASG name without the -base suffix."
+  type        = string
+  default     = ""
+}
+
 ################################################################################
 # Common Variables
 ################################################################################
