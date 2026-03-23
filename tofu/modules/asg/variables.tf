@@ -67,9 +67,9 @@ variable "root_volume_size_gb" {
 ################################################################################
 
 variable "asg_min_size" {
-  description = "Minimum number of instances in the base ASG (seed ASG, Harness manages deployed ASGs)"
+  description = "Minimum number of instances in the base ASG (seed ASG, Harness copies this to deployed ASGs)"
   type        = number
-  default     = 0
+  default     = 1
 }
 
 variable "asg_max_size" {
@@ -79,9 +79,9 @@ variable "asg_max_size" {
 }
 
 variable "asg_desired_capacity" {
-  description = "Desired capacity for the base ASG (0 = no running instances until first Harness deploy)"
+  description = "Desired capacity for the base ASG (Harness copies this to deployed ASGs for B/G)"
   type        = number
-  default     = 0
+  default     = 1
 }
 
 ################################################################################
