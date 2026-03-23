@@ -389,6 +389,36 @@ variable "asg_prod_asg_name" {
   default     = ""
 }
 
+variable "asg_alb_name" {
+  description = "Name of the ALB for ASG Blue-Green deployments"
+  type        = string
+  default     = ""
+}
+
+variable "asg_prod_listener_arn" {
+  description = "ARN of the production listener (HTTPS/443) for ASG Blue-Green deployments"
+  type        = string
+  default     = ""
+}
+
+variable "asg_prod_listener_rule_arn" {
+  description = "ARN of the production listener rule for ASG Blue-Green deployments"
+  type        = string
+  default     = ""
+}
+
+variable "asg_stage_listener_arn" {
+  description = "ARN of the stage listener (HTTP/8080) for ASG Blue-Green deployments"
+  type        = string
+  default     = ""
+}
+
+variable "asg_stage_listener_rule_arn" {
+  description = "ARN of the stage listener rule for ASG Blue-Green deployments"
+  type        = string
+  default     = ""
+}
+
 ################################################################################
 # Common Variables
 ################################################################################

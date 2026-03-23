@@ -102,11 +102,12 @@ resource "harness_platform_pipeline" "asg_strategy" {
                       spec:
                         asgName: ${var.asg_prod_asg_name}
                         useAlreadyRunningInstances: false
-                        loadBalancer: <+infra.loadBalancers[0].loadBalancerName>
-                        prodListener: <+infra.loadBalancers[0].prodListenerArn>
-                        prodListenerRuleArn: ""
-                        stageListener: <+infra.loadBalancers[0].stageListenerArn>
-                        stageListenerRuleArn: ""
+                        loadBalancers:
+                          - loadBalancer: ${var.asg_alb_name}
+                            prodListener: ${var.asg_prod_listener_arn}
+                            prodListenerRuleArn: ${var.asg_prod_listener_rule_arn}
+                            stageListener: ${var.asg_stage_listener_arn}
+                            stageListenerRuleArn: ${var.asg_stage_listener_rule_arn}
                   - step:
                       name: Validate Stage
                       identifier: validate_stage_bg

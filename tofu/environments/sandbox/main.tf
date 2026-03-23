@@ -868,6 +868,13 @@ module "harness_pipelines_asg" {
   asg_canary_instance_count         = var.asg_canary_instance_count
   asg_prod_asg_name                 = local.enable_asg && length(module.asg) > 0 ? replace(module.asg[0].base_asg_name, "-base", "") : ""
 
+  # ALB configuration for Blue-Green deployments
+  asg_alb_name                = local.enable_asg && length(module.asg) > 0 ? module.asg[0].alb_name : ""
+  asg_prod_listener_arn       = local.enable_asg && length(module.asg) > 0 ? module.asg[0].prod_listener_arn : ""
+  asg_prod_listener_rule_arn  = local.enable_asg && length(module.asg) > 0 ? module.asg[0].prod_listener_rule_arn : ""
+  asg_stage_listener_arn      = local.enable_asg && length(module.asg) > 0 ? module.asg[0].stage_listener_arn : ""
+  asg_stage_listener_rule_arn = local.enable_asg && length(module.asg) > 0 ? module.asg[0].stage_listener_rule_arn : ""
+
   # Disable all K8s pipelines for this ASG-only module
   create_canary_pipeline     = false
   create_blue_green_pipeline = false

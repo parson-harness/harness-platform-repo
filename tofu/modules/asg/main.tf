@@ -315,6 +315,20 @@ resource "aws_lb_listener" "stage" {
 }
 
 ################################################################################
+# Listener Rules - Data sources to get default rule ARNs for B/G deployments
+################################################################################
+
+data "aws_lb_listener_rule" "prod_default" {
+  listener_arn = aws_lb_listener.prod.arn
+  priority     = "default"
+}
+
+data "aws_lb_listener_rule" "stage_default" {
+  listener_arn = aws_lb_listener.stage.arn
+  priority     = "default"
+}
+
+################################################################################
 # IAM - EC2 Instance Profile
 # Allows instances to: use SSM Session Manager, write CloudWatch logs
 # No ECR needed - JAR is baked into the AMI by Packer
