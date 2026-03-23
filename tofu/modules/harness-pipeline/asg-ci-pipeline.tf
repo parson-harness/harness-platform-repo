@@ -24,6 +24,17 @@ resource "harness_platform_pipeline" "asg_ci_build" {
         pipeline-type: ci
         build: packer
         deployment: asg
+      variables:
+        - name: auto_deploy
+          type: String
+          description: Automatically trigger CD pipeline after successful build
+          required: false
+          value: <+input>.default(true).allowedValues(true,false)
+        - name: harness_endpoint
+          type: String
+          description: Harness API endpoint
+          required: false
+          value: <+input>.default(https://app.harness.io/gratis)
       properties:
         ci:
           codebase:
@@ -155,7 +166,56 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                           echo ""
                           echo "To deploy this AMI, run the ASG strategy pipeline:"
                           echo "  Use image_tag: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>"
-                          echo "========================================"
+                          echo "========================================="
+                  - step:
+                      type: Run
+                      name: Trigger CD Pipeline
+                      identifier: trigger_cd
+                      spec:
+                        shell: Bash
+                        command: |
+                          if [ "$AUTO_DEPLOY" = "true" ]; then
+                            echo "========================================"
+                            echo "  AUTO-DEPLOYING (Rolling Strategy)"
+                            echo "========================================"
+                            echo "Triggering ASG deployment with image tag: $IMAGE_TAG"
+
+                            WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.asg_strategy_pipeline_id}&triggerIdentifier=asg_auto_deploy_webhook"
+
+                            response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
+                              -H "Content-Type: application/json" \
+                              -d "{\"image_tag\": \"$IMAGE_TAG\"}")
+
+                            http_code=$(echo "$response" | tail -n1)
+                            body=$(echo "$response" | sed '$d')
+
+                            echo "Response code: $http_code"
+                            echo "Response: $body"
+
+                            if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
+                              echo "CD pipeline triggered successfully!"
+                            else
+                              echo "CD pipeline trigger returned: $http_code"
+                              echo "Deployment can still be triggered manually."
+                            fi
+                          else
+                            echo "Auto-deploy is disabled. To deploy, run the ASG strategy pipeline manually."
+                          fi
+                        envVariables:
+                          IMAGE_TAG: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
+                          AUTO_DEPLOY: <+pipeline.variables.auto_deploy>
+                          HARNESS_ENDPOINT: <+pipeline.variables.harness_endpoint>
+                          ACCOUNT_ID: <+account.identifier>
+                          ORG_ID: <+org.identifier>
+                          PROJECT_ID: <+project.identifier>
+                      when:
+                        stageStatus: Success
+                      failureStrategies:
+                        - onFailure:
+                            errors:
+                              - AllErrors
+                            action:
+                              type: MarkAsSuccess
             failureStrategies:
               - onFailure:
                   errors:
