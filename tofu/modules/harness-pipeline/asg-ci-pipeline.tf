@@ -110,27 +110,27 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                           echo "Region:      $AWS_DEFAULT_REGION"
                           echo ""
 
-                          JAR_PATH=$$PWD/target/harness-demo-app-1.0-SNAPSHOT.jar
-                          echo "JAR path: $$JAR_PATH"
-                          ls -la "$$JAR_PATH"
+                          JAR_PATH=$PWD/target/harness-demo-app-1.0-SNAPSHOT.jar
+                          echo "JAR path: $JAR_PATH"
+                          ls -la "$JAR_PATH"
 
                           cd asg/packer
                           packer init ami.pkr.hcl
                           packer build \
-                            -var "app_version=$$APP_VERSION" \
-                            -var "owner=$$OWNER" \
-                            -var "ami_name_prefix=harness-demo-app-$$OWNER" \
-                            -var "aws_region=$$AWS_DEFAULT_REGION" \
-                            -var "jar_source=$$JAR_PATH" \
+                            -var "app_version=$APP_VERSION" \
+                            -var "owner=$OWNER" \
+                            -var "ami_name_prefix=harness-demo-app-$OWNER" \
+                            -var "aws_region=$AWS_DEFAULT_REGION" \
+                            -var "jar_source=$JAR_PATH" \
                             ami.pkr.hcl
 
-                          AMI_ID=$$(aws ec2 describe-images \
+                          AMI_ID=$(aws ec2 describe-images \
                             --owners self \
-                            --filters "Name=tag:Application,Values=harness-demo-app-$$OWNER" \
-                                      "Name=tag:Version,Values=$$APP_VERSION" \
+                            --filters "Name=tag:Application,Values=harness-demo-app-$OWNER" \
+                                      "Name=tag:Version,Values=$APP_VERSION" \
                             --query 'sort_by(Images, &CreationDate)[-1].ImageId' \
                             --output text)
-                          echo "AMI_ID: $$AMI_ID"
+                          echo "AMI_ID: $AMI_ID"
                         envVariables:
                           APP_VERSION: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
                           OWNER: ${var.asg_packer_owner}
