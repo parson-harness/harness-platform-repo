@@ -85,6 +85,12 @@ resource "aws_iam_role_policy" "delegate_base" {
           Resource = "*"
         },
         {
+          Sid      = "STSAssumeRoleSelf"
+          Effect   = "Allow"
+          Action   = "sts:AssumeRole"
+          Resource = aws_iam_role.delegate.arn
+        },
+        {
           Sid    = "ECRReadOnly"
           Effect = "Allow"
           Action = [
