@@ -475,6 +475,7 @@ module "harness_connectors" {
   k8s_connector_name   = "${title(var.owner)} K8s Reference Architecture"
 
   # AWS Connector with IRSA and cross-account support
+  # Note: AmazonMachineImage artifact type requires cross_account_access even for same-account IRSA
   create_aws_connector        = true
   aws_connector_id            = "${var.owner}_aws_reference_architecture"
   aws_connector_name          = "${title(var.owner)} AWS Reference Architecture"
@@ -482,8 +483,8 @@ module "harness_connectors" {
   connector_tags              = ["tofu-managed:true", "harness-sandbox:true", "owner:${var.owner}"]
   aws_auth_type               = var.enable_irsa ? "irsa" : "delegate"
   aws_region                  = var.aws_region
-  enable_cross_account_access = var.enable_cross_account_access
-  cross_account_role_arn      = var.cross_account_role_arn
+  enable_cross_account_access = var.enable_cross_account_access || (var.enable_irsa && local.enable_asg)
+  cross_account_role_arn      = var.cross_account_role_arn != "" ? var.cross_account_role_arn : (var.enable_irsa && local.enable_asg && length(module.irsa_delegate_role) > 0 ? module.irsa_delegate_role[0].role_arn : "")
   cross_account_external_id   = var.cross_account_external_id
 
   # Docker/ECR Connector - disabled, ECR auth handled by AWS connector via IRSA
