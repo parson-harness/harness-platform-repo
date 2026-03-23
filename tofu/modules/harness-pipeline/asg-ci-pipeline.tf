@@ -23,6 +23,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
       tags:
         pipeline-type: ci
         build: packer
+        deployment: asg
       properties:
         ci:
           codebase:
