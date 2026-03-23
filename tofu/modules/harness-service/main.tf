@@ -96,8 +96,9 @@ EOT
 
   # ASG service YAML
   # Uses AmazonMachineImage artifact - Packer bakes the JAR into the AMI.
-  # image_tag = AMI name (e.g., harness-demo-app-owner-42) from CI Packer build.
-  # The startupScript is stored in git and rendered by Harness at deploy time.
+  # image_tag = full AMI name (e.g., harness-demo-app-owner-13) from CI Packer build.
+  # AsgLaunchTemplate + AsgConfiguration manifests are REQUIRED by Harness for all ASG strategies.
+  # startupScript provides the user-data that runs on each new instance at startup.
   asg_service_yaml = <<-EOT
 service:
   name: ${var.service_name}
@@ -108,6 +109,41 @@ ${local.tags_yaml}
   serviceDefinition:
     type: Asg
     spec:
+      manifests:
+        - manifest:
+            identifier: launchTemplate
+            type: AsgLaunchTemplate
+            spec:
+              store:
+                type: ${var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github"}
+                spec:
+                  gitFetchType: Branch
+                  branch: ${var.git_branch}
+                  paths:
+                    - ${var.asg_launch_template_path}
+%{if var.manifest_store_type == "HarnessCode"~}
+                  repoName: ${local.effective_repo_name}
+%{else~}
+                  connectorRef: ${var.git_connector_ref}
+                  repoName: ${local.effective_repo_name}
+%{endif~}
+        - manifest:
+            identifier: asgConfig
+            type: AsgConfiguration
+            spec:
+              store:
+                type: ${var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github"}
+                spec:
+                  gitFetchType: Branch
+                  branch: ${var.git_branch}
+                  paths:
+                    - ${var.asg_config_path}
+%{if var.manifest_store_type == "HarnessCode"~}
+                  repoName: ${local.effective_repo_name}
+%{else~}
+                  connectorRef: ${var.git_connector_ref}
+                  repoName: ${local.effective_repo_name}
+%{endif~}
       artifacts:
         primary:
           primaryArtifactRef: primary

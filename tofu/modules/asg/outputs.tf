@@ -57,6 +57,16 @@ output "instance_profile_arn" {
   value       = aws_iam_instance_profile.app.arn
 }
 
+output "instance_security_group_id" {
+  description = "ID of the EC2 instance security group"
+  value       = aws_security_group.instance.id
+}
+
+output "launch_template_name" {
+  description = "Name of the Launch Template"
+  value       = aws_launch_template.main.name
+}
+
 output "app_fqdn" {
   description = "Fully qualified domain name if Route53 record was created, else ALB DNS name"
   value       = var.create_dns_record ? "${var.owner}.asg.${var.route53_zone_name}" : aws_lb.main.dns_name

@@ -211,6 +211,18 @@ variable "asg_startup_script_path" {
   default     = "asg/user-data.sh"
 }
 
+variable "asg_launch_template_path" {
+  description = "Path to the EC2 Launch Template JSON manifest in the git repository (required by Harness ASG)"
+  type        = string
+  default     = "asg/harness/launch-template.json"
+}
+
+variable "asg_config_path" {
+  description = "Path to the ASG Configuration JSON manifest in the git repository (required by Harness ASG)"
+  type        = string
+  default     = "asg/harness/asg-config.json"
+}
+
 variable "asg_ami_owner_tag" {
   description = "Value of the 'Application' AMI tag used to filter Packer-built AMIs (e.g., harness-demo-app-owner)"
   type        = string

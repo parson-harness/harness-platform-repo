@@ -1,0 +1,27 @@
+{
+  "LaunchTemplateData": {
+    "InstanceType": "t3.small",
+    "IamInstanceProfile": {
+      "Name": "<+serviceVariables.instanceProfileName>"
+    },
+    "SecurityGroupIds": ["<+serviceVariables.securityGroupId>"],
+    "BlockDeviceMappings": [
+      {
+        "DeviceName": "/dev/xvda",
+        "Ebs": {
+          "VolumeSize": 20,
+          "VolumeType": "gp3",
+          "DeleteOnTermination": true
+        }
+      }
+    ],
+    "MetadataOptions": {
+      "HttpEndpoint": "enabled",
+      "HttpTokens": "optional",
+      "HttpPutResponseHopLimit": 2
+    },
+    "Monitoring": {
+      "Enabled": true
+    }
+  }
+}

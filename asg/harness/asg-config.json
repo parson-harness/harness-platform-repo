@@ -1,0 +1,17 @@
+{
+  "AutoScalingGroupName": "<+serviceVariables.baseAsgName>",
+  "MinSize": 1,
+  "MaxSize": 4,
+  "DesiredCapacity": 1,
+  "VPCZoneIdentifier": "<+serviceVariables.subnetIds>",
+  "HealthCheckType": "ELB",
+  "HealthCheckGracePeriod": 120,
+  "DefaultCooldown": 60,
+  "Tags": [
+    {
+      "Key": "harness-managed",
+      "Value": "true",
+      "PropagateAtLaunch": true
+    }
+  ]
+}

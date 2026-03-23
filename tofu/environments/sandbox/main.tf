@@ -558,6 +558,26 @@ module "harness_service_asg" {
       name  = "stageUrl"
       type  = "String"
       value = length(module.asg) > 0 ? module.asg[0].stage_url : ""
+    },
+    {
+      name  = "instanceProfileName"
+      type  = "String"
+      value = length(module.asg) > 0 ? module.asg[0].instance_profile_name : ""
+    },
+    {
+      name  = "securityGroupId"
+      type  = "String"
+      value = length(module.asg) > 0 ? module.asg[0].instance_security_group_id : ""
+    },
+    {
+      name  = "subnetIds"
+      type  = "String"
+      value = length(module.asg) > 0 ? join(",", module.asg[0].public_subnet_ids) : ""
+    },
+    {
+      name  = "baseAsgName"
+      type  = "String"
+      value = length(module.asg) > 0 ? module.asg[0].base_asg_name : ""
     }
   ]
 
