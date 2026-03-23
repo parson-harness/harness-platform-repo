@@ -46,7 +46,7 @@ variable "owner" {
 }
 
 locals {
-  ami_name = "${var.ami_name_prefix}-${var.owner}-${var.app_version}"
+  ami_name = "${var.ami_name_prefix}-${var.app_version}"
 }
 
 source "amazon-ebs" "demo_app" {

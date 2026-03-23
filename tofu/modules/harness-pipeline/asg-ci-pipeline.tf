@@ -187,13 +187,14 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                             echo "========================================"
                             echo "  AUTO-DEPLOYING (Rolling Strategy)"
                             echo "========================================"
-                            echo "Triggering ASG deployment with image tag: $IMAGE_TAG"
+                            AMI_NAME="harness-demo-app-${PACKER_OWNER}-${IMAGE_TAG}"
+                            echo "Triggering ASG deployment with AMI name: $AMI_NAME"
 
                             WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.asg_strategy_pipeline_id}&triggerIdentifier=asg_auto_deploy_webhook"
 
                             response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
                               -H "Content-Type: application/json" \
-                              -d "{\"image_tag\": \"$IMAGE_TAG\"}")
+                              -d "{\"image_tag\": \"$AMI_NAME\"}")
 
                             http_code=$(echo "$response" | tail -n1)
                             body=$(echo "$response" | sed '$d')
@@ -212,6 +213,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                           fi
                         envVariables:
                           IMAGE_TAG: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
+                          PACKER_OWNER: ${var.asg_packer_owner}
                           AUTO_DEPLOY: <+pipeline.variables.auto_deploy>
                           HARNESS_ENDPOINT: <+pipeline.variables.harness_endpoint>
                           ACCOUNT_ID: <+account.identifier>
