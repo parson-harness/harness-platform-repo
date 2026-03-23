@@ -52,6 +52,16 @@ output "cd_webhook_trigger_identifier" {
   value       = var.create_ci_completion_trigger && var.create_ci_pipeline && var.create_canary_pipeline ? harness_platform_triggers.cd_webhook_trigger[0].identifier : null
 }
 
+output "asg_ci_pipeline_id" {
+  description = "ID of the ASG CI build pipeline (Packer AMI)"
+  value       = var.create_asg_ci_pipeline ? harness_platform_pipeline.asg_ci_build[0].id : null
+}
+
+output "asg_ci_pipeline_identifier" {
+  description = "Identifier of the ASG CI build pipeline"
+  value       = var.create_asg_ci_pipeline ? harness_platform_pipeline.asg_ci_build[0].identifier : null
+}
+
 output "asg_strategy_pipeline_id" {
   description = "ID of the ASG strategy pipeline"
   value       = var.create_asg_strategy_pipeline ? harness_platform_pipeline.asg_strategy[0].id : null

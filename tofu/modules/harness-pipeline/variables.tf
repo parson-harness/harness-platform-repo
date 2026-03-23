@@ -280,7 +280,7 @@ variable "harness_api_key" {
 ################################################################################
 
 variable "asg_packer_build_enabled" {
-  description = "Add Packer AMI build step to CI pipeline for ASG deployments"
+  description = "Deprecated: Packer build now has its own pipeline (asg_ci_build). This variable is no longer used."
   type        = bool
   default     = false
 }
@@ -307,6 +307,34 @@ variable "asg_aws_secret_key_secret" {
   description = "Name of the Harness secret holding AWS_SECRET_ACCESS_KEY for Packer builds"
   type        = string
   default     = "aws_secret_access_key"
+}
+
+################################################################################
+# ASG CI Pipeline Variables
+################################################################################
+
+variable "create_asg_ci_pipeline" {
+  description = "Create ASG CI pipeline (Maven build + Packer AMI — separate from EKS Docker CI pipeline)"
+  type        = bool
+  default     = false
+}
+
+variable "asg_ci_pipeline_id" {
+  description = "Identifier for the ASG CI pipeline"
+  type        = string
+  default     = "asg_ci_build"
+}
+
+variable "asg_ci_pipeline_name" {
+  description = "Display name for the ASG CI pipeline"
+  type        = string
+  default     = "ASG CI Build"
+}
+
+variable "asg_ci_pipeline_description" {
+  description = "Description for the ASG CI pipeline"
+  type        = string
+  default     = "Builds Java JAR and bakes it into an AWS AMI using Packer"
 }
 
 ################################################################################

@@ -847,11 +847,14 @@ module "harness_pipelines_asg" {
   create_blue_green_pipeline = false
   create_strategy_pipeline   = false
 
-  # CI pipeline: create here when ASG-only; harness_pipelines_dev handles it for mixed targets
-  create_ci_pipeline      = (local.enable_asg && !(local.enable_eks || local.enable_ecs || local.enable_lambda)) ? var.create_ci_pipeline : false
-  ci_pipeline_id          = "${var.owner}_ci_build"
-  ci_pipeline_name        = "${title(var.owner)} CI Build"
-  ci_pipeline_description = "Builds JAR and Packer AMI, pushes to Harness Artifact Registry"
+  # EKS Docker CI pipeline is NOT created for ASG-only deployments
+  create_ci_pipeline = false
+
+  # ASG CI pipeline: Maven → Packer AMI build (separate from EKS Docker CI pipeline)
+  create_asg_ci_pipeline      = (local.enable_asg && !(local.enable_eks || local.enable_ecs || local.enable_lambda)) ? var.create_ci_pipeline : false
+  asg_ci_pipeline_id          = "${var.owner}_asg_ci_build"
+  asg_ci_pipeline_name        = "${title(var.owner)} ASG CI Build"
+  asg_ci_pipeline_description = "Builds Java JAR and bakes into AWS AMI using Packer"
   git_connector_ref       = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   git_repo_name           = var.github_repo_name
   har_registry_ref        = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""
@@ -864,7 +867,6 @@ module "harness_pipelines_asg" {
   harness_project_id      = local.resolved_project_id
   harness_api_key         = var.harness_api_key
 
-  asg_packer_build_enabled  = local.enable_asg
   asg_packer_owner          = var.owner
   asg_packer_region         = "us-east-1"
   asg_aws_access_key_secret = "aws_access_key_id"
