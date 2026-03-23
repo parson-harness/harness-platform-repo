@@ -237,52 +237,25 @@ resource "aws_iam_role_policy" "delegate_asg" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "ASGDeployment"
-        Effect = "Allow"
-        Action = ["autoscaling:*"]
+        Sid      = "ASGDeployment"
+        Effect   = "Allow"
+        Action   = ["autoscaling:*"]
         Resource = "*"
       },
       {
-        Sid    = "LaunchTemplateManagement"
-        Effect = "Allow"
-        Action = [
-          "ec2:CreateLaunchTemplate",
-          "ec2:CreateLaunchTemplateVersion",
-          "ec2:DescribeLaunchTemplates",
-          "ec2:DescribeLaunchTemplateVersions",
-          "ec2:DeleteLaunchTemplate",
-          "ec2:DeleteLaunchTemplateVersions",
-          "ec2:ModifyLaunchTemplate",
-          "ec2:DescribeInstances",
-          "ec2:DescribeInstanceTypes",
-          "ec2:DescribeImages",
-          "ec2:DescribeSecurityGroups",
-          "ec2:DescribeSubnets",
-          "ec2:DescribeVpcs",
-          "ec2:RunInstances",
-          "ec2:TerminateInstances",
-          "ec2:CreateTags"
-        ]
+        Sid      = "EC2Full"
+        Effect   = "Allow"
+        Action   = ["ec2:*"]
         Resource = "*"
       },
       {
-        Sid    = "ALBManagement"
-        Effect = "Allow"
-        Action = [
-          "elasticloadbalancing:DescribeLoadBalancers",
-          "elasticloadbalancing:DescribeListeners",
-          "elasticloadbalancing:DescribeRules",
-          "elasticloadbalancing:DescribeTargetGroups",
-          "elasticloadbalancing:DescribeTargetHealth",
-          "elasticloadbalancing:ModifyListener",
-          "elasticloadbalancing:ModifyRule",
-          "elasticloadbalancing:RegisterTargets",
-          "elasticloadbalancing:DeregisterTargets"
-        ]
+        Sid      = "ALBManagement"
+        Effect   = "Allow"
+        Action   = ["elasticloadbalancing:*"]
         Resource = "*"
       },
       {
-        Sid      = "ASGPassRole"
+        Sid      = "IAMPassRole"
         Effect   = "Allow"
         Action   = "iam:PassRole"
         Resource = "*"
