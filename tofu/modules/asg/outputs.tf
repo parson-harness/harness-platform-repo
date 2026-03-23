@@ -69,7 +69,7 @@ output "launch_template_name" {
 
 output "app_fqdn" {
   description = "Fully qualified domain name if Route53 record was created, else ALB DNS name"
-  value       = var.create_dns_record ? "${var.owner}.asg.${var.route53_zone_name}" : aws_lb.main.dns_name
+  value       = var.create_dns_record ? "${var.owner}-asg.${var.route53_zone_name}" : aws_lb.main.dns_name
 }
 
 output "vpc_id" {
@@ -84,10 +84,10 @@ output "public_subnet_ids" {
 
 output "app_url" {
   description = "Production app URL (HTTPS)"
-  value       = var.create_dns_record ? "https://${var.owner}.asg.${var.route53_zone_name}" : "https://${aws_lb.main.dns_name}"
+  value       = var.create_dns_record ? "https://${var.owner}-asg.${var.route53_zone_name}" : "https://${aws_lb.main.dns_name}"
 }
 
 output "stage_url" {
   description = "Stage app URL (HTTP/8080) - for B/G validation before swap"
-  value       = var.create_dns_record ? "http://${var.owner}.asg.${var.route53_zone_name}:8080" : "http://${aws_lb.main.dns_name}:8080"
+  value       = var.create_dns_record ? "http://${var.owner}-asg.${var.route53_zone_name}:8080" : "http://${aws_lb.main.dns_name}:8080"
 }

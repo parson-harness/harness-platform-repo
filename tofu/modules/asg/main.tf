@@ -370,7 +370,7 @@ data "aws_route53_zone" "harness_demo_dev" {
 resource "aws_route53_record" "asg_app" {
   count   = var.create_dns_record ? 1 : 0
   zone_id = data.aws_route53_zone.harness_demo_dev[0].zone_id
-  name    = "${var.owner}.asg.${var.route53_zone_name}"
+  name    = "${var.owner}-asg.${var.route53_zone_name}"
   type    = "CNAME"
   ttl     = 60
   records = [aws_lb.main.dns_name]

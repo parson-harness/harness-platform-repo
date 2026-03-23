@@ -571,7 +571,7 @@ variable "asg_canary_instance_count" {
 }
 
 variable "asg_create_dns_record" {
-  description = "Create Route53 CNAME <owner>.asg.harness-demo.dev pointing to the ASG ALB"
+  description = "Create Route53 CNAME <owner>-asg.<route53_zone_name> pointing to the ASG ALB (e.g. todd-asg.harness-demo.dev)"
   type        = bool
   default     = false
 }
