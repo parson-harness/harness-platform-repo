@@ -31,6 +31,9 @@ locals {
 resource "aws_iam_role" "delegate" {
   name = "${var.name_prefix}-delegate-irsa-role"
 
+  # Trust policy allows:
+  # 1. EKS OIDC provider to assume role via IRSA (for delegate pods)
+  # 2. Self-assume for Harness AWS connector cross-account access (required for AmazonMachineImage artifact type)
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -46,6 +49,13 @@ resource "aws_iam_role" "delegate" {
             "${local.oidc_provider_url}:sub" = "system:serviceaccount:${var.delegate_namespace}:${var.delegate_service_account}"
           }
         }
+      },
+      {
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${local.account_id}:role/${var.name_prefix}-delegate-irsa-role"
+        }
+        Action = "sts:AssumeRole"
       }
     ]
   })
