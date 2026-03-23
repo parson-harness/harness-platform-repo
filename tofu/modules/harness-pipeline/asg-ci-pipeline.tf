@@ -110,6 +110,10 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                           echo "Region:      $AWS_DEFAULT_REGION"
                           echo ""
 
+                          JAR_PATH=$$(pwd)/target/harness-demo-app-1.0-SNAPSHOT.jar
+                          echo "JAR path: $$JAR_PATH"
+                          ls -la "$$JAR_PATH"
+
                           cd asg/packer
                           packer init ami.pkr.hcl
                           packer build \
@@ -117,7 +121,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                             -var "owner=$$OWNER" \
                             -var "ami_name_prefix=harness-demo-app-$$OWNER" \
                             -var "aws_region=$$AWS_DEFAULT_REGION" \
-                            -var "jar_source=../../target/harness-demo-app-1.0-SNAPSHOT.jar" \
+                            -var "jar_source=$$JAR_PATH" \
                             ami.pkr.hcl
 
                           AMI_ID=$$(aws ec2 describe-images \
