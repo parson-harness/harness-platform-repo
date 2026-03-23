@@ -332,6 +332,35 @@ pipeline:
                           type: MarkAsSuccess
               - step:
                   type: Http
+                  name: Create asg_create_dns_record Variable
+                  identifier: create_asg_create_dns_record_var
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces/<+pipeline.variables.owner>_pov/variables
+                    method: POST
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    requestBody: |
+                      {
+                        "key": "asg_create_dns_record",
+                        "kind": "tf",
+                        "value": "<+pipeline.variables.asg_create_dns_record>",
+                        "value_type": "string"
+                      }
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201 || <+httpResponseCode> == 409
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Http
                   name: Update asg_create_dns_record Variable
                   identifier: update_asg_create_dns_record_var
                   spec:
