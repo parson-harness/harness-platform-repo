@@ -30,8 +30,9 @@ This directory contains Harness pipeline definitions for provisioning POV-in-a-b
 └─────────────────────────────────────────────────────────────────┘
                                ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│  OpenTofu: tofu/environments/sandbox                            │
-│  └── Creates: Delegate, Connectors, Services, Pipelines, etc.   │
+│  OpenTofu: tofu/stacks/eks                                      │
+│  └── Creates: Namespace, Connectors, Service, Environment, etc. │
+│  └── Uses EXISTING EKS cluster and delegate                     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -88,7 +89,7 @@ The `POV_Provisioner` template should already exist in the `sandbox/parson` proj
    - Git Connector: `parsongh`
    - Repository: `harness-demo-app`
    - Branch: `main`
-   - Path: `tofu/environments/sandbox`
+   - Path: `tofu/stacks/eks`
 
    **Provisioner:**
    - Type: `OpenTofu`
@@ -99,35 +100,32 @@ The `POV_Provisioner` template should already exist in the `sandbox/parson` proj
    - Plan/Apply: `pov_provisioning`
    - Destroy: `pov_destroy`
 
-### Step 2: Add Missing Variables to Template
+### Step 2: Add Variables to Template (EKS Stack)
 
 The template needs these tfvars (add via Template Studio → Variables tab):
 
-**Runtime Variables** (value references pipeline):
-| Variable | Value | Locked |
-|----------|-------|--------|
-| `owner` | `<+pipeline.variables.owner>` | No |
-| `harness_account_id` | `<+pipeline.variables.harness_account_id>` | No |
-| `harness_endpoint` | `<+pipeline.variables.harness_endpoint>` | No |
-| `harness_api_key` | `<+pipeline.variables.harness_api_key>` | No |
-| `harness_api_key_email` | `<+pipeline.variables.harness_api_key_email>` | No |
-| `harness_org_id` | `<+pipeline.variables.harness_org_id>` | No |
-| `harness_project_id` | `<+pipeline.variables.harness_project_id>` | No |
+**Required Runtime Variables:**
+| Variable | Description | Locked |
+|----------|-------------|--------|
+| `owner` | Owner name for resource naming | No |
+| `eks_cluster_name` | Existing EKS cluster name | No |
+| `harness_account_id` | Target Harness account ID | No |
+| `harness_api_key` | Harness API key | No |
+| `harness_api_key_email` | Email for HAR authentication | No |
+| `harness_org_id` | Target org ID | No |
+| `harness_project_id` | Target project ID | No |
 
-**Static Variables** (centrally managed defaults):
-| Variable | Value | Locked |
-|----------|-------|--------|
-| `enable_irsa` | `true` | Yes |
-| `create_connectors` | `true` | Yes |
-| `create_harness_service` | `true` | Yes |
-| `create_canary_pipeline` | `true` | No |
-| `create_blue_green_pipeline` | `true` | No |
-| `create_strategy_pipeline` | `true` | No |
-| `create_ci_pipeline` | `true` | No |
-| `artifact_registry_type` | `har` | Yes |
-| `create_dockerhub_upstream` | `false` | No |
-| `import_to_harness_code` | `false` | No |
-| `github_repo_name` | `parson-harness/harness-demo-app` | No |
+**Optional Variables:**
+| Variable | Default | Description | Locked |
+|----------|---------|-------------|--------|
+| `harness_endpoint` | `https://app.harness.io/gateway` | Harness platform URL | Yes |
+| `create_harness_org` | `false` | Create new org | No |
+| `create_harness_project` | `false` | Create new project | No |
+| `artifact_registry_type` | `har` | `har` or `ecr` | No |
+| `create_strategy_pipeline` | `true` | Create deploy pipeline | No |
+| `create_ci_pipeline` | `true` | Create CI pipeline | No |
+| `use_harness_code` | `false` | Use Harness Code repo | Yes |
+| `github_repo_name` | `parson-harness/harness-demo-app` | Source repo | No |
 
 ### Step 3: Import the IDP Pipeline
 
@@ -163,23 +161,24 @@ Import the IDP workflow from `.harness/workflows/pov_provisioner_workflow.yaml`:
    - **harness_project_id**: Target project ID
 4. Review the plan and approve
 
-## Pipeline Variables Reference
+## Pipeline Variables Reference (EKS Stack)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `owner` | Yes | - | Owner name for resource naming |
-| `harness_account_id` | Yes | - | Target Harness account |
-| `harness_endpoint` | Yes | `https://app.harness.io` | Harness platform URL |
-| `harness_api_key` | Yes | - | API key secret reference |
-| `harness_api_key_email` | Yes | - | Email for API key |
-| `deployment_targets` | Yes | `eks` | Comma-separated targets |
+| `eks_cluster_name` | Yes | `harness-eks-parson` | Existing EKS cluster name |
+| `harness_account_id` | Yes | Current account | Target Harness account |
+| `harness_endpoint` | Yes | `https://app.harness.io/gratis` | Harness platform URL |
+| `target_api_key` | Yes | Provisioner SAT | API key for target account |
+| `target_api_key_email` | Yes | Service account email | Email for HAR auth |
+| `harness_org_id` | Yes | Current org | Target org ID |
+| `harness_project_id` | Yes | Current project | Target project ID |
 | `create_harness_org` | No | `false` | Create new org |
-| `harness_org_id` | Yes | - | Existing org ID |
 | `create_harness_project` | No | `false` | Create new project |
-| `harness_project_id` | Yes | - | Existing project ID |
-| `create_eks_cluster` | No | `false` | Create new EKS cluster |
-| `existing_cluster_name` | No | - | Existing cluster name |
-| `github_token_ref` | No | `""` | GitHub PAT secret ref |
+| `artifact_registry_type` | No | `har` | `har` or `ecr` |
+| `create_strategy_pipeline` | No | `true` | Create deploy pipeline |
+| `create_ci_pipeline` | No | `true` | Create CI pipeline |
+| `acm_cert_arn` | No | - | ACM cert for HTTPS ingress |
 
 ## Future: IDP Workflow Integration
 
