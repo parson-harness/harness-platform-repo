@@ -30,14 +30,15 @@ resource "harness_platform_repo" "main" {
   description    = var.repo_description
 
   # Import from external SCM provider (GitHub, GitLab, etc.)
-  # Note: For GitHub, host is optional and defaults to github.com
+  # Note: For GitHub public repos, authentication is optional
   dynamic "source" {
     for_each = var.import_from_scm ? [1] : []
     content {
       type     = var.source_provider
       repo     = var.source_repo
-      username = var.source_username
-      password = var.source_password
+      # Only include auth if password is provided (for private repos)
+      username = var.source_password != "" ? var.source_username : null
+      password = var.source_password != "" ? var.source_password : null
     }
   }
 }
