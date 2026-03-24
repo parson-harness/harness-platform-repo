@@ -387,7 +387,8 @@ module "harness_pipelines" {
   create_asg_ci_pipeline       = false
 
   # Pipelines must be destroyed BEFORE service/environment to avoid reference errors
-  depends_on = [module.harness_service, module.harness_environment_dev]
+  # CI pipeline with Harness Code must wait for the repo to be created
+  depends_on = [module.harness_service, module.harness_environment_dev, module.harness_code_repo]
 }
 
 ################################################################################
