@@ -5,6 +5,9 @@
 ################################################################################
 
 locals {
+  # Validate that we have a valid codebase source
+  has_valid_codebase = var.use_harness_code || (var.git_connector_ref != "" && var.git_repo_name != "")
+
   # Codebase configuration differs between GitHub and Harness Code
   # GitHub requires connectorRef + repoName; Harness Code only needs repoName
   ci_codebase_github = chomp(<<-EOT
@@ -24,7 +27,10 @@ EOT
 EOT
   )
 
-  ci_codebase_spec = var.use_harness_code ? local.ci_codebase_harness_code : local.ci_codebase_github
+  # Use Harness Code if specified, otherwise use GitHub (with validation)
+  ci_codebase_spec = var.use_harness_code ? local.ci_codebase_harness_code : (
+    local.has_valid_codebase ? local.ci_codebase_github : local.ci_codebase_harness_code
+  )
 }
 
 resource "harness_platform_pipeline" "ci_build" {

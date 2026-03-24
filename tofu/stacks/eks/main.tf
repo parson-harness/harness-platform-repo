@@ -359,7 +359,8 @@ module "harness_pipelines" {
   strategy_pipeline_description = "Single pipeline with runtime strategy selection - Blue/Green, Canary, or Rolling"
 
   # CI Build pipeline
-  create_ci_pipeline      = var.create_ci_pipeline
+  # Only create CI pipeline if we have a valid codebase source (Harness Code OR GitHub connector)
+  create_ci_pipeline      = var.create_ci_pipeline && (var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != "")
   ci_pipeline_id          = "${var.owner}_ci_build"
   ci_pipeline_name        = "${title(var.owner)} CI Build"
   ci_pipeline_description = "Builds Docker image and pushes to Harness Artifact Registry"
@@ -385,6 +386,7 @@ module "harness_pipelines" {
   create_asg_strategy_pipeline = false
   create_asg_ci_pipeline       = false
 
+  # Pipelines must be destroyed BEFORE service/environment to avoid reference errors
   depends_on = [module.harness_service, module.harness_environment_dev]
 }
 
