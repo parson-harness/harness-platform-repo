@@ -127,13 +127,13 @@ module "harness_code_repo" {
   repo_description = "Demo app for ${var.owner} POV - imported from GitHub"
   default_branch   = "main"
 
-  # Import from GitHub
+  # Import from GitHub (auth only needed for private repos)
   import_from_scm = true
   source_provider = "github"
   source_host     = "https://github.com"
   source_repo     = var.github_repo_name
   source_username = "x-access-token"
-  source_password = var.github_pat
+  source_password = var.github_repo_is_public ? "" : var.github_pat
 
   depends_on = [module.harness_org_project]
 }
