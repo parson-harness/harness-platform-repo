@@ -28,6 +28,16 @@ pipeline:
       description: Harness platform endpoint
       required: true
       value: <+input>.default(https://app.harness.io/gratis)
+    - name: github_pat
+      type: Secret
+      description: GitHub PAT for importing repo to Harness Code (needs repo read access)
+      required: true
+      value: github_pat
+    - name: source_github_repo
+      type: String
+      description: Source GitHub repo to import (org/repo format)
+      required: true
+      value: <+input>.default(parson-harness/harness-demo-app)
     - name: provisioner_api_key
       type: Secret
       description: SAT for IACM workspace management in provisioner account (sandbox/parson)
@@ -148,7 +158,7 @@ pipeline:
                       {
                         "identifier": "<+pipeline.variables.owner>_pov",
                         "name": "<+pipeline.variables.owner> POV Workspace (EKS)",
-                        "description": "POV environment for <+pipeline.variables.owner> - EKS stack",
+                        "description": "POV environment for <+pipeline.variables.owner> - EKS stack (Terraform creates Harness Code repo)",
                         "provisioner": "opentofu",
                         "provisioner_version": "1.11.2",
                         "repository_connector": "parsongh",
@@ -244,13 +254,18 @@ pipeline:
                           },
                           "use_harness_code": {
                             "key": "use_harness_code",
-                            "value": "false",
+                            "value": "true",
                             "value_type": "string"
                           },
                           "github_repo_name": {
                             "key": "github_repo_name",
-                            "value": "parson-harness/harness-demo-app",
+                            "value": "<+pipeline.variables.source_github_repo>",
                             "value_type": "string"
+                          },
+                          "github_pat": {
+                            "key": "github_pat",
+                            "value": "<+pipeline.variables.github_pat>",
+                            "value_type": "secret"
                           }
                         },
                         "environment_variables": {}
@@ -553,8 +568,14 @@ pipeline:
                           echo "Owner: <+pipeline.variables.owner>"
                           echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
                           echo ""
+                          echo "Harness Code Repo: <+pipeline.variables.owner>-demo-app"
+                          echo "  (Terraform-managed, imported from: <+pipeline.variables.source_github_repo>)"
+                          echo ""
+                          echo "All resources are managed by Terraform state."
+                          echo "To destroy, run 'terraform destroy' or the POV Destroyer pipeline."
+                          echo ""
                           echo "The CI build will:"
-                          echo "  1. Clone the demo app repository"
+                          echo "  1. Clone from Harness Code repo"
                           echo "  2. Build the Docker image"
                           echo "  3. Push to Harness Artifact Registry (har-<+pipeline.variables.owner>)"
                           echo ""

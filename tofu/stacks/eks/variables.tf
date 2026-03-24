@@ -179,19 +179,26 @@ variable "dockerhub_password_secret_ref" {
 }
 
 ################################################################################
-# Service Configuration
+# Harness Code Repository Configuration
 ################################################################################
 
 variable "use_harness_code" {
-  description = "Use Harness Code Repository instead of GitHub"
+  description = "Use Harness Code Repository instead of GitHub. When true, creates a Harness Code repo and imports from GitHub."
   type        = bool
   default     = false
 }
 
 variable "github_repo_name" {
-  description = "GitHub repository name (org/repo format)"
+  description = "GitHub repository name (org/repo format) - used as source for Harness Code import or direct GitHub access"
   type        = string
   default     = "parson-harness/harness-demo-app"
+}
+
+variable "github_pat" {
+  description = "GitHub PAT for importing repo to Harness Code (needs repo read access). Only required when use_harness_code=true."
+  type        = string
+  default     = ""
+  sensitive   = true
 }
 
 variable "git_branch" {

@@ -1,0 +1,313 @@
+pipeline:
+  name: POV Bulk Update
+  identifier: pov_bulk_update
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: Triggers plan/apply on all POV workspaces linked to the POV_Provisioner template. Use this to push Terraform changes to all POVs at once.
+  tags:
+    pov: "true"
+    iacm: "true"
+    bulk: "true"
+  allowStageExecutions: false
+  variables:
+    - name: harness_account_id
+      type: String
+      description: Harness Account ID
+      required: true
+      value: <+input>.default(<+account.identifier>)
+    - name: harness_endpoint
+      type: String
+      description: Harness platform endpoint
+      required: true
+      value: <+input>.default(https://app.harness.io/gratis)
+    - name: provisioner_api_key
+      type: Secret
+      description: SAT for IACM workspace management
+      required: true
+      value: acct-automation-svc-acct
+    - name: template_id
+      type: String
+      description: IACM workspace template ID to find linked workspaces
+      required: true
+      value: <+input>.default(POV_Provisioner)
+    - name: action
+      type: String
+      description: Action to perform on each workspace
+      required: true
+      value: <+input>.default(apply).allowedValues(plan,apply)
+    - name: dry_run
+      type: String
+      description: If true, only list workspaces without triggering pipelines
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
+  stages:
+    - stage:
+        name: List Linked Workspaces
+        identifier: list_workspaces
+        description: Find all workspaces linked to the specified template
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: Http
+                  name: Get Workspaces from Template
+                  identifier: get_workspaces
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+org.identifier>/projects/<+project.identifier>/workspace/templates/<+pipeline.variables.template_id>/workspaces
+                    method: GET
+                    headers:
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    outputVariables:
+                      - name: workspaces_json
+                        value: <+httpResponseBody>
+                        type: String
+                      - name: workspace_count
+                        value: <+json.select("length(@)", httpResponseBody)>
+                        type: String
+                    assertion: <+httpResponseCode> == 200
+                  timeout: 1m
+              - step:
+                  type: ShellScript
+                  name: Parse Workspace List
+                  identifier: parse_workspaces
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Workspaces Linked to Template: <+pipeline.variables.template_id> ==="
+                          echo ""
+                          
+                          # Parse the JSON response to extract workspace identifiers
+                          WORKSPACES_JSON='<+execution.steps.get_workspaces.output.outputVariables.workspaces_json>'
+                          
+                          # Extract workspace identifiers using jq-like parsing
+                          # The response is an array of workspace objects with 'identifier' field
+                          WORKSPACE_IDS=$(echo "$WORKSPACES_JSON" | python3 -c "
+                          import sys, json
+                          try:
+                              data = json.load(sys.stdin)
+                              if isinstance(data, list):
+                                  ids = [w.get('identifier', '') for w in data if w.get('identifier')]
+                                  print(','.join(ids))
+                              else:
+                                  print('')
+                          except:
+                              print('')
+                          ")
+                          
+                          echo "Found workspaces: $WORKSPACE_IDS"
+                          echo ""
+                          
+                          # Count workspaces
+                          if [ -z "$WORKSPACE_IDS" ]; then
+                            WORKSPACE_COUNT=0
+                          else
+                            WORKSPACE_COUNT=$(echo "$WORKSPACE_IDS" | tr ',' '\n' | wc -l | tr -d ' ')
+                          fi
+                          
+                          echo "Total: $WORKSPACE_COUNT workspace(s)"
+                          
+                          # Export for next steps
+                          export WORKSPACE_IDS
+                          export WORKSPACE_COUNT
+                    environmentVariables: []
+                    outputVariables:
+                      - name: workspace_ids
+                        type: String
+                        value: WORKSPACE_IDS
+                      - name: workspace_count
+                        type: String
+                        value: WORKSPACE_COUNT
+                  timeout: 2m
+    - stage:
+        name: Update Workspaces
+        identifier: update_workspaces
+        description: Trigger plan/apply on each workspace
+        type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.dry_run> == "false"
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Trigger Updates
+                  identifier: trigger_updates
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          
+                          HARNESS_ENDPOINT="<+pipeline.variables.harness_endpoint>"
+                          ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
+                          ORG_ID="<+org.identifier>"
+                          PROJECT_ID="<+project.identifier>"
+                          API_KEY="<+pipeline.variables.provisioner_api_key>"
+                          ACTION="<+pipeline.variables.action>"
+                          
+                          # Get workspace list from previous stage
+                          WORKSPACES_JSON='<+stages.list_workspaces.spec.execution.steps.get_workspaces.output.outputVariables.workspaces_json>'
+                          
+                          echo "=== POV Bulk Update ==="
+                          echo "Action: $ACTION"
+                          echo ""
+                          
+                          # Parse workspace identifiers
+                          WORKSPACE_IDS=$(echo "$WORKSPACES_JSON" | python3 -c "
+                          import sys, json
+                          try:
+                              data = json.load(sys.stdin)
+                              if isinstance(data, list):
+                                  ids = [w.get('identifier', '') for w in data if w.get('identifier')]
+                                  for id in ids:
+                                      print(id)
+                          except:
+                              pass
+                          ")
+                          
+                          if [ -z "$WORKSPACE_IDS" ]; then
+                            echo "No workspaces found to update."
+                            exit 0
+                          fi
+                          
+                          # Determine pipeline to trigger based on action
+                          if [ "$ACTION" == "apply" ]; then
+                            PIPELINE_ID="pov_provisioning"
+                          else
+                            PIPELINE_ID="pov_provisioning"  # Same pipeline, just plan stage
+                          fi
+                          
+                          SUCCESS_COUNT=0
+                          FAIL_COUNT=0
+                          
+                          echo "$WORKSPACE_IDS" | while read WORKSPACE_ID; do
+                            if [ -z "$WORKSPACE_ID" ]; then
+                              continue
+                            fi
+                            
+                            echo "----------------------------------------"
+                            echo "Triggering $ACTION for workspace: $WORKSPACE_ID"
+                            
+                            # Trigger the provisioning pipeline for this workspace
+                            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+                              "$HARNESS_ENDPOINT/pipeline/api/pipeline/execute/$PIPELINE_ID?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&moduleType=IACM" \
+                              -H "Content-Type: application/json" \
+                              -H "x-api-key: $API_KEY" \
+                              -d "{
+                                \"workspaceId\": \"$WORKSPACE_ID\"
+                              }")
+                            
+                            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+                            BODY=$(echo "$RESPONSE" | head -n -1)
+                            
+                            if [ "$HTTP_CODE" == "200" ]; then
+                              EXECUTION_ID=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('data',{}).get('planExecution',{}).get('uuid',''))" 2>/dev/null || echo "")
+                              echo "✓ Triggered successfully (execution: $EXECUTION_ID)"
+                              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+                            else
+                              echo "✗ Failed to trigger (HTTP $HTTP_CODE)"
+                              echo "  Response: $BODY"
+                              FAIL_COUNT=$((FAIL_COUNT + 1))
+                            fi
+                          done
+                          
+                          echo ""
+                          echo "=== Summary ==="
+                          echo "Successful: $SUCCESS_COUNT"
+                          echo "Failed: $FAIL_COUNT"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 10m
+              - step:
+                  type: ShellScript
+                  name: Update Complete
+                  identifier: update_complete
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=============================================="
+                          echo "   POV Bulk Update Complete"
+                          echo "=============================================="
+                          echo ""
+                          echo "Template: <+pipeline.variables.template_id>"
+                          echo "Action: <+pipeline.variables.action>"
+                          echo ""
+                          echo "All linked workspaces have been triggered."
+                          echo "Check individual workspace executions for status."
+                          echo "=============================================="
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m
+    - stage:
+        name: Dry Run Summary
+        identifier: dry_run_summary
+        description: Show what would be updated (dry run mode)
+        type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.dry_run> == "true"
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Dry Run Report
+                  identifier: dry_run_report
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=============================================="
+                          echo "   POV Bulk Update - DRY RUN"
+                          echo "=============================================="
+                          echo ""
+                          echo "Template: <+pipeline.variables.template_id>"
+                          echo "Action: <+pipeline.variables.action>"
+                          echo ""
+                          echo "The following workspaces WOULD be updated:"
+                          echo ""
+                          
+                          WORKSPACES_JSON='<+stages.list_workspaces.spec.execution.steps.get_workspaces.output.outputVariables.workspaces_json>'
+                          
+                          echo "$WORKSPACES_JSON" | python3 -c "
+                          import sys, json
+                          try:
+                              data = json.load(sys.stdin)
+                              if isinstance(data, list):
+                                  for i, w in enumerate(data, 1):
+                                      name = w.get('name', 'Unknown')
+                                      identifier = w.get('identifier', 'Unknown')
+                                      print(f'  {i}. {name} ({identifier})')
+                                  print(f'\nTotal: {len(data)} workspace(s)')
+                              else:
+                                  print('  No workspaces found')
+                          except Exception as e:
+                              print(f'  Error parsing response: {e}')
+                          "
+                          
+                          echo ""
+                          echo "To actually trigger updates, run again with dry_run=false"
+                          echo "=============================================="
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m

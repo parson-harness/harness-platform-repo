@@ -36,9 +36,21 @@ harness_project_id     = "parson"
 # AWS
 aws_region = "us-east-1"
 
-# GitHub (if using GitHub connector)
+# Harness Code Repository (RECOMMENDED)
+# When use_harness_code=true, Terraform creates a Harness Code repo by importing from GitHub.
+# This gives each POV an isolated repo they can modify without affecting the source.
+use_harness_code  = true
+github_repo_name  = "parson-harness/harness-demo-app"  # Source repo to import
+github_pat        = "your-github-pat"                   # PAT with repo read access
+
+# GitHub Connector (alternative - when use_harness_code=false)
+# Option 1: Create a new GitHub connector (provide token secret ref)
 # github_token_ref = "account.github_pat"
 # github_username  = "your-github-username"
+#
+# Option 2: Use an existing GitHub connector
+# github_connector_ref = "account.parsongh"  # Account-level connector
+# github_connector_ref = "org.my_github"     # Org-level connector
 
 # Artifact Registry
 artifact_registry_type    = "har"

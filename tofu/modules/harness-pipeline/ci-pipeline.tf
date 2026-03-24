@@ -1,8 +1,31 @@
 ################################################################################
 # CI Pipeline for Demo App
 # Builds Docker image and pushes to Harness Artifact Registry (HAR)
-# Uses native cloneCodebase with Harness Code repository
+# Supports both GitHub (with connectorRef) and Harness Code (without connectorRef)
 ################################################################################
+
+locals {
+  # Codebase configuration differs between GitHub and Harness Code
+  # GitHub requires connectorRef + repoName; Harness Code only needs repoName
+  ci_codebase_github = chomp(<<-EOT
+          codebase:
+            connectorRef: ${var.git_connector_ref}
+            repoName: ${var.git_repo_name}
+            build: <+input>
+            sparseCheckout: []
+EOT
+  )
+
+  ci_codebase_harness_code = chomp(<<-EOT
+          codebase:
+            repoName: ${var.harness_code_repo_name}
+            build: <+input>
+            sparseCheckout: []
+EOT
+  )
+
+  ci_codebase_spec = var.use_harness_code ? local.ci_codebase_harness_code : local.ci_codebase_github
+}
 
 resource "harness_platform_pipeline" "ci_build" {
   count       = var.create_ci_pipeline ? 1 : 0
@@ -36,10 +59,7 @@ resource "harness_platform_pipeline" "ci_build" {
           value: <+input>.default(https://app.harness.io/gratis)
       properties:
         ci:
-          codebase:
-            repoName: ${var.harness_code_repo_name}
-            build: <+input>
-            sparseCheckout: []
+${local.ci_codebase_spec}
       stages:
         - stage:
             name: Build and Push
