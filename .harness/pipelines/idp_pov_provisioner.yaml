@@ -264,7 +264,7 @@ pipeline:
                           },
                           "github_pat": {
                             "key": "github_pat",
-                            "value": "<+secrets.getValue(\"github_pat\")>",
+                            "value": "account.github_pat",
                             "value_type": "secret"
                           }
                         },
