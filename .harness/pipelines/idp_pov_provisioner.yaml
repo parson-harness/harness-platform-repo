@@ -154,6 +154,12 @@ pipeline:
                       - name: workspace_id
                         value: <+json.select("identifier", httpResponseBody)>
                         type: String
+                      - name: response_body
+                        value: <+httpResponseBody>
+                        type: String
+                      - name: response_code
+                        value: <+httpResponseCode>
+                        type: String
                     requestBody: |
                       {
                         "identifier": "<+pipeline.variables.owner>_pov",
