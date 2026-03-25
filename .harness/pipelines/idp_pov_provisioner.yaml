@@ -272,6 +272,11 @@ pipeline:
                             "key": "github_pat",
                             "value": "github_pat",
                             "value_type": "secret"
+                          },
+                          "github_repo_is_public": {
+                            "key": "github_repo_is_public",
+                            "value": "true",
+                            "value_type": "string"
                           }
                         },
                         "environment_variables": {}
