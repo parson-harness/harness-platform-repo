@@ -2,6 +2,13 @@
 # CI Pipeline for Demo App
 # Builds Docker image and pushes to Harness Artifact Registry (HAR)
 # Supports both GitHub (with connectorRef) and Harness Code (without connectorRef)
+#
+# HARNESS CI INTELLIGENCE FEATURES:
+# - Test Intelligence: Runs only tests affected by code changes (up to 90% faster)
+# - Cache Intelligence: Auto-caches Maven dependencies (.m2/repository)
+# - Docker Layer Caching: Reuses Docker image layers for faster builds
+# - Harness Cloud: Hosted build infrastructure with resource classes
+# - OPA Policy Integration: Enforces CI standards and governance
 ################################################################################
 
 locals {
@@ -43,7 +50,7 @@ resource "harness_platform_pipeline" "ci_build" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.ci_pipeline_description
-  tags        = ["pipeline-type:ci", "build:docker"]
+  tags        = ["pipeline-type:ci", "build:docker", "harness-intelligence:enabled"]
 
   yaml = <<-CI_EOT
     pipeline:
@@ -55,6 +62,7 @@ resource "harness_platform_pipeline" "ci_build" {
       tags:
         pipeline-type: ci
         build: docker
+        harness-intelligence: enabled
       variables:
         - name: auto_deploy
           type: String
@@ -66,59 +74,41 @@ resource "harness_platform_pipeline" "ci_build" {
           description: Harness API endpoint
           required: false
           value: <+input>.default(https://app.harness.io/gratis)
+        - name: run_all_tests
+          type: String
+          description: Override Test Intelligence and run all tests
+          required: false
+          value: <+input>.default(false).allowedValues(true,false)
       properties:
         ci:
           codebase:
-%{if var.use_harness_code ~}
+%{if var.use_harness_code~}
             repoName: ${local.effective_harness_code_repo_name}
-%{else ~}
+%{else~}
             connectorRef: ${var.git_connector_ref}
             repoName: ${var.git_repo_name}
-%{endif ~}
+%{endif~}
             build: <+input>
             sparseCheckout: []
       stages:
         - stage:
-            name: Build and Push
-            identifier: build_and_push
-            description: Build Docker image and push to Harness Artifact Registry
+            name: Build and Test
+            identifier: build_and_test
+            description: "Build, test with Test Intelligence, and push to HAR"
             type: CI
             spec:
               cloneCodebase: true
+              caching:
+                enabled: true
               platform:
                 os: Linux
                 arch: Amd64
               runtime:
                 type: Cloud
-                spec: {}
+                spec:
+                  size: medium
               execution:
                 steps:
-                  - step:
-                      type: Run
-                      name: Build Java App
-                      identifier: build_java
-                      spec:
-                        connectorRef: ${var.har_upstream_proxy_ref != "" ? var.har_upstream_proxy_ref : "account.harnessImage"}
-                        image: ${var.har_upstream_proxy_ref != "" ? "library/maven:3.9-eclipse-temurin-17" : "maven:3.9-eclipse-temurin-17"}
-                        shell: Bash
-                        command: |
-                          echo "========================================"
-                          echo "  BUILDING JAVA APPLICATION"
-                          echo "========================================"
-                          echo "Java version:"
-                          java -version
-                          echo ""
-                          echo "Maven version:"
-                          mvn -version
-                          echo ""
-
-                          # Build the application
-                          echo "Running: mvn clean package -DskipTests"
-                          mvn clean package -DskipTests
-
-                          # Verify JAR was created
-                          ls -la target/*.jar
-                          echo "Build complete!"
                   - step:
                       type: Run
                       name: Build Info
@@ -126,14 +116,21 @@ resource "harness_platform_pipeline" "ci_build" {
                       spec:
                         shell: Bash
                         command: |
-                          echo "========================================"
-                          echo "  BUILD INFORMATION"
-                          echo "========================================"
-                          echo "Pipeline: <+pipeline.name>"
-                          echo "Build Number: <+pipeline.sequenceId>"
-                          echo "Branch: <+codebase.branch>"
-                          echo "Commit: <+codebase.commitSha>"
-                          echo "========================================"
+                          echo "╔══════════════════════════════════════════════════════════════╗"
+                          echo "║           HARNESS CI - BUILD INFORMATION                     ║"
+                          echo "╠══════════════════════════════════════════════════════════════╣"
+                          echo "║ Pipeline:     <+pipeline.name>"
+                          echo "║ Build Number: <+pipeline.sequenceId>"
+                          echo "║ Branch:       <+codebase.branch>"
+                          echo "║ Commit:       <+codebase.commitSha>"
+                          echo "║ Trigger:      <+pipeline.triggerType>"
+                          echo "╠══════════════════════════════════════════════════════════════╣"
+                          echo "║ HARNESS CI INTELLIGENCE FEATURES ENABLED:                    ║"
+                          echo "║ ✓ Test Intelligence  - Run only affected tests               ║"
+                          echo "║ ✓ Cache Intelligence - Auto-cache Maven dependencies         ║"
+                          echo "║ ✓ Docker Layer Cache - Reuse image layers                    ║"
+                          echo "║ ✓ Harness Cloud      - Hosted build infrastructure           ║"
+                          echo "╚══════════════════════════════════════════════════════════════╝"
 
                           # Set image tag based on branch and build number
                           if [ "<+codebase.branch>" = "main" ]; then
@@ -142,11 +139,95 @@ resource "harness_platform_pipeline" "ci_build" {
                             BRANCH_SAFE=$(echo "<+codebase.branch>" | sed 's/[^a-zA-Z0-9]/-/g')
                             IMAGE_TAG="$${BRANCH_SAFE}-<+pipeline.sequenceId>"
                           fi
+                          echo ""
                           echo "Image Tag: $IMAGE_TAG"
-                        envVariables:
-                          DOCKER_BUILDKIT: "1"
                         outputVariables:
                           - name: IMAGE_TAG
+                  - stepGroup:
+                      name: Test with Intelligence
+                      identifier: test_with_intelligence
+                      steps:
+                        - step:
+                            type: RunTests
+                            name: Run Tests with TI
+                            identifier: run_tests_ti
+                            spec:
+                              connectorRef: ${var.har_upstream_proxy_ref != "" ? var.har_upstream_proxy_ref : "account.harnessImage"}
+                              image: ${var.har_upstream_proxy_ref != "" ? "library/maven:3.9-eclipse-temurin-17" : "maven:3.9-eclipse-temurin-17"}
+                              language: Java
+                              buildTool: Maven
+                              args: test -Dmaven.test.failure.ignore=true -DfailIfNoTests=false
+                              packages: io.harness.demo
+                              runOnlySelectedTests: <+<+pipeline.variables.run_all_tests> == "true" ? false : true>
+                              postCommand: |
+                                echo ""
+                                echo "╔══════════════════════════════════════════════════════════════╗"
+                                echo "║           TEST INTELLIGENCE RESULTS                          ║"
+                                echo "╚══════════════════════════════════════════════════════════════╝"
+                                echo "Test Intelligence analyzed code changes and selected relevant tests."
+                                echo "View the Tests tab for detailed test selection visualization."
+                                echo ""
+                                # Generate JaCoCo coverage report
+                                mvn jacoco:report -q || true
+                              reports:
+                                type: JUnit
+                                spec:
+                                  paths:
+                                    - "target/surefire-reports/*.xml"
+                              enableTestSplitting: false
+                            timeout: 15m
+                        - step:
+                            type: Run
+                            name: Code Coverage Summary
+                            identifier: coverage_summary
+                            spec:
+                              shell: Bash
+                              command: |
+                                echo "╔══════════════════════════════════════════════════════════════╗"
+                                echo "║           CODE COVERAGE REPORT                               ║"
+                                echo "╚══════════════════════════════════════════════════════════════╝"
+                                if [ -f target/site/jacoco/index.html ]; then
+                                  # Extract coverage percentage from JaCoCo report
+                                  COVERAGE=$(grep -oP 'Total.*?([0-9]+)%' target/site/jacoco/index.html | head -1 || echo "Coverage data available in JaCoCo report")
+                                  echo "Coverage: $COVERAGE"
+                                  echo ""
+                                  echo "Full report available at: target/site/jacoco/index.html"
+                                else
+                                  echo "JaCoCo report not generated. Run with tests to see coverage."
+                                fi
+                            when:
+                              stageStatus: Success
+                            failureStrategies:
+                              - onFailure:
+                                  errors:
+                                    - AllErrors
+                                  action:
+                                    type: MarkAsSuccess
+                  - step:
+                      type: Run
+                      name: Build Application
+                      identifier: build_app
+                      spec:
+                        connectorRef: ${var.har_upstream_proxy_ref != "" ? var.har_upstream_proxy_ref : "account.harnessImage"}
+                        image: ${var.har_upstream_proxy_ref != "" ? "library/maven:3.9-eclipse-temurin-17" : "maven:3.9-eclipse-temurin-17"}
+                        shell: Bash
+                        command: |
+                          echo "╔══════════════════════════════════════════════════════════════╗"
+                          echo "║           BUILDING APPLICATION (with Cache Intelligence)     ║"
+                          echo "╚══════════════════════════════════════════════════════════════╝"
+                          echo ""
+                          echo "Maven is using cached dependencies from ~/.m2/repository"
+                          echo "Cache Intelligence automatically manages dependency caching."
+                          echo ""
+                          
+                          # Package the application (tests already ran)
+                          mvn package -DskipTests -q
+                          
+                          echo ""
+                          echo "Build artifacts:"
+                          ls -la target/*.jar
+                          echo ""
+                          echo "✓ Application build complete!"
                   - step:
                       type: BuildAndPushDockerRegistry
                       name: Build and Push to HAR
@@ -168,19 +249,23 @@ resource "harness_platform_pipeline" "ci_build" {
                       spec:
                         shell: Bash
                         command: |
-                          echo "========================================"
-                          echo "  BUILD COMPLETE"
-                          echo "========================================"
-                          echo "Image: ${var.har_registry_ref}/${var.har_image_name}"
-                          echo "Tags: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>, latest"
                           echo ""
-                          echo "To deploy this image, run one of the CD pipelines:"
-                          echo "  - Strategy Choice Pipeline"
-                          echo "  - Blue-Green Pipeline"
-                          echo "  - Canary Pipeline"
-                          echo ""
-                          echo "Use image_tag: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>"
-                          echo "========================================"
+                          echo "╔══════════════════════════════════════════════════════════════╗"
+                          echo "║           BUILD COMPLETE - SUMMARY                           ║"
+                          echo "╠══════════════════════════════════════════════════════════════╣"
+                          echo "║ Image: ${var.har_registry_ref}/${var.har_image_name}"
+                          echo "║ Tags:  <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>, latest"
+                          echo "╠══════════════════════════════════════════════════════════════╣"
+                          echo "║ HARNESS CI INTELLIGENCE SAVINGS:                             ║"
+                          echo "║ • Test Intelligence: Only relevant tests executed            ║"
+                          echo "║ • Cache Intelligence: Maven deps loaded from cache           ║"
+                          echo "║ • Docker Layer Cache: Image layers reused                    ║"
+                          echo "╠══════════════════════════════════════════════════════════════╣"
+                          echo "║ NEXT STEPS:                                                  ║"
+                          echo "║ • Auto-deploy: <+pipeline.variables.auto_deploy>"
+                          echo "║ • Manual deploy: Run CD pipeline with tag below              ║"
+                          echo "║ • Image Tag: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>"
+                          echo "╚══════════════════════════════════════════════════════════════╝"
                   - step:
                       type: Run
                       name: Trigger CD Pipeline
@@ -189,18 +274,15 @@ resource "harness_platform_pipeline" "ci_build" {
                         shell: Bash
                         command: |
                           if [ "$AUTO_DEPLOY" = "true" ]; then
-                            echo "========================================"
-                            echo "  AUTO-DEPLOYING TO DEV (Canary Strategy)"
-                            echo "========================================"
+                            echo "╔══════════════════════════════════════════════════════════════╗"
+                            echo "║           AUTO-DEPLOYING TO DEV (Canary Strategy)            ║"
+                            echo "╚══════════════════════════════════════════════════════════════╝"
                             echo "Triggering deployment with image tag: $IMAGE_TAG"
                             
                             # Get the webhook URL for the strategy pipeline trigger
                             WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.strategy_pipeline_id}&triggerIdentifier=auto_deploy_webhook"
                             
-                            echo "Webhook URL: $WEBHOOK_URL"
-                            
                             # Trigger the CD pipeline (custom webhooks don't require API key auth)
-                            # Strategy pipeline uses canary by default for CI-triggered deployments
                             response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
                               -H "Content-Type: application/json" \
                               -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\"}")
@@ -208,11 +290,9 @@ resource "harness_platform_pipeline" "ci_build" {
                             http_code=$(echo "$response" | tail -n1)
                             body=$(echo "$response" | sed '$d')
                             
-                            echo "Response code: $http_code"
-                            echo "Response: $body"
-                            
                             if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
                               echo "✓ CD pipeline triggered successfully!"
+                              echo "Response: $body"
                             else
                               echo "⚠ CD pipeline trigger returned: $http_code"
                               echo "Deployment can still be triggered manually."

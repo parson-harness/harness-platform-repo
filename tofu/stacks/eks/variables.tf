@@ -284,3 +284,31 @@ variable "route53_hosted_zone_id" {
   type        = string
   default     = ""
 }
+
+################################################################################
+# OPA Policy Configuration
+################################################################################
+
+variable "create_opa_policies" {
+  description = "Create OPA policies for CI/CD governance"
+  type        = bool
+  default     = true
+}
+
+variable "enforce_ci_policies" {
+  description = "Enable enforcement of CI pipeline policies"
+  type        = bool
+  default     = true
+}
+
+variable "enforce_security_policies" {
+  description = "Enable enforcement of security policies"
+  type        = bool
+  default     = true
+}
+
+variable "enforce_quality_policies" {
+  description = "Enable enforcement of quality gate policies"
+  type        = bool
+  default     = true
+}

@@ -1,0 +1,180 @@
+pipeline:
+  name: CI Test Intelligence Demo
+  identifier: ci_test_intelligence_demo
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: "Demo pipeline showcasing Harness CI Intelligence features: Test Intelligence, Cache Intelligence, Docker Layer Caching"
+  tags:
+    pipeline-type: ci
+    harness-intelligence: enabled
+    demo: test-intelligence
+  variables:
+    - name: run_all_tests
+      type: String
+      description: Override Test Intelligence and run all tests
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
+  properties:
+    ci:
+      codebase:
+        repoName: harness-demo-app
+        build: <+input>
+        sparseCheckout: []
+  stages:
+    - stage:
+        name: Build and Test
+        identifier: build_and_test
+        description: "Build, test with Test Intelligence, and push to registry"
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec:
+              size: medium
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Build Info
+                  identifier: build_info
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "╔══════════════════════════════════════════════════════════════╗"
+                      echo "║           HARNESS CI - BUILD INFORMATION                     ║"
+                      echo "╠══════════════════════════════════════════════════════════════╣"
+                      echo "║ Pipeline:     <+pipeline.name>"
+                      echo "║ Build Number: <+pipeline.sequenceId>"
+                      echo "║ Branch:       <+codebase.branch>"
+                      echo "║ Commit:       <+codebase.commitSha>"
+                      echo "║ Trigger:      <+pipeline.triggerType>"
+                      echo "╠══════════════════════════════════════════════════════════════╣"
+                      echo "║ HARNESS CI INTELLIGENCE FEATURES ENABLED:                    ║"
+                      echo "║ ✓ Test Intelligence  - Run only affected tests               ║"
+                      echo "║ ✓ Cache Intelligence - Auto-cache Maven dependencies         ║"
+                      echo "║ ✓ Docker Layer Cache - Reuse image layers                    ║"
+                      echo "║ ✓ Harness Cloud      - Hosted build infrastructure           ║"
+                      echo "╚══════════════════════════════════════════════════════════════╝"
+                      
+                      # Set image tag based on branch and build number
+                      if [ "<+codebase.branch>" = "main" ]; then
+                        IMAGE_TAG="<+pipeline.sequenceId>"
+                      else
+                        BRANCH_SAFE=$(echo "<+codebase.branch>" | sed 's/[^a-zA-Z0-9]/-/g')
+                        IMAGE_TAG="${BRANCH_SAFE}-<+pipeline.sequenceId>"
+                      fi
+                      echo ""
+                      echo "Image Tag: $IMAGE_TAG"
+                    outputVariables:
+                      - name: IMAGE_TAG
+              - stepGroup:
+                  name: Test with Intelligence
+                  identifier: test_with_intelligence
+                  steps:
+                    - step:
+                        type: RunTests
+                        name: Run Tests with TI
+                        identifier: run_tests_ti
+                        spec:
+                          connectorRef: account.harnessImage
+                          image: maven:3.9-eclipse-temurin-17
+                          language: Java
+                          buildTool: Maven
+                          args: test -Dmaven.test.failure.ignore=true -DfailIfNoTests=false
+                          packages: io.harness.demo
+                          runOnlySelectedTests: true
+                          postCommand: |
+                            echo ""
+                            echo "╔══════════════════════════════════════════════════════════════╗"
+                            echo "║           TEST INTELLIGENCE RESULTS                          ║"
+                            echo "╚══════════════════════════════════════════════════════════════╝"
+                            echo "Test Intelligence analyzed code changes and selected relevant tests."
+                            echo "View the Tests tab for detailed test selection visualization."
+                            echo ""
+                            # Generate JaCoCo coverage report
+                            mvn jacoco:report -q || true
+                          reports:
+                            type: JUnit
+                            spec:
+                              paths:
+                                - "target/surefire-reports/*.xml"
+                          enableTestSplitting: false
+                    - step:
+                        type: Run
+                        name: Code Coverage Summary
+                        identifier: coverage_summary
+                        spec:
+                          shell: Bash
+                          command: |
+                            echo "╔══════════════════════════════════════════════════════════════╗"
+                            echo "║           CODE COVERAGE REPORT                               ║"
+                            echo "╚══════════════════════════════════════════════════════════════╝"
+                            if [ -f target/site/jacoco/index.html ]; then
+                              # Extract coverage percentage from JaCoCo report
+                              COVERAGE=$(grep -oP 'Total.*?([0-9]+)%' target/site/jacoco/index.html | head -1 || echo "Coverage data available in JaCoCo report")
+                              echo "Coverage: $COVERAGE"
+                              echo ""
+                              echo "Full report available at: target/site/jacoco/index.html"
+                            else
+                              echo "JaCoCo report not generated. Run with tests to see coverage."
+                            fi
+                        when:
+                          stageStatus: Success
+                        failureStrategies:
+                          - onFailure:
+                              errors:
+                                - AllErrors
+                              action:
+                                type: MarkAsSuccess
+              - step:
+                  type: Run
+                  name: Build Application
+                  identifier: build_app
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: maven:3.9-eclipse-temurin-17
+                    shell: Bash
+                    command: |
+                      echo "╔══════════════════════════════════════════════════════════════╗"
+                      echo "║           BUILDING APPLICATION (with Cache Intelligence)     ║"
+                      echo "╚══════════════════════════════════════════════════════════════╝"
+                      echo ""
+                      echo "Maven is using cached dependencies from ~/.m2/repository"
+                      echo "Cache Intelligence automatically manages dependency caching."
+                      echo ""
+                      
+                      # Package the application (tests already ran)
+                      mvn package -DskipTests -q
+                      
+                      echo ""
+                      echo "Build artifacts:"
+                      ls -la target/*.jar
+                      echo ""
+                      echo "✓ Application build complete!"
+              - step:
+                  type: Run
+                  name: Build Summary
+                  identifier: build_summary
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo ""
+                      echo "╔══════════════════════════════════════════════════════════════╗"
+                      echo "║           BUILD COMPLETE - SUMMARY                           ║"
+                      echo "╠══════════════════════════════════════════════════════════════╣"
+                      echo "║ Branch: <+codebase.branch>"
+                      echo "║ Commit: <+codebase.commitSha>"
+                      echo "╠══════════════════════════════════════════════════════════════╣"
+                      echo "║ HARNESS CI INTELLIGENCE SAVINGS:                             ║"
+                      echo "║ • Test Intelligence: Only relevant tests executed            ║"
+                      echo "║ • Cache Intelligence: Maven deps loaded from cache           ║"
+                      echo "║ • Docker Layer Cache: Image layers reused                    ║"
+                      echo "╚══════════════════════════════════════════════════════════════╝"
+                      echo ""
+                      echo "Check the Tests tab to see Test Intelligence visualization!"

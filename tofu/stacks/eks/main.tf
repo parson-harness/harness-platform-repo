@@ -291,12 +291,12 @@ module "harness_service" {
   deployment_type = "Kubernetes"
 
   # Manifest configuration
-  manifest_type       = "K8sManifest"
-  manifest_store_type = var.use_harness_code ? "HarnessCode" : "Github"
-  git_connector_ref   = var.use_harness_code ? "" : "${var.owner}_github_reference_architecture"
-  git_repo_name       = var.use_harness_code ? "" : var.github_repo_name
-  git_branch          = var.git_branch
-  manifest_paths      = var.manifest_paths
+  manifest_type          = "K8sManifest"
+  manifest_store_type    = var.use_harness_code ? "HarnessCode" : "Github"
+  git_connector_ref      = var.use_harness_code ? "" : "${var.owner}_github_reference_architecture"
+  git_repo_name          = var.use_harness_code ? "" : var.github_repo_name
+  git_branch             = var.git_branch
+  manifest_paths         = var.manifest_paths
   harness_code_repo_name = var.use_harness_code ? "${var.owner}-demo-app" : ""
 
   # Artifact configuration - HAR
@@ -347,7 +347,7 @@ module "harness_environment_dev" {
   environment_type        = "PreProduction"
 
   create_k8s_infrastructure = true
-  create_k8s_namespace      = false  # Already created above
+  create_k8s_namespace      = false # Already created above
   k8s_infra_id              = "${var.owner}_k8s_dev"
   k8s_infra_name            = "${title(var.owner)} K8s Dev"
   k8s_connector_ref         = "${var.owner}_k8s_reference_architecture"
@@ -401,14 +401,44 @@ module "harness_pipelines" {
   pipeline_tags     = ["tofu-managed", var.owner, "eks"]
 
   # Disable other pipeline types
-  create_canary_pipeline     = false
-  create_blue_green_pipeline = false
+  create_canary_pipeline       = false
+  create_blue_green_pipeline   = false
   create_asg_strategy_pipeline = false
   create_asg_ci_pipeline       = false
 
   # Pipelines must be destroyed BEFORE service/environment to avoid reference errors
   # CI pipeline with Harness Code must wait for the repo to be created
   depends_on = [module.harness_service, module.harness_environment_dev, module.harness_code_repo]
+}
+
+################################################################################
+# OPA Policies - CI/CD Governance
+# Creates policies for CI standards, security, and quality gates
+################################################################################
+
+module "opa_policies" {
+  source = "../../modules/harness-opa-policies"
+  count  = var.create_opa_policies ? 1 : 0
+
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
+
+  # Policy creation flags
+  create_ci_policies       = true
+  create_security_policies = true
+  create_quality_policies  = true
+
+  # Policy set creation flags
+  create_ci_policy_set       = true
+  create_security_policy_set = true
+  create_quality_policy_set  = true
+
+  # Enforcement flags
+  enforce_ci_policies       = var.enforce_ci_policies
+  enforce_security_policies = var.enforce_security_policies
+  enforce_quality_policies  = var.enforce_quality_policies
+
+  depends_on = [module.harness_org_project]
 }
 
 ################################################################################
@@ -493,6 +523,11 @@ output "alb_dns_name" {
 output "dns_record" {
   description = "Wildcard DNS record managed by this stack"
   value       = var.manage_dns ? "*.${var.dns_domain} -> ${data.aws_lb.ingress_alb[0].dns_name}" : "DNS management disabled"
+}
+
+output "opa_policy_sets" {
+  description = "OPA policy sets created for CI/CD governance"
+  value       = var.create_opa_policies ? module.opa_policies[0].policy_set_ids : null
 }
 
 ################################################################################

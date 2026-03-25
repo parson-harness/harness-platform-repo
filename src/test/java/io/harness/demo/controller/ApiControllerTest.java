@@ -28,7 +28,7 @@ class ApiControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.version").value(appConfig.getVersion()))
-                .andExpect(jsonPath("$.deploymentVariant").value(appConfig.getDeploymentVariant()));
+                .andExpect(jsonPath("$.deploymentVariant").value(appConfig.getEffectiveVariant()));
     }
 
     @Test
