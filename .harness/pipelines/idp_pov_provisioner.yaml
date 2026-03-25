@@ -286,6 +286,31 @@ pipeline:
                   when:
                     stageStatus: Success
                     condition: <+execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "404"
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsFailure
+              - step:
+                  type: ShellScript
+                  name: Log Workspace Creation Error
+                  identifier: log_workspace_error
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "Workspace creation response code: <+execution.steps.create_iacm_workspace.output.outputVariables.response_code>"
+                          echo "Workspace creation response body: <+execution.steps.create_iacm_workspace.output.outputVariables.response_body>"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m
+                  when:
+                    stageStatus: Failure
+                    condition: <+execution.steps.create_iacm_workspace.output.outputVariables.response_code> != "200" && <+execution.steps.create_iacm_workspace.output.outputVariables.response_code> != "201"
               - step:
                   type: Http
                   name: Link Workspace to Template
