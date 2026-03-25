@@ -107,7 +107,7 @@ pipeline:
       type: String
       description: ACM certificate ARN for HTTPS ingress
       required: false
-      value: <+input>.default(arn:aws:acm:us-east-1:759984737373:certificate/9c90d4f8-208d-46cd-bdc1-bc13f1759c05)
+      value: "<+input>.default(arn:aws:acm:us-east-1:759984737373:certificate/9c90d4f8-208d-46cd-bdc1-bc13f1759c05)"
   stages:
     - stage:
         name: Create Workspace from Template
