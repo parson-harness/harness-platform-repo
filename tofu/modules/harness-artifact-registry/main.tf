@@ -56,17 +56,24 @@ resource "terraform_data" "cleanup_existing_registry" {
 
   provisioner "local-exec" {
     command = <<-EOT
-      echo "Checking for existing HAR registry: ${var.registry_id}"
+      # Delete main registry first (it depends on upstream)
+      echo "Cleaning up existing HAR registry: ${var.registry_id}"
       REGISTRY_REF="${var.account_id}/${var.org_id}/${var.project_id}/${var.registry_id}/+"
-      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "${var.harness_endpoint}/har/api/v1/v1/registry/$REGISTRY_REF" \
+      HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X DELETE "${var.harness_endpoint}/har/api/v1/v1/registry/$REGISTRY_REF" \
         -H "x-api-key: ${var.harness_api_key}" \
         -H "Content-Type: application/json" 2>/dev/null)
-      HTTP_CODE=$(echo "$RESP" | tail -n1)
-      case "$HTTP_CODE" in
-        200|204) echo "  Deleted existing registry" ;;
-        404) echo "  Registry does not exist (OK)" ;;
-        *) echo "  Warning: cleanup returned $HTTP_CODE (continuing anyway)" ;;
-      esac
+      echo "  ${var.registry_id}: $HTTP_CODE"
+      
+      # Delete upstream proxy if it exists
+      echo "Cleaning up existing upstream proxy: ${var.dockerhub_upstream_id}"
+      UPSTREAM_REF="${var.account_id}/${var.org_id}/${var.project_id}/${var.dockerhub_upstream_id}/+"
+      HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X DELETE "${var.harness_endpoint}/har/api/v1/v1/registry/$UPSTREAM_REF" \
+        -H "x-api-key: ${var.harness_api_key}" \
+        -H "Content-Type: application/json" 2>/dev/null)
+      echo "  ${var.dockerhub_upstream_id}: $HTTP_CODE"
+      
+      # Small delay to ensure deletion is processed
+      sleep 2
       exit 0
     EOT
   }
