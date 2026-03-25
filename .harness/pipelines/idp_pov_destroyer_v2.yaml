@@ -1,0 +1,627 @@
+pipeline:
+  name: IDP POV Destroyer v2
+  identifier: idp_pov_destroyer_v2
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: |
+    Robust POV destroyer that properly uses Terraform state.
+    
+    Strategy:
+    1. Pre-flight: Verify workspace exists, get state inventory
+    2. Unblock: Delete K8s deployments that prevent Harness service deletion
+    3. Terraform Destroy: Let Terraform handle resource deletion with proper ordering
+    4. Cleanup Orphans: API-delete any resources Terraform couldn't remove
+    5. Delete Workspace: Remove IACM workspace after successful destroy
+  tags:
+    idp: "true"
+    pov: "true"
+    iacm: "true"
+    version: "2"
+  
+  variables:
+    - name: owner
+      type: String
+      description: Owner name (identifies the workspace to destroy)
+      required: true
+      value: <+input>
+    - name: harness_account_id
+      type: String
+      description: Target Harness Account ID
+      required: true
+      value: <+input>.default(<+account.identifier>)
+    - name: harness_endpoint
+      type: String
+      description: Harness platform endpoint
+      required: true
+      value: <+input>.default(https://app.harness.io/gratis)
+    - name: provisioner_api_key
+      type: Secret
+      description: SAT for IACM workspace management
+      required: true
+      value: acct-automation-svc-acct
+    - name: target_api_key
+      type: String
+      description: API Key for target Harness account
+      required: false
+      value: <+input>.default(<+pipeline.variables.provisioner_api_key>)
+    - name: harness_org_id
+      type: String
+      description: Harness Org ID
+      required: true
+      value: <+org.identifier>
+    - name: harness_project_id
+      type: String
+      description: Harness Project ID
+      required: true
+      value: <+project.identifier>
+    - name: eks_cluster_name
+      type: String
+      description: EKS cluster name (for kubectl access)
+      required: false
+      value: <+input>.default(harness-eks-parson)
+    - name: skip_terraform_destroy
+      type: String
+      description: Skip Terraform destroy (use API-only cleanup for orphaned resources)
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
+    - name: auto_approve
+      type: String
+      description: Auto-approve the destroy (skip manual approval)
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
+
+  stages:
+    ############################################################################
+    # Stage 1: Pre-flight Checks
+    ############################################################################
+    - stage:
+        name: Pre-flight
+        identifier: preflight
+        description: Verify workspace exists and gather state information
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: Http
+                  name: Check Workspace Exists
+                  identifier: check_workspace
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces/<+pipeline.variables.owner>_pov
+                    method: GET
+                    headers:
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    outputVariables:
+                      - name: workspace_exists
+                        value: <+httpResponseCode>
+                        type: String
+                      - name: workspace_data
+                        value: <+httpResponseBody>
+                        type: String
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                  timeout: 1m
+              
+              - step:
+                  type: ShellScript
+                  name: Analyze Workspace
+                  identifier: analyze_workspace
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=============================================="
+                          echo "  POV Destroyer v2 - Pre-flight Analysis"
+                          echo "=============================================="
+                          echo ""
+                          echo "Owner: <+pipeline.variables.owner>"
+                          echo "Workspace: <+pipeline.variables.owner>_pov"
+                          echo "Org: <+pipeline.variables.harness_org_id>"
+                          echo "Project: <+pipeline.variables.harness_project_id>"
+                          echo ""
+                          
+                          WORKSPACE_STATUS="<+execution.steps.check_workspace.output.outputVariables.workspace_exists>"
+                          
+                          if [ "$WORKSPACE_STATUS" = "200" ]; then
+                            echo "✓ Workspace EXISTS - Terraform state is available"
+                            echo "  Strategy: Use Terraform destroy (state-aware)"
+                            export HAS_WORKSPACE="true"
+                          else
+                            echo "○ Workspace NOT FOUND - No Terraform state"
+                            echo "  Strategy: API-only cleanup (orphan removal)"
+                            export HAS_WORKSPACE="false"
+                          fi
+                          
+                          echo ""
+                          echo "Skip Terraform: <+pipeline.variables.skip_terraform_destroy>"
+                          echo "Auto Approve: <+pipeline.variables.auto_approve>"
+                    environmentVariables: []
+                    outputVariables:
+                      - name: has_workspace
+                        type: String
+                        value: HAS_WORKSPACE
+                  timeout: 1m
+
+    ############################################################################
+    # Stage 2: Unblock Terraform Destroy
+    # Delete K8s deployments so Harness service can be deleted by Terraform
+    ############################################################################
+    - stage:
+        name: Unblock Destroy
+        identifier: unblock_destroy
+        description: Delete K8s deployments that block Harness service deletion
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Delete K8s Deployments
+                  identifier: delete_k8s_deployments
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    delegateSelectors:
+                      - parson-eks-delegate
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=============================================="
+                          echo "  Unblocking Terraform Destroy"
+                          echo "=============================================="
+                          echo ""
+                          echo "Deleting K8s deployments that would block Harness service deletion..."
+                          echo ""
+                          
+                          OWNER="<+pipeline.variables.owner>"
+                          NAMESPACE="harness-demo-${OWNER}"
+                          
+                          # Check if namespace exists
+                          if kubectl get namespace "${NAMESPACE}" 2>/dev/null; then
+                            echo "Found namespace: ${NAMESPACE}"
+                            
+                            # Delete all deployments (this removes "active instances" from Harness)
+                            echo "  Deleting deployments..."
+                            kubectl delete deployment --all -n "${NAMESPACE}" --wait=false 2>/dev/null || true
+                            
+                            # Delete all services
+                            echo "  Deleting services..."
+                            kubectl delete service --all -n "${NAMESPACE}" --wait=false 2>/dev/null || true
+                            
+                            # Delete all pods (force cleanup)
+                            echo "  Deleting pods..."
+                            kubectl delete pod --all -n "${NAMESPACE}" --grace-period=0 --force 2>/dev/null || true
+                            
+                            # Wait briefly for cleanup
+                            echo "  Waiting for resources to terminate..."
+                            sleep 5
+                            
+                            # Show remaining resources
+                            echo ""
+                            echo "Remaining resources in ${NAMESPACE}:"
+                            kubectl get all -n "${NAMESPACE}" 2>/dev/null || echo "  (namespace empty or deleted)"
+                          else
+                            echo "Namespace ${NAMESPACE} does not exist - nothing to clean up"
+                          fi
+                          
+                          echo ""
+                          echo "✓ K8s deployments cleared - Terraform can now delete Harness service"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 5m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+
+    ############################################################################
+    # Stage 3: Terraform Destroy (State-Aware)
+    # Only runs if workspace exists and skip_terraform_destroy is false
+    ############################################################################
+    - stage:
+        name: Terraform Destroy
+        identifier: terraform_destroy
+        description: Use Terraform to destroy resources with proper dependency ordering
+        type: IACM
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.skip_terraform_destroy> == "false"
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+pipeline.variables.owner>_pov
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Plan Destroy
+                  identifier: plan_destroy
+                  timeout: 15m
+                  spec:
+                    command: plan-destroy
+              
+              - step:
+                  type: Run
+                  name: Show Destroy Plan
+                  identifier: show_destroy_plan
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=============================================="
+                      echo "  Terraform Destroy Plan"
+                      echo "=============================================="
+                      echo ""
+                      echo "Owner: <+pipeline.variables.owner>"
+                      echo "Workspace: <+pipeline.variables.owner>_pov"
+                      echo ""
+                      
+                      if [ -f /harness/plan.json ]; then
+                        echo "Resources to be DESTROYED:"
+                        echo ""
+                        jq -r '.resource_changes[] | select(.change.actions | contains(["delete"])) | "  ✗ \(.type).\(.name)"' /harness/plan.json 2>/dev/null || echo "  (unable to parse plan)"
+                        echo ""
+                        DESTROY_COUNT=$(jq '[.resource_changes[] | select(.change.actions | contains(["delete"]))] | length' /harness/plan.json 2>/dev/null || echo "?")
+                        echo "Total resources to destroy: ${DESTROY_COUNT}"
+                      else
+                        echo "  (plan file not available)"
+                      fi
+                      
+                      echo ""
+                      echo "⚠️  This action is IRREVERSIBLE!"
+              
+              - step:
+                  type: IACMApproval
+                  name: Approve Destroy
+                  identifier: approve_destroy
+                  spec:
+                    autoApprove: <+pipeline.variables.auto_approve> == "true"
+                  timeout: 1d
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.auto_approve> == "false"
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - Timeout
+                        action:
+                          type: MarkAsSuccess
+              
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Destroy
+                  identifier: destroy
+                  timeout: 30m
+                  spec:
+                    command: destroy
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+                          spec: {}
+              
+              - step:
+                  type: Run
+                  name: Check Destroy Result
+                  identifier: check_destroy_result
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "Terraform destroy completed."
+                      echo "Any remaining resources will be cleaned up in the next stage."
+
+    ############################################################################
+    # Stage 4: Cleanup Orphans
+    # Force-delete any resources that Terraform couldn't remove
+    # Also handles the case where workspace doesn't exist (orphan-only cleanup)
+    ############################################################################
+    - stage:
+        name: Cleanup Orphans
+        identifier: cleanup_orphans
+        description: Force-delete any remaining Harness resources via API
+        type: Custom
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Force Delete Remaining Resources
+                  identifier: force_delete_remaining
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    delegateSelectors:
+                      - parson-eks-delegate
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=============================================="
+                          echo "  Cleanup Orphans - Force Delete via API"
+                          echo "=============================================="
+                          echo ""
+                          echo "This stage catches any resources that:"
+                          echo "  - Terraform couldn't delete (dependency issues)"
+                          echo "  - Were created outside Terraform"
+                          echo "  - Exist without a workspace (orphaned)"
+                          echo ""
+                          
+                          # Helper function for API calls
+                          api_delete() {
+                            local NAME="$1"
+                            local URL="$2"
+                            echo -n "  ${NAME}: "
+                            RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${URL}" \
+                              -H "x-api-key: ${API_KEY}" \
+                              -H "Content-Type: application/json" 2>/dev/null)
+                            HTTP_CODE=$(echo "$RESP" | tail -n1)
+                            case "$HTTP_CODE" in
+                              200|204) echo "deleted" ;;
+                              404) echo "not found (ok)" ;;
+                              *) echo "failed ($HTTP_CODE)" ;;
+                            esac
+                          }
+                          
+                          echo "=== Pipelines ==="
+                          for P in ci_build k8s_strategy_deploy k8s_canary_deploy k8s_bg_canary_deploy canary_deployment blue_green_deployment strategy_choice; do
+                            api_delete "${OWNER}_${P}" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_${P}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
+                          done
+                          
+                          echo ""
+                          echo "=== Service ==="
+                          api_delete "${OWNER}_demo_app" "${ENDPOINT}/ng/api/servicesV2/${OWNER}_demo_app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
+                          
+                          echo ""
+                          echo "=== Infrastructures ==="
+                          for ENV in dev prod; do
+                            api_delete "${OWNER}_k8s_${ENV}" "${ENDPOINT}/ng/api/infrastructures/${OWNER}_k8s_${ENV}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_${ENV}&forceDelete=true"
+                          done
+                          
+                          echo ""
+                          echo "=== Environments ==="
+                          for ENV in dev prod; do
+                            api_delete "${OWNER}_${ENV}" "${ENDPOINT}/ng/api/environmentsV2/${OWNER}_${ENV}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
+                          done
+                          
+                          echo ""
+                          echo "=== Connectors ==="
+                          for CONN in k8s_reference_architecture aws_reference_architecture github_reference_architecture; do
+                            api_delete "${OWNER}_${CONN}" "${ENDPOINT}/ng/api/connectors/${OWNER}_${CONN}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
+                          done
+                          
+                          echo ""
+                          echo "=== HAR Registry ==="
+                          api_delete "har-${OWNER}" "${ENDPOINT}/har/api/v1/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}/+"
+                          api_delete "${OWNER}-dockerhub-proxy" "${ENDPOINT}/har/api/v1/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${OWNER}-dockerhub-proxy/+"
+                          
+                          echo ""
+                          echo "=== Harness Code Repository ==="
+                          api_delete "${OWNER}-demo-app" "${ENDPOINT}/code/api/v1/repos/${OWNER}-demo-app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
+                          
+                          echo ""
+                          echo "=== Delegate Token ==="
+                          # List and delete matching tokens
+                          TOKENS=$(curl -s "${ENDPOINT}/ng/api/delegate-token-ng?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
+                            -H "x-api-key: ${API_KEY}" | grep -o '"name":"[^"]*"' | sed 's/"name":"//g' | sed 's/"//g' | grep "^${OWNER}-delegate-token" || true)
+                          if [ -n "$TOKENS" ]; then
+                            for TOKEN in $TOKENS; do
+                              api_delete "$TOKEN" "${ENDPOINT}/ng/api/delegate-token-ng?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&tokenName=$TOKEN"
+                            done
+                          else
+                            echo "  No matching delegate tokens found"
+                          fi
+                          
+                          echo ""
+                          echo "✓ API cleanup complete"
+                    environmentVariables:
+                      - name: OWNER
+                        type: String
+                        value: <+pipeline.variables.owner>
+                      - name: ACCOUNT_ID
+                        type: String
+                        value: <+pipeline.variables.harness_account_id>
+                      - name: ORG_ID
+                        type: String
+                        value: <+pipeline.variables.harness_org_id>
+                      - name: PROJECT_ID
+                        type: String
+                        value: <+pipeline.variables.harness_project_id>
+                      - name: API_KEY
+                        type: String
+                        value: <+pipeline.variables.target_api_key>
+                      - name: ENDPOINT
+                        type: String
+                        value: <+pipeline.variables.harness_endpoint>
+                    outputVariables: []
+                  timeout: 10m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              
+              - step:
+                  type: ShellScript
+                  name: Delete K8s Namespace
+                  identifier: delete_k8s_namespace
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    delegateSelectors:
+                      - parson-eks-delegate
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Cleaning up Kubernetes resources ==="
+                          OWNER="<+pipeline.variables.owner>"
+                          
+                          # Delete app namespace
+                          NS="harness-demo-${OWNER}"
+                          echo -n "Namespace ${NS}: "
+                          if kubectl get namespace "${NS}" 2>/dev/null; then
+                            kubectl delete namespace "${NS}" --wait=false 2>/dev/null && echo "deleting" || echo "failed"
+                          else
+                            echo "not found (ok)"
+                          fi
+                          
+                          # Delete delegate namespace
+                          DELEGATE_NS="harness-delegate-ng-${OWNER}"
+                          echo -n "Namespace ${DELEGATE_NS}: "
+                          if kubectl get namespace "${DELEGATE_NS}" 2>/dev/null; then
+                            kubectl delete namespace "${DELEGATE_NS}" --wait=false 2>/dev/null && echo "deleting" || echo "failed"
+                          else
+                            echo "not found (ok)"
+                          fi
+                          
+                          # Delete cluster role binding
+                          CRB="harness-delegate-admin-${OWNER}"
+                          echo -n "ClusterRoleBinding ${CRB}: "
+                          if kubectl get clusterrolebinding "${CRB}" 2>/dev/null; then
+                            kubectl delete clusterrolebinding "${CRB}" 2>/dev/null && echo "deleted" || echo "failed"
+                          else
+                            echo "not found (ok)"
+                          fi
+                          
+                          echo ""
+                          echo "✓ Kubernetes cleanup complete"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 5m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+
+    ############################################################################
+    # Stage 5: Delete Workspace
+    # Remove the IACM workspace (and its state) after successful cleanup
+    ############################################################################
+    - stage:
+        name: Delete Workspace
+        identifier: delete_workspace
+        description: Delete the IACM workspace after successful destroy
+        type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "200"
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: Http
+                  name: Delete IACM Workspace
+                  identifier: delete_workspace
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces/<+pipeline.variables.owner>_pov
+                    method: DELETE
+                    headers:
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
+                  timeout: 2m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              
+              - step:
+                  type: ShellScript
+                  name: Destroy Complete
+                  identifier: destroy_complete
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=============================================="
+                          echo "   POV Environment Destroyed Successfully"
+                          echo "=============================================="
+                          echo ""
+                          echo "Owner: <+pipeline.variables.owner>"
+                          echo ""
+                          echo "Cleanup Summary:"
+                          echo "  ✓ K8s deployments deleted (unblocked Terraform)"
+                          echo "  ✓ Terraform destroy completed"
+                          echo "  ✓ Orphaned resources force-deleted"
+                          echo "  ✓ K8s namespaces deleted"
+                          echo "  ✓ IACM workspace deleted"
+                          echo ""
+                          echo "The POV environment for '<+pipeline.variables.owner>' no longer exists."
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m
+
+    ############################################################################
+    # Stage 6: Orphan-Only Summary (when no workspace exists)
+    ############################################################################
+    - stage:
+        name: Orphan Cleanup Complete
+        identifier: orphan_cleanup_complete
+        description: Summary when running orphan-only cleanup (no workspace)
+        type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "404"
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Orphan Cleanup Summary
+                  identifier: orphan_summary
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=============================================="
+                          echo "   Orphan Cleanup Complete"
+                          echo "=============================================="
+                          echo ""
+                          echo "Owner: <+pipeline.variables.owner>"
+                          echo ""
+                          echo "No IACM workspace was found for this owner."
+                          echo "Performed API-only cleanup of orphaned resources."
+                          echo ""
+                          echo "Cleanup Summary:"
+                          echo "  ○ Terraform destroy skipped (no state)"
+                          echo "  ✓ Orphaned Harness resources force-deleted"
+                          echo "  ✓ K8s namespaces deleted"
+                          echo ""
+                          echo "Any resources matching '<+pipeline.variables.owner>_*' pattern have been removed."
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m

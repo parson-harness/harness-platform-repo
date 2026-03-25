@@ -2,6 +2,44 @@
 
 This directory contains Harness pipeline definitions for provisioning POV-in-a-box environments using Infrastructure as Code Management (IACM).
 
+## Resource Lifecycle Management
+
+### Philosophy: Terraform State is the Source of Truth
+
+All POV resources are managed by Terraform state. The pipelines are designed to:
+
+1. **Use Terraform destroy** when cleaning up existing resources (not API calls)
+2. **Only use API cleanup** for true orphans (resources with no workspace/state)
+3. **Preserve state integrity** by never deleting resources outside of Terraform
+
+### Provisioner Behavior
+
+The `idp_pov_provisioner` pipeline handles three scenarios:
+
+| Scenario | Workspace Exists? | force_recreate | Behavior |
+|----------|-------------------|----------------|----------|
+| Fresh provision | No | N/A | Create workspace, apply Terraform |
+| Update existing | Yes | false | Apply Terraform to existing state |
+| Clean slate | Yes | true | Terraform destroy → delete workspace → create fresh |
+| Orphan cleanup | No (but resources exist) | N/A | API cleanup → create workspace → apply |
+
+### Destroyer Behavior
+
+The `idp_pov_destroyer_v2` pipeline:
+
+1. **Unblock Destroy**: Delete K8s deployments (removes "active instances" from Harness service)
+2. **Terraform Destroy**: Let Terraform delete resources with proper dependency ordering
+3. **Cleanup Orphans**: API-delete any resources Terraform couldn't remove
+4. **Delete Workspace**: Remove IACM workspace after successful cleanup
+
+### Why API Cleanup Still Exists
+
+API cleanup is a **fallback**, not the primary mechanism. It handles:
+
+- Resources Terraform couldn't delete (dependency issues, API errors)
+- Resources created outside Terraform
+- True orphans (workspace deleted but resources remain)
+
 ## Architecture
 
 ```

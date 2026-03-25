@@ -108,6 +108,11 @@ pipeline:
       description: ACM certificate ARN for HTTPS ingress
       required: false
       value: "<+input>.default(arn:aws:acm:us-east-1:759984737373:certificate/9c90d4f8-208d-46cd-bdc1-bc13f1759c05)"
+    - name: force_recreate
+      type: String
+      description: If workspace exists, destroy it first and recreate (clean slate). If false, will update existing workspace.
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
   stages:
     - stage:
         name: Create Workspace from Template
@@ -398,162 +403,323 @@ pipeline:
                     environmentVariables: []
                     outputVariables: []
                   timeout: 1m
+    ############################################################################
+    # Stage: Destroy Existing (only when force_recreate=true AND workspace exists)
+    # Uses Terraform destroy to properly clean up state-tracked resources
+    ############################################################################
     - stage:
-        name: Pre-Apply Cleanup
-        identifier: pre_apply_cleanup
-        description: Clean up orphaned resources before Terraform apply (handles state drift)
+        name: Destroy Existing
+        identifier: destroy_existing
+        description: Terraform destroy existing workspace before recreating (force_recreate mode)
+        type: IACM
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.force_recreate> == "true"
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+pipeline.variables.owner>_pov
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Plan Destroy
+                  identifier: plan_destroy
+                  timeout: 15m
+                  spec:
+                    command: plan-destroy
+              - step:
+                  type: Run
+                  name: Show Destroy Plan
+                  identifier: show_destroy_plan
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=============================================="
+                      echo "  Force Recreate: Destroying Existing POV"
+                      echo "=============================================="
+                      echo ""
+                      echo "Owner: <+pipeline.variables.owner>"
+                      echo "Workspace: <+pipeline.variables.owner>_pov"
+                      echo ""
+                      if [ -f /harness/plan.json ]; then
+                        echo "Resources to be destroyed before recreating:"
+                        jq -r '.resource_changes[] | select(.change.actions | contains(["delete"])) | "  ✗ \(.type).\(.name)"' /harness/plan.json 2>/dev/null || echo "  (unable to parse plan)"
+                      fi
+              - step:
+                  type: IACMApproval
+                  name: Auto Approve Destroy
+                  identifier: approve_destroy
+                  spec:
+                    autoApprove: true
+                  timeout: 1m
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Destroy
+                  identifier: destroy
+                  timeout: 30m
+                  spec:
+                    command: destroy
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Run
+                  name: Destroy Complete
+                  identifier: destroy_complete
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "✓ Existing POV destroyed via Terraform"
+                      echo "Proceeding to delete workspace and recreate..."
+    ############################################################################
+    # Stage: Delete Workspace After Destroy (force_recreate mode)
+    ############################################################################
+    - stage:
+        name: Delete Old Workspace
+        identifier: delete_old_workspace
+        description: Delete the IACM workspace after Terraform destroy
         type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.force_recreate> == "true"
         spec:
           execution:
             steps:
               - step:
                   type: Http
-                  name: Delete Orphaned HAR Registry
-                  identifier: delete_orphaned_har
+                  name: Delete IACM Workspace
+                  identifier: delete_workspace
                   spec:
-                    url: https://app.harness.io/har/api/v1/v1/registry/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/har-<+pipeline.variables.owner>/+
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces/<+pipeline.variables.owner>_pov
                     method: DELETE
                     headers:
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
                       - key: x-api-key
-                        value: <+pipeline.variables.target_api_key>
+                        value: <+pipeline.variables.provisioner_api_key>
                     assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
-                  timeout: 1m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Orphaned Harness Code Repo
-                  identifier: delete_orphaned_code_repo
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/code/api/v1/repos/<+pipeline.variables.owner>-demo-app?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.target_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
-                  timeout: 1m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Orphaned CI Pipeline
-                  identifier: delete_orphaned_ci_pipeline
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/pipeline/api/pipelines/<+pipeline.variables.owner>_ci_build?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.target_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
-                  timeout: 1m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Orphaned Strategy Pipeline
-                  identifier: delete_orphaned_strategy_pipeline
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/pipeline/api/pipelines/<+pipeline.variables.owner>_k8s_strategy_deploy?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.target_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
-                  timeout: 1m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Orphaned Service
-                  identifier: delete_orphaned_service
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/ng/api/servicesV2/<+pipeline.variables.owner>_demo_app?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.target_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
-                  timeout: 1m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Orphaned Environment
-                  identifier: delete_orphaned_environment
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/ng/api/environmentsV2/<+pipeline.variables.owner>_dev?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.target_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
-                  timeout: 1m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Orphaned K8s Connector
-                  identifier: delete_orphaned_k8s_connector
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/ng/api/connectors/<+pipeline.variables.owner>_k8s_reference_architecture?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.target_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
-                  timeout: 1m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-              - step:
-                  type: Http
-                  name: Delete Orphaned AWS Connector
-                  identifier: delete_orphaned_aws_connector
-                  spec:
-                    url: <+pipeline.variables.harness_endpoint>/ng/api/connectors/<+pipeline.variables.owner>_aws_reference_architecture?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
-                    method: DELETE
-                    headers:
-                      - key: x-api-key
-                        value: <+pipeline.variables.target_api_key>
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
-                  timeout: 1m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
+                  timeout: 2m
               - step:
                   type: ShellScript
-                  name: Cleanup Orphaned K8s Resources
-                  identifier: cleanup_orphaned_k8s
+                  name: Workspace Deleted
+                  identifier: workspace_deleted
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "✓ Old workspace deleted"
+                          echo "Will create fresh workspace in next stage..."
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m
+    ############################################################################
+    # Stage: Recreate Workspace (after force_recreate destroy)
+    ############################################################################
+    - stage:
+        name: Recreate Workspace
+        identifier: recreate_workspace
+        description: Create fresh IACM workspace after force_recreate destroy
+        type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.force_recreate> == "true"
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: Http
+                  name: Create Fresh Workspace
+                  identifier: create_fresh_workspace
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces
+                    method: POST
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    requestBody: |
+                      {
+                        "identifier": "<+pipeline.variables.owner>_pov",
+                        "name": "<+pipeline.variables.owner> POV Workspace (EKS)",
+                        "description": "POV environment for <+pipeline.variables.owner> - EKS stack (recreated)",
+                        "provisioner": "opentofu",
+                        "provisioner_version": "1.11.2",
+                        "repository_connector": "parsongh",
+                        "repository": "harness-demo-app",
+                        "repository_branch": "main",
+                        "repository_path": "tofu/stacks/eks",
+                        "provider_connector": "aws_oidc_iacm",
+                        "cost_estimation_enabled": true,
+                        "provider_connectors": [
+                          {
+                            "connector_ref": "aws_oidc_iacm",
+                            "type": "aws"
+                          }
+                        ],
+                        "default_pipelines": {
+                          "provision": {
+                            "project_pipeline": "pov_provisioning"
+                          },
+                          "destroy": {
+                            "project_pipeline": "pov_destroy"
+                          }
+                        },
+                        "terraform_variables": {
+                          "owner": {
+                            "key": "owner",
+                            "value": "<+pipeline.variables.owner>",
+                            "value_type": "string"
+                          },
+                          "eks_cluster_name": {
+                            "key": "eks_cluster_name",
+                            "value": "<+pipeline.variables.eks_cluster_name>",
+                            "value_type": "string"
+                          },
+                          "harness_account_id": {
+                            "key": "harness_account_id",
+                            "value": "<+pipeline.variables.harness_account_id>",
+                            "value_type": "string"
+                          },
+                          "harness_endpoint": {
+                            "key": "harness_endpoint",
+                            "value": "<+pipeline.variables.harness_endpoint>",
+                            "value_type": "string"
+                          },
+                          "harness_api_key": {
+                            "key": "harness_api_key",
+                            "value": "<+pipeline.variables.target_api_key>",
+                            "value_type": "string"
+                          },
+                          "harness_api_key_email": {
+                            "key": "harness_api_key_email",
+                            "value": "<+pipeline.variables.target_api_key_email>",
+                            "value_type": "string"
+                          },
+                          "harness_org_id": {
+                            "key": "harness_org_id",
+                            "value": "<+pipeline.variables.harness_org_id>",
+                            "value_type": "string"
+                          },
+                          "harness_project_id": {
+                            "key": "harness_project_id",
+                            "value": "<+pipeline.variables.harness_project_id>",
+                            "value_type": "string"
+                          },
+                          "create_harness_org": {
+                            "key": "create_harness_org",
+                            "value": "<+pipeline.variables.create_harness_org>",
+                            "value_type": "string"
+                          },
+                          "create_harness_project": {
+                            "key": "create_harness_project",
+                            "value": "<+pipeline.variables.create_harness_project>",
+                            "value_type": "string"
+                          },
+                          "artifact_registry_type": {
+                            "key": "artifact_registry_type",
+                            "value": "<+pipeline.variables.artifact_registry_type>",
+                            "value_type": "string"
+                          },
+                          "create_strategy_pipeline": {
+                            "key": "create_strategy_pipeline",
+                            "value": "<+pipeline.variables.create_strategy_pipeline>",
+                            "value_type": "string"
+                          },
+                          "create_ci_pipeline": {
+                            "key": "create_ci_pipeline",
+                            "value": "<+pipeline.variables.create_ci_pipeline>",
+                            "value_type": "string"
+                          },
+                          "acm_cert_arn": {
+                            "key": "acm_cert_arn",
+                            "value": "<+pipeline.variables.acm_cert_arn>",
+                            "value_type": "string"
+                          },
+                          "use_harness_code": {
+                            "key": "use_harness_code",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "github_repo_name": {
+                            "key": "github_repo_name",
+                            "value": "<+pipeline.variables.source_github_repo>",
+                            "value_type": "string"
+                          },
+                          "github_pat": {
+                            "key": "github_pat",
+                            "value": "github_pat",
+                            "value_type": "secret"
+                          },
+                          "github_repo_is_public": {
+                            "key": "github_repo_is_public",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "create_delegate": {
+                            "key": "create_delegate",
+                            "value": "true",
+                            "value_type": "string"
+                          }
+                        },
+                        "environment_variables": {}
+                      }
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201
+                  timeout: 2m
+              - step:
+                  type: ShellScript
+                  name: Fresh Workspace Created
+                  identifier: fresh_workspace_created
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "✓ Fresh workspace created: <+pipeline.variables.owner>_pov"
+                          echo "Proceeding to provision..."
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m
+    ############################################################################
+    # Stage: Orphan Cleanup (only when NO workspace exists - true orphans)
+    ############################################################################
+    - stage:
+        name: Orphan Cleanup
+        identifier: orphan_cleanup
+        description: Clean up orphaned resources when no workspace exists (API-only cleanup)
+        type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "404"
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Cleanup Orphaned Resources
+                  identifier: cleanup_orphans
                   spec:
                     shell: Bash
                     executionTarget: {}
@@ -563,49 +729,96 @@ pipeline:
                       type: Inline
                       spec:
                         script: |
-                          echo "=== Pre-Apply Cleanup: Removing Orphaned K8s Resources ==="
-                          OWNER="<+pipeline.variables.owner>"
-                          APP_NAMESPACE="harness-demo-${OWNER}"
-
-                          # Delete app namespace if exists (may be orphaned from previous failed run)
-                          echo "Checking for orphaned app namespace: ${APP_NAMESPACE}"
-                          if kubectl get namespace "${APP_NAMESPACE}" 2>/dev/null; then
-                            echo "  Found orphaned namespace, deleting..."
-                            kubectl delete namespace "${APP_NAMESPACE}" --wait=false || true
-                            echo "  Deletion initiated"
-                          else
-                            echo "  Not found, skipping"
-                          fi
-
+                          echo "=============================================="
+                          echo "  Orphan Cleanup (No Workspace Found)"
+                          echo "=============================================="
                           echo ""
-                          echo "=== Pre-Apply Cleanup Complete ==="
-                    environmentVariables: []
+                          echo "No IACM workspace exists for owner: ${OWNER}"
+                          echo "Cleaning up any orphaned resources before creating fresh workspace..."
+                          echo ""
+                          
+                          # Helper function
+                          api_delete() {
+                            local NAME="$1"
+                            local URL="$2"
+                            echo -n "  ${NAME}: "
+                            RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${URL}" \
+                              -H "x-api-key: ${API_KEY}" 2>/dev/null)
+                            HTTP_CODE=$(echo "$RESP" | tail -n1)
+                            case "$HTTP_CODE" in
+                              200|204) echo "deleted" ;;
+                              404) echo "not found" ;;
+                              *) echo "error ($HTTP_CODE)" ;;
+                            esac
+                          }
+                          
+                          echo "=== Pipelines ==="
+                          api_delete "${OWNER}_ci_build" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_ci_build?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
+                          api_delete "${OWNER}_k8s_strategy_deploy" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_k8s_strategy_deploy?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
+                          
+                          echo ""
+                          echo "=== Service ==="
+                          api_delete "${OWNER}_demo_app" "${ENDPOINT}/ng/api/servicesV2/${OWNER}_demo_app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
+                          
+                          echo ""
+                          echo "=== Environments ==="
+                          api_delete "${OWNER}_dev" "${ENDPOINT}/ng/api/environmentsV2/${OWNER}_dev?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
+                          
+                          echo ""
+                          echo "=== Connectors ==="
+                          api_delete "${OWNER}_k8s_reference_architecture" "${ENDPOINT}/ng/api/connectors/${OWNER}_k8s_reference_architecture?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
+                          api_delete "${OWNER}_aws_reference_architecture" "${ENDPOINT}/ng/api/connectors/${OWNER}_aws_reference_architecture?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
+                          
+                          echo ""
+                          echo "=== HAR Registry ==="
+                          api_delete "har-${OWNER}" "${ENDPOINT}/har/api/v1/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}/+"
+                          
+                          echo ""
+                          echo "=== Harness Code Repo ==="
+                          api_delete "${OWNER}-demo-app" "${ENDPOINT}/code/api/v1/repos/${OWNER}-demo-app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
+                          
+                          echo ""
+                          echo "=== K8s Namespace ==="
+                          NS="harness-demo-${OWNER}"
+                          echo -n "  ${NS}: "
+                          if kubectl get namespace "${NS}" 2>/dev/null; then
+                            kubectl delete namespace "${NS}" --wait=false 2>/dev/null && echo "deleting" || echo "failed"
+                          else
+                            echo "not found"
+                          fi
+                          
+                          echo ""
+                          echo "✓ Orphan cleanup complete"
+                    environmentVariables:
+                      - name: OWNER
+                        type: String
+                        value: <+pipeline.variables.owner>
+                      - name: ACCOUNT_ID
+                        type: String
+                        value: <+pipeline.variables.harness_account_id>
+                      - name: ORG_ID
+                        type: String
+                        value: <+pipeline.variables.harness_org_id>
+                      - name: PROJECT_ID
+                        type: String
+                        value: <+pipeline.variables.harness_project_id>
+                      - name: API_KEY
+                        type: String
+                        value: <+pipeline.variables.target_api_key>
+                      - name: ENDPOINT
+                        type: String
+                        value: <+pipeline.variables.harness_endpoint>
                     outputVariables: []
-                  timeout: 5m
+                  timeout: 10m
                   failureStrategies:
                     - onFailure:
                         errors:
                           - AllErrors
                         action:
                           type: MarkAsSuccess
-                          spec: {}
-              - step:
-                  type: ShellScript
-                  name: Cleanup Summary
-                  identifier: cleanup_summary
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          echo "=== Pre-Apply Cleanup Complete ==="
-                          echo "Cleaned up any orphaned resources for owner: <+pipeline.variables.owner>"
-                          echo "Terraform will now create fresh resources"
-                    environmentVariables: []
-                    outputVariables: []
-                  timeout: 1m
+    ############################################################################
+    # Stage: Plan and Apply (runs for all paths)
+    ############################################################################
     - stage:
         name: Plan and Apply
         identifier: plan_and_apply
