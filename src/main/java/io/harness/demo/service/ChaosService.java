@@ -143,4 +143,19 @@ public class ChaosService {
         metricsService.incrementErrors("chaos_manual");
         throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Chaos Engineering: Manual failure injection");
     }
+
+    /**
+     * Demo method for Test Intelligence showcase.
+     * Added: 20260325-163147
+     * 
+     * This method demonstrates how Harness Test Intelligence
+     * selects only tests affected by code changes.
+     * 
+     * Expected: Only ChaosServiceTest and ChaosApiTest will run,
+     * while AppConfigTest, MetricsServiceTest, etc. are skipped.
+     */
+    public boolean isSystemHealthy() {
+        return !isChaosActive() && getCurrentErrorRate() == 0.0;
+    }
+
 }
