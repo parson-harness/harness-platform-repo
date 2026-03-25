@@ -181,7 +181,7 @@ pipeline:
                           done
 
                           # Delete HAR registries (project-level registry and org-level upstream proxy)
-                          # API format: DELETE /har/api/v1/v1/registry/{registry_ref}
+                          # API format: DELETE /har/api/v1/registry/{registry_ref}
                           # registry_ref format: account_id/org_id/project_id/registry_name/+ (project-level)
                           #                      account_id/org_id/registry_name/+ (org-level)
                           echo ""
@@ -191,7 +191,7 @@ pipeline:
                           REGISTRY_REF="${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}/+"
                           echo "  Deleting project registry: har-${OWNER}"
                           echo "    Registry ref: ${REGISTRY_REF}"
-                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/har/api/v1/v1/registry/${REGISTRY_REF}" \
+                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/har/api/v1/registry/${REGISTRY_REF}" \
                             -H "x-api-key: ${API_KEY}" \
                             -H "Content-Type: application/json")
                           HTTP_CODE=$(echo "$RESP" | tail -n1)
@@ -203,7 +203,7 @@ pipeline:
                           UPSTREAM_REF="${ACCOUNT_ID}/${ORG_ID}/${OWNER}-dockerhub-proxy/+"
                           echo "  Deleting upstream proxy: ${OWNER}-dockerhub-proxy"
                           echo "    Registry ref: ${UPSTREAM_REF}"
-                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/har/api/v1/v1/registry/${UPSTREAM_REF}" \
+                          RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/har/api/v1/registry/${UPSTREAM_REF}" \
                             -H "x-api-key: ${API_KEY}" \
                             -H "Content-Type: application/json")
                           HTTP_CODE=$(echo "$RESP" | tail -n1)
