@@ -262,3 +262,25 @@ variable "enable_asg_permissions" {
   type        = bool
   default     = false
 }
+
+################################################################################
+# DNS Configuration
+################################################################################
+
+variable "manage_dns" {
+  description = "Manage Route53 wildcard DNS record for *.harness-demo.dev"
+  type        = bool
+  default     = true
+}
+
+variable "dns_domain" {
+  description = "Base domain for DNS records"
+  type        = string
+  default     = "harness-demo.dev"
+}
+
+variable "route53_hosted_zone_id" {
+  description = "Route53 hosted zone ID for dns_domain. If empty, will be looked up by domain name."
+  type        = string
+  default     = ""
+}

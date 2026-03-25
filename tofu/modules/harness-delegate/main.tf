@@ -123,7 +123,16 @@ resource "kubernetes_cluster_role_binding" "delegate_admin" {
 
 ################################################################################
 # Delegate Token Secret
+# Note: harness_platform_delegatetoken.value returns base64-encoded token.
+# We decode it here so K8s can re-encode it properly.
 ################################################################################
+
+locals {
+  # The Harness provider returns delegate tokens already base64-encoded.
+  # We need to decode it for the Helm chart which expects raw token value.
+  # The Helm chart passes it to K8s which will base64-encode it again.
+  decoded_delegate_token = try(base64decode(var.delegate_token), var.delegate_token)
+}
 
 resource "kubernetes_secret" "delegate_token" {
   metadata {
@@ -136,8 +145,8 @@ resource "kubernetes_secret" "delegate_token" {
   }
 
   data = {
-    DELEGATE_TOKEN  = var.delegate_token
-    UPGRADER_TOKEN  = var.delegate_token
+    DELEGATE_TOKEN  = local.decoded_delegate_token
+    UPGRADER_TOKEN  = local.decoded_delegate_token
   }
 
   type = "Opaque"
@@ -160,7 +169,7 @@ resource "helm_release" "delegate" {
     yamlencode({
       delegateName        = "${var.delegate_name}-${var.owner}"
       accountId           = var.harness_account_id
-      delegateToken       = var.delegate_token
+      delegateToken       = local.decoded_delegate_token
       managerEndpoint     = var.harness_manager_endpoint
       delegateDockerImage = local.final_delegate_image
       replicas            = var.delegate_replicas

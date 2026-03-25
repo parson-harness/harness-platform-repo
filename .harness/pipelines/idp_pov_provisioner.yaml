@@ -287,6 +287,11 @@ pipeline:
                             "key": "create_delegate",
                             "value": "true",
                             "value_type": "string"
+                          },
+                          "manage_dns": {
+                            "key": "manage_dns",
+                            "value": "true",
+                            "value_type": "string"
                           }
                         },
                         "environment_variables": {}
@@ -676,6 +681,11 @@ pipeline:
                           },
                           "create_delegate": {
                             "key": "create_delegate",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "manage_dns": {
+                            "key": "manage_dns",
                             "value": "true",
                             "value_type": "string"
                           }

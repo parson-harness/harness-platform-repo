@@ -412,6 +412,36 @@ module "harness_pipelines" {
 }
 
 ################################################################################
+# DNS Management - Wildcard CNAME for *.harness-demo.dev
+# Automatically updates the wildcard DNS to point to the shared ALB
+################################################################################
+
+data "aws_route53_zone" "harness_demo" {
+  count = var.manage_dns ? 1 : 0
+  name  = "${var.dns_domain}."
+}
+
+data "aws_lb" "ingress_alb" {
+  count = var.manage_dns ? 1 : 0
+  tags = {
+    "ingress.k8s.aws/stack" = "harness-demo"
+  }
+}
+
+resource "aws_route53_record" "wildcard" {
+  count   = var.manage_dns ? 1 : 0
+  zone_id = var.route53_hosted_zone_id != "" ? var.route53_hosted_zone_id : data.aws_route53_zone.harness_demo[0].zone_id
+  name    = "*.${var.dns_domain}"
+  type    = "CNAME"
+  ttl     = 300
+  records = [data.aws_lb.ingress_alb[0].dns_name]
+
+  lifecycle {
+    create_before_destroy = true
+  }
+}
+
+################################################################################
 # Outputs
 ################################################################################
 
@@ -453,6 +483,16 @@ output "delegate_name" {
 output "delegate_irsa_role_arn" {
   description = "IRSA role ARN for the delegate"
   value       = var.create_delegate ? module.irsa_delegate_role[0].role_arn : null
+}
+
+output "alb_dns_name" {
+  description = "ALB DNS name for the ingress"
+  value       = var.manage_dns ? data.aws_lb.ingress_alb[0].dns_name : null
+}
+
+output "dns_record" {
+  description = "Wildcard DNS record managed by this stack"
+  value       = var.manage_dns ? "*.${var.dns_domain} -> ${data.aws_lb.ingress_alb[0].dns_name}" : "DNS management disabled"
 }
 
 ################################################################################
