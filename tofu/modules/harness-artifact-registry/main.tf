@@ -46,6 +46,40 @@ resource "harness_platform_har_registry" "dockerhub_upstream" {
 }
 
 ################################################################################
+# Pre-Create Cleanup: Delete existing registry if it exists outside of state
+# This handles the case where a previous failed run created the registry
+# but it wasn't tracked in Terraform state
+################################################################################
+
+resource "terraform_data" "cleanup_existing_registry" {
+  count = var.harness_api_key != "" ? 1 : 0
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Checking for existing HAR registry: ${var.registry_id}"
+      REGISTRY_REF="${var.account_id}/${var.org_id}/${var.project_id}/${var.registry_id}/+"
+      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "${var.harness_endpoint}/har/api/v1/v1/registry/$REGISTRY_REF" \
+        -H "x-api-key: ${var.harness_api_key}" \
+        -H "Content-Type: application/json" 2>/dev/null)
+      HTTP_CODE=$(echo "$RESP" | tail -n1)
+      case "$HTTP_CODE" in
+        200|204) echo "  Deleted existing registry" ;;
+        404) echo "  Registry does not exist (OK)" ;;
+        *) echo "  Warning: cleanup returned $HTTP_CODE (continuing anyway)" ;;
+      esac
+      exit 0
+    EOT
+  }
+
+  triggers_replace = [
+    var.registry_id,
+    var.account_id,
+    var.org_id,
+    var.project_id
+  ]
+}
+
+################################################################################
 # Project-Level Docker Registry (VIRTUAL type with project-level upstream proxy)
 ################################################################################
 
@@ -60,7 +94,10 @@ resource "harness_platform_har_registry" "registry" {
     upstream_proxies = var.create_dockerhub_upstream ? [var.dockerhub_upstream_id] : var.upstream_proxy_ids
   }
 
-  depends_on = [harness_platform_har_registry.dockerhub_upstream]
+  depends_on = [
+    harness_platform_har_registry.dockerhub_upstream,
+    terraform_data.cleanup_existing_registry
+  ]
 
   parent_ref = "${var.account_id}/${var.org_id}/${var.project_id}"
 

@@ -229,6 +229,10 @@ module "har" {
   dockerhub_password_secret_ref = var.dockerhub_password_secret_ref
   dockerhub_secret_space_path   = var.harness_account_id
 
+  # API credentials for pre-create cleanup (handles orphaned registries)
+  harness_endpoint = var.harness_endpoint
+  harness_api_key  = var.harness_api_key
+
   depends_on = [module.harness_org_project]
 }
 

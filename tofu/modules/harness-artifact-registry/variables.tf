@@ -71,3 +71,16 @@ variable "upstream_proxy_ids" {
   type        = list(string)
   default     = []
 }
+
+variable "harness_endpoint" {
+  description = "Harness API endpoint (e.g., https://app.harness.io/gratis)"
+  type        = string
+  default     = "https://app.harness.io/gratis"
+}
+
+variable "harness_api_key" {
+  description = "Harness API key for pre-create cleanup"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
