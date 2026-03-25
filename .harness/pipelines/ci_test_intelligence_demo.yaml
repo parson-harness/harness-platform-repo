@@ -3,17 +3,11 @@ pipeline:
   identifier: ci_test_intelligence_demo
   projectIdentifier: parson
   orgIdentifier: sandbox
-  description: "Demo pipeline showcasing Harness CI Intelligence features: Test Intelligence, Cache Intelligence, Docker Layer Caching"
+  description: "Demo pipeline showcasing Harness CI Intelligence features: Test Intelligence, Build Intelligence, Cache Intelligence, Docker Layer Caching"
   tags:
     pipeline-type: ci
     harness-intelligence: enabled
     demo: test-intelligence
-  variables:
-    - name: run_all_tests
-      type: String
-      description: Override Test Intelligence and run all tests
-      required: false
-      value: <+input>.default(false).allowedValues(true,false)
   properties:
     ci:
       codebase:
@@ -24,7 +18,7 @@ pipeline:
     - stage:
         name: Build and Test
         identifier: build_and_test
-        description: "Build, test with Test Intelligence, and push to registry"
+        description: "Build with Gradle Build Intelligence, test with Test Intelligence, push to HAR"
         type: CI
         spec:
           cloneCodebase: true
@@ -57,7 +51,8 @@ pipeline:
                       echo "╠══════════════════════════════════════════════════════════════╣"
                       echo "║ HARNESS CI INTELLIGENCE FEATURES ENABLED:                    ║"
                       echo "║ ✓ Test Intelligence  - Run only affected tests               ║"
-                      echo "║ ✓ Cache Intelligence - Auto-cache Maven dependencies         ║"
+                      echo "║ ✓ Build Intelligence - Cache Gradle build outputs            ║"
+                      echo "║ ✓ Cache Intelligence - Auto-cache dependencies               ║"
                       echo "║ ✓ Docker Layer Cache - Reuse image layers                    ║"
                       echo "║ ✓ Harness Cloud      - Hosted build infrastructure           ║"
                       echo "╚══════════════════════════════════════════════════════════════╝"
@@ -73,6 +68,32 @@ pipeline:
                       echo "Image Tag: $IMAGE_TAG"
                     outputVariables:
                       - name: IMAGE_TAG
+              - step:
+                  type: Run
+                  name: Gradle Build with Build Intelligence
+                  identifier: gradle_build
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: gradle:8.5-jdk17
+                    shell: Bash
+                    command: |
+                      echo "╔══════════════════════════════════════════════════════════════╗"
+                      echo "║           GRADLE BUILD INTELLIGENCE                          ║"
+                      echo "╚══════════════════════════════════════════════════════════════╝"
+                      echo ""
+                      echo "Build Intelligence caches:"
+                      echo "- Compiled classes (.gradle/caches)"
+                      echo "- Dependencies (~/.gradle/caches)"
+                      echo "- Incremental compilation state"
+                      echo ""
+                      
+                      # Gradle build with Build Intelligence optimizations
+                      gradle build -x test --build-cache --parallel --profile
+                      
+                      echo ""
+                      echo "✓ Gradle build complete with Build Intelligence!"
+                      echo ""
+                      echo "Build profile available at: build/reports/profile/"
               - stepGroup:
                   name: Test with Intelligence
                   identifier: test_with_intelligence
@@ -83,10 +104,10 @@ pipeline:
                         identifier: run_tests_ti
                         spec:
                           connectorRef: account.harnessImage
-                          image: maven:3.9-eclipse-temurin-17
+                          image: gradle:8.5-jdk17
                           language: Java
-                          buildTool: Maven
-                          args: test -Dmaven.test.failure.ignore=true -DfailIfNoTests=false
+                          buildTool: Gradle
+                          args: test --build-cache
                           packages: io.harness.demo
                           runOnlySelectedTests: true
                           postCommand: |
@@ -96,67 +117,25 @@ pipeline:
                             echo "╚══════════════════════════════════════════════════════════════╝"
                             echo "Test Intelligence analyzed code changes and selected relevant tests."
                             echo "View the Tests tab for detailed test selection visualization."
-                            echo ""
-                            # Generate JaCoCo coverage report
-                            mvn jacoco:report -q || true
                           reports:
                             type: JUnit
                             spec:
                               paths:
-                                - "target/surefire-reports/*.xml"
+                                - "build/test-results/test/*.xml"
                           enableTestSplitting: false
-                    - step:
-                        type: Run
-                        name: Code Coverage Summary
-                        identifier: coverage_summary
-                        spec:
-                          shell: Bash
-                          command: |
-                            echo "╔══════════════════════════════════════════════════════════════╗"
-                            echo "║           CODE COVERAGE REPORT                               ║"
-                            echo "╚══════════════════════════════════════════════════════════════╝"
-                            if [ -f target/site/jacoco/index.html ]; then
-                              # Extract coverage percentage from JaCoCo report
-                              COVERAGE=$(grep -oP 'Total.*?([0-9]+)%' target/site/jacoco/index.html | head -1 || echo "Coverage data available in JaCoCo report")
-                              echo "Coverage: $COVERAGE"
-                              echo ""
-                              echo "Full report available at: target/site/jacoco/index.html"
-                            else
-                              echo "JaCoCo report not generated. Run with tests to see coverage."
-                            fi
-                        when:
-                          stageStatus: Success
-                        failureStrategies:
-                          - onFailure:
-                              errors:
-                                - AllErrors
-                              action:
-                                type: MarkAsSuccess
               - step:
-                  type: Run
-                  name: Build Application
-                  identifier: build_app
+                  type: BuildAndPushDockerRegistry
+                  name: Build and Push Docker
+                  identifier: build_push_docker
                   spec:
-                    connectorRef: account.harnessImage
-                    image: maven:3.9-eclipse-temurin-17
-                    shell: Bash
-                    command: |
-                      echo "╔══════════════════════════════════════════════════════════════╗"
-                      echo "║           BUILDING APPLICATION (with Cache Intelligence)     ║"
-                      echo "╚══════════════════════════════════════════════════════════════╝"
-                      echo ""
-                      echo "Maven is using cached dependencies from ~/.m2/repository"
-                      echo "Cache Intelligence automatically manages dependency caching."
-                      echo ""
-                      
-                      # Package the application (tests already ran)
-                      mvn package -DskipTests -q
-                      
-                      echo ""
-                      echo "Build artifacts:"
-                      ls -la target/*.jar
-                      echo ""
-                      echo "✓ Application build complete!"
+                    connectorRef: <+input>
+                    repo: <+input>
+                    tags:
+                      - <+pipeline.sequenceId>
+                      - latest
+                    caching: true
+                    dockerfile: Dockerfile
+                    context: .
               - step:
                   type: Run
                   name: Build Summary
@@ -173,7 +152,8 @@ pipeline:
                       echo "╠══════════════════════════════════════════════════════════════╣"
                       echo "║ HARNESS CI INTELLIGENCE SAVINGS:                             ║"
                       echo "║ • Test Intelligence: Only relevant tests executed            ║"
-                      echo "║ • Cache Intelligence: Maven deps loaded from cache           ║"
+                      echo "║ • Build Intelligence: Gradle incremental build               ║"
+                      echo "║ • Cache Intelligence: Dependencies loaded from cache         ║"
                       echo "║ • Docker Layer Cache: Image layers reused                    ║"
                       echo "╚══════════════════════════════════════════════════════════════╝"
                       echo ""
