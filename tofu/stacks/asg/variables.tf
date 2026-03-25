@@ -251,3 +251,25 @@ variable "create_asg_ci_pipeline" {
   type        = bool
   default     = true
 }
+
+################################################################################
+# Delegate Configuration
+################################################################################
+
+variable "eks_cluster_name" {
+  description = "Name of the shared EKS cluster where delegate will run (required if create_delegate=true)"
+  type        = string
+  default     = ""
+}
+
+variable "create_delegate" {
+  description = "Create a Harness delegate for this POV (set to false if using shared delegate from EKS stack)"
+  type        = bool
+  default     = false
+}
+
+variable "delegate_replicas" {
+  description = "Number of delegate replicas"
+  type        = number
+  default     = 1
+}

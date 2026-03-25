@@ -240,3 +240,25 @@ variable "create_ci_pipeline" {
   type        = bool
   default     = true
 }
+
+################################################################################
+# Delegate Configuration
+################################################################################
+
+variable "create_delegate" {
+  description = "Create a Harness delegate for this POV"
+  type        = bool
+  default     = true
+}
+
+variable "delegate_replicas" {
+  description = "Number of delegate replicas"
+  type        = number
+  default     = 1
+}
+
+variable "enable_asg_permissions" {
+  description = "Enable ASG/EC2/ALB permissions in delegate IRSA role (for combined EKS+ASG deployments)"
+  type        = bool
+  default     = false
+}

@@ -30,6 +30,14 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.12"
+    }
   }
 }
 
@@ -63,6 +71,14 @@ provider "harness" {
   endpoint         = var.harness_endpoint
   account_id       = var.harness_account_id
   platform_api_key = var.harness_api_key
+}
+
+provider "helm" {
+  kubernetes = {
+    host                   = data.aws_eks_cluster.cluster.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.cluster.token
+  }
 }
 
 ################################################################################
@@ -423,4 +439,90 @@ output "k8s_namespace" {
 output "app_url" {
   description = "Application URL"
   value       = "https://${var.owner}.harness-demo.dev"
+}
+
+output "delegate_name" {
+  description = "Delegate name"
+  value       = var.create_delegate ? "delegate-${var.owner}" : null
+}
+
+output "delegate_irsa_role_arn" {
+  description = "IRSA role ARN for the delegate"
+  value       = var.create_delegate ? module.irsa_delegate_role[0].role_arn : null
+}
+
+################################################################################
+# IRSA Role for Delegate (AWS permissions via service account)
+################################################################################
+
+module "irsa_delegate_role" {
+  source = "../../modules/irsa-delegate-role"
+  count  = var.create_delegate ? 1 : 0
+
+  name_prefix              = local.name_prefix
+  owner                    = var.owner
+  cluster_name             = var.eks_cluster_name
+  delegate_namespace       = "harness-delegate-ng-${var.owner}"
+  delegate_service_account = "delegate-${var.owner}"
+
+  # ECR access for CI builds
+  ecr_repository_arns = ["*"]
+
+  # Enable deployment-specific permissions
+  enable_ecs_permissions    = false
+  enable_asg_permissions    = var.enable_asg_permissions
+  enable_lambda_permissions = false
+
+  tags = local.common_tags
+}
+
+################################################################################
+# Delegate Token
+################################################################################
+
+resource "random_id" "delegate_token_suffix" {
+  count       = var.create_delegate ? 1 : 0
+  byte_length = 4
+}
+
+resource "harness_platform_delegatetoken" "delegate" {
+  count      = var.create_delegate ? 1 : 0
+  name       = "${var.owner}-delegate-token-${random_id.delegate_token_suffix[0].hex}"
+  account_id = var.harness_account_id
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
+}
+
+################################################################################
+# Harness Delegate
+################################################################################
+
+module "harness_delegate" {
+  source = "../../modules/harness-delegate"
+  count  = var.create_delegate ? 1 : 0
+
+  owner                    = var.owner
+  delegate_name            = "delegate"
+  harness_account_id       = var.harness_account_id
+  harness_api_key          = var.harness_api_key
+  delegate_token           = harness_platform_delegatetoken.delegate[0].value
+  harness_manager_endpoint = var.harness_endpoint
+
+  create_namespace     = true
+  delegate_replicas    = var.delegate_replicas
+  grant_cluster_admin  = true
+  fetch_latest_version = true
+
+  # IRSA configuration - bind delegate SA to IAM role
+  enable_irsa_annotations = true
+  irsa_role_arn           = module.irsa_delegate_role[0].role_arn
+
+  # Tags for delegate selection - includes delegate-{owner} for CD pipeline
+  delegate_tags = ["delegate-${var.owner}"]
+
+  depends_on = [
+    module.harness_org_project,
+    module.irsa_delegate_role,
+    harness_platform_delegatetoken.delegate
+  ]
 }
