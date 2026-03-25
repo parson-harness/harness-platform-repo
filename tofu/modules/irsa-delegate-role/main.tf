@@ -31,9 +31,8 @@ locals {
 resource "aws_iam_role" "delegate" {
   name = "${var.name_prefix}-delegate-irsa-role"
 
-  # Trust policy allows:
-  # 1. EKS OIDC provider to assume role via IRSA (for delegate pods)
-  # 2. Self-assume for Harness AWS connector cross-account access (required for AmazonMachineImage artifact type)
+  # Trust policy allows EKS OIDC provider to assume role via IRSA (for delegate pods)
+  # Note: Self-assume is added via aws_iam_role_policy after role creation
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -49,13 +48,6 @@ resource "aws_iam_role" "delegate" {
             "${local.oidc_provider_url}:sub" = "system:serviceaccount:${var.delegate_namespace}:${var.delegate_service_account}"
           }
         }
-      },
-      {
-        Effect = "Allow"
-        Principal = {
-          AWS = "arn:aws:iam::${local.account_id}:role/${var.name_prefix}-delegate-irsa-role"
-        }
-        Action = "sts:AssumeRole"
       }
     ]
   })
@@ -63,6 +55,29 @@ resource "aws_iam_role" "delegate" {
   tags = merge(var.tags, {
     Name  = "${var.name_prefix}-delegate-irsa-role"
     Owner = var.owner
+  })
+
+}
+
+################################################################################
+# Update Trust Policy to Add Self-Assume (after role creation)
+# This is needed for Harness AWS connector cross-account access
+################################################################################
+
+resource "aws_iam_role_policy" "self_assume" {
+  name = "delegate-self-assume"
+  role = aws_iam_role.delegate.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "AllowSelfAssume"
+        Effect   = "Allow"
+        Action   = "sts:AssumeRole"
+        Resource = aws_iam_role.delegate.arn
+      }
+    ]
   })
 }
 
@@ -83,12 +98,6 @@ resource "aws_iam_role_policy" "delegate_base" {
           Effect   = "Allow"
           Action   = ["ec2:DescribeRegions"]
           Resource = "*"
-        },
-        {
-          Sid      = "STSAssumeRoleSelf"
-          Effect   = "Allow"
-          Action   = "sts:AssumeRole"
-          Resource = aws_iam_role.delegate.arn
         },
         {
           Sid    = "ECRReadOnly"
