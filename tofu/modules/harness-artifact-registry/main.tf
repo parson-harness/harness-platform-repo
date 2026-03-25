@@ -59,23 +59,34 @@ resource "terraform_data" "cleanup_existing_registry" {
       # Delete main registry first (it depends on upstream)
       echo "Cleaning up existing HAR registry: ${var.registry_id}"
       REGISTRY_REF="${var.account_id}/${var.org_id}/${var.project_id}/${var.registry_id}/+"
-      HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X DELETE "${var.harness_endpoint}/har/api/v1/v1/registry/$REGISTRY_REF" \
-        -H "x-api-key: ${var.harness_api_key}" \
-        -H "Content-Type: application/json" 2>/dev/null)
+      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_ENDPOINT/har/api/v1/v1/registry/$REGISTRY_REF" \
+        -H "x-api-key: $HARNESS_API_KEY" \
+        -H "Content-Type: application/json")
+      HTTP_CODE=$(echo "$RESP" | tail -n1)
+      BODY=$(echo "$RESP" | head -n -1)
       echo "  ${var.registry_id}: $HTTP_CODE"
+      [ -n "$BODY" ] && echo "  Response: $BODY"
       
       # Delete upstream proxy if it exists
       echo "Cleaning up existing upstream proxy: ${var.dockerhub_upstream_id}"
       UPSTREAM_REF="${var.account_id}/${var.org_id}/${var.project_id}/${var.dockerhub_upstream_id}/+"
-      HTTP_CODE=$(curl -s -o /dev/null -w "%%{http_code}" -X DELETE "${var.harness_endpoint}/har/api/v1/v1/registry/$UPSTREAM_REF" \
-        -H "x-api-key: ${var.harness_api_key}" \
-        -H "Content-Type: application/json" 2>/dev/null)
+      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_ENDPOINT/har/api/v1/v1/registry/$UPSTREAM_REF" \
+        -H "x-api-key: $HARNESS_API_KEY" \
+        -H "Content-Type: application/json")
+      HTTP_CODE=$(echo "$RESP" | tail -n1)
+      BODY=$(echo "$RESP" | head -n -1)
       echo "  ${var.dockerhub_upstream_id}: $HTTP_CODE"
+      [ -n "$BODY" ] && echo "  Response: $BODY"
       
       # Small delay to ensure deletion is processed
       sleep 2
       exit 0
     EOT
+
+    environment = {
+      HARNESS_API_KEY  = var.harness_api_key
+      HARNESS_ENDPOINT = var.harness_endpoint
+    }
   }
 
   triggers_replace = [
