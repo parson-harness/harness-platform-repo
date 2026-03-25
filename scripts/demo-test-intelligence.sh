@@ -128,11 +128,15 @@ if [ "$DRY_RUN" = true ]; then
     echo "$DEMO_CODE"
 else
     # Find the last closing brace and insert before it
-    # Using a temp file for compatibility
+    # Using sed for macOS compatibility (head -n -1 doesn't work on macOS)
     TEMP_FILE=$(mktemp)
     
+    # Get total lines and remove the last line (closing brace)
+    TOTAL_LINES=$(wc -l < "$TARGET_FILE" | tr -d ' ')
+    LINES_TO_KEEP=$((TOTAL_LINES - 1))
+    
     # Insert the new method before the final closing brace
-    head -n -1 "$TARGET_FILE" > "$TEMP_FILE"
+    head -n "$LINES_TO_KEEP" "$TARGET_FILE" > "$TEMP_FILE"
     echo "$DEMO_CODE" >> "$TEMP_FILE"
     echo "}" >> "$TEMP_FILE"
     
