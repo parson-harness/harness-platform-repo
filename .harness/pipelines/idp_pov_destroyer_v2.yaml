@@ -294,11 +294,8 @@ pipeline:
                   name: Approve Destroy
                   identifier: approve_destroy
                   spec:
-                    autoApprove: <+pipeline.variables.auto_approve> == "true"
-                  timeout: 1d
-                  when:
-                    stageStatus: Success
-                    condition: <+pipeline.variables.auto_approve> == "false"
+                    autoApprove: true
+                  timeout: 1m
                   failureStrategies:
                     - onFailure:
                         errors:
