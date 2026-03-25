@@ -396,11 +396,155 @@ pipeline:
     - stage:
         name: Pre-Apply Cleanup
         identifier: pre_apply_cleanup
-        description: Clean up orphaned Kubernetes resources before Terraform apply
+        description: Clean up orphaned resources before Terraform apply (handles state drift)
         type: Custom
         spec:
           execution:
             steps:
+              - step:
+                  type: Http
+                  name: Delete Orphaned HAR Registry
+                  identifier: delete_orphaned_har
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/har/api/v1/registry/har-<+pipeline.variables.owner>?space_ref=<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.target_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Http
+                  name: Delete Orphaned Harness Code Repo
+                  identifier: delete_orphaned_code_repo
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/code/api/v1/repos/<+pipeline.variables.owner>-demo-app?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.target_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Http
+                  name: Delete Orphaned CI Pipeline
+                  identifier: delete_orphaned_ci_pipeline
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/pipeline/api/pipelines/<+pipeline.variables.owner>_ci_build?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.target_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Http
+                  name: Delete Orphaned Strategy Pipeline
+                  identifier: delete_orphaned_strategy_pipeline
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/pipeline/api/pipelines/<+pipeline.variables.owner>_k8s_strategy_deploy?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.target_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Http
+                  name: Delete Orphaned Service
+                  identifier: delete_orphaned_service
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/ng/api/servicesV2/<+pipeline.variables.owner>_demo_app?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.target_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Http
+                  name: Delete Orphaned Environment
+                  identifier: delete_orphaned_environment
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/ng/api/environmentsV2/<+pipeline.variables.owner>_dev?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.target_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Http
+                  name: Delete Orphaned K8s Connector
+                  identifier: delete_orphaned_k8s_connector
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/ng/api/connectors/<+pipeline.variables.owner>_k8s_reference_architecture?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.target_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Http
+                  name: Delete Orphaned AWS Connector
+                  identifier: delete_orphaned_aws_connector
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/ng/api/connectors/<+pipeline.variables.owner>_aws_reference_architecture?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
+                    method: DELETE
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.target_api_key>
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 204 || <+httpResponseCode> == 404
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
               - step:
                   type: ShellScript
                   name: Cleanup Orphaned K8s Resources
@@ -440,6 +584,23 @@ pipeline:
                         action:
                           type: MarkAsSuccess
                           spec: {}
+              - step:
+                  type: ShellScript
+                  name: Cleanup Summary
+                  identifier: cleanup_summary
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Pre-Apply Cleanup Complete ==="
+                          echo "Cleaned up any orphaned resources for owner: <+pipeline.variables.owner>"
+                          echo "Terraform will now create fresh resources"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m
     - stage:
         name: Plan and Apply
         identifier: plan_and_apply

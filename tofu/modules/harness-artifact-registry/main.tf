@@ -66,5 +66,7 @@ resource "harness_platform_har_registry" "registry" {
 
   lifecycle {
     prevent_destroy = false
+    # Ignore changes to allow re-import if registry already exists
+    ignore_changes = [description]
   }
 }
