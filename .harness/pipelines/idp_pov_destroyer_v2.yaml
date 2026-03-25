@@ -223,8 +223,93 @@ pipeline:
                           type: MarkAsSuccess
 
     ############################################################################
+    # Stage 2.5: Check State Health
+    # Verify key resources still exist before running Terraform destroy
+    ############################################################################
+    - stage:
+        name: Check State Health
+        identifier: check_state_health
+        description: Check if key resources exist before running Terraform (avoids 404 errors)
+        type: Custom
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.skip_terraform_destroy> == "false"
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: Http
+                  name: Check Harness Code Repo
+                  identifier: check_code_repo
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/code/api/v1/repos/<+pipeline.variables.owner>-demo-app?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>
+                    method: GET
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.target_api_key>
+                    outputVariables:
+                      - name: repo_exists
+                        value: <+httpResponseCode>
+                        type: String
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                  timeout: 1m
+              - step:
+                  type: Http
+                  name: Check HAR Registry
+                  identifier: check_har_registry
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/har/api/v1/v1/registry/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/har-<+pipeline.variables.owner>
+                    method: GET
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.target_api_key>
+                    outputVariables:
+                      - name: har_exists
+                        value: <+httpResponseCode>
+                        type: String
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                  timeout: 1m
+              - step:
+                  type: ShellScript
+                  name: Evaluate State Health
+                  identifier: evaluate_state_health
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=============================================="
+                          echo "  State Health Check"
+                          echo "=============================================="
+                          echo ""
+                          REPO_STATUS="<+execution.steps.check_code_repo.output.outputVariables.repo_exists>"
+                          HAR_STATUS="<+execution.steps.check_har_registry.output.outputVariables.har_exists>"
+                          
+                          echo "Harness Code Repo: $REPO_STATUS"
+                          echo "HAR Registry: $HAR_STATUS"
+                          echo ""
+                          
+                          # If key resources are 404, state is corrupted - skip Terraform
+                          if [ "$REPO_STATUS" = "404" ]; then
+                            echo "⚠️  Harness Code repo already deleted - state is stale"
+                            echo "   Will skip Terraform and use API-only cleanup"
+                            export STATE_HEALTHY="false"
+                          else
+                            echo "✓ Key resources exist - Terraform destroy can proceed"
+                            export STATE_HEALTHY="true"
+                          fi
+                    environmentVariables: []
+                    outputVariables:
+                      - name: state_healthy
+                        type: String
+                        value: STATE_HEALTHY
+                  timeout: 1m
+
+    ############################################################################
     # Stage 3: Terraform Destroy (State-Aware)
-    # Only runs if workspace exists and skip_terraform_destroy is false
+    # Only runs if workspace exists, skip_terraform_destroy is false, AND state is healthy
     ############################################################################
     - stage:
         name: Terraform Destroy
@@ -233,7 +318,7 @@ pipeline:
         type: IACM
         when:
           pipelineStatus: Success
-          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.skip_terraform_destroy> == "false"
+          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.skip_terraform_destroy> == "false" && <+pipeline.stages.check_state_health.spec.execution.steps.evaluate_state_health.output.outputVariables.state_healthy> == "true"
         spec:
           platform:
             os: Linux
@@ -251,66 +336,6 @@ pipeline:
                   timeout: 10m
                   spec:
                     command: init
-              
-              - step:
-                  type: Run
-                  name: Clean Stale State
-                  identifier: clean_stale_state
-                  spec:
-                    shell: Bash
-                    command: |
-                      echo "=============================================="
-                      echo "  Cleaning Stale State Entries"
-                      echo "=============================================="
-                      echo ""
-                      echo "Removing state entries for resources that were deleted outside Terraform..."
-                      echo "This prevents 404 errors during plan-destroy refresh."
-                      echo ""
-                      
-                      # Find the tofu binary
-                      TOFU_BIN=$(find /harness/.iacmbin-* -name "tofu" 2>/dev/null | head -1)
-                      if [ -z "$TOFU_BIN" ]; then
-                        echo "Warning: tofu binary not found, skipping state cleanup"
-                        exit 0
-                      fi
-                      echo "Using: $TOFU_BIN"
-                      
-                      cd /harness/tofu/stacks/eks
-                      
-                      # List all resources in state
-                      echo ""
-                      echo "Current state resources:"
-                      $TOFU_BIN state list 2>/dev/null || echo "(empty state)"
-                      
-                      # Resources that commonly get deleted outside Terraform
-                      # Remove them from state if they exist (no error if not in state)
-                      RESOURCES_TO_CHECK=(
-                        "module.harness_code_repo[0].harness_platform_repo.main[0]"
-                        "module.har[0].harness_platform_har_registry.registry"
-                        "module.harness_pipelines.harness_platform_pipeline.ci[0]"
-                        "module.harness_pipelines.harness_platform_pipeline.strategy[0]"
-                        "module.harness_service.harness_platform_service.main"
-                        "module.harness_environment_dev.harness_platform_environment.main"
-                        "module.harness_environment_dev.harness_platform_infrastructure.kubernetes[0]"
-                        "module.harness_connectors.harness_platform_connector_kubernetes.cluster[0]"
-                        "module.harness_connectors.harness_platform_connector_aws.main[0]"
-                      )
-                      
-                      echo ""
-                      echo "Checking for stale entries..."
-                      for RESOURCE in "${RESOURCES_TO_CHECK[@]}"; do
-                        # Check if resource is in state
-                        if $TOFU_BIN state list 2>/dev/null | grep -q "^${RESOURCE}$"; then
-                          echo "  Removing: $RESOURCE"
-                          $TOFU_BIN state rm "$RESOURCE" 2>/dev/null || true
-                        fi
-                      done
-                      
-                      echo ""
-                      echo "✓ State cleanup complete"
-                      echo ""
-                      echo "Remaining state resources:"
-                      $TOFU_BIN state list 2>/dev/null || echo "(empty state)"
               
               - step:
                   type: IACMTerraformPlugin
