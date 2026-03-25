@@ -281,21 +281,15 @@ pipeline:
                         },
                         "environment_variables": {}
                       }
-                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201
+                    assertion: "true"
                   timeout: 2m
                   when:
                     stageStatus: Success
                     condition: <+execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "404"
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsFailure
               - step:
                   type: ShellScript
-                  name: Log Workspace Creation Error
-                  identifier: log_workspace_error
+                  name: Validate Workspace Creation
+                  identifier: validate_workspace_creation
                   spec:
                     shell: Bash
                     executionTarget: {}
@@ -303,14 +297,23 @@ pipeline:
                       type: Inline
                       spec:
                         script: |
-                          echo "Workspace creation response code: <+execution.steps.create_iacm_workspace.output.outputVariables.response_code>"
-                          echo "Workspace creation response body: <+execution.steps.create_iacm_workspace.output.outputVariables.response_body>"
+                          echo "=== Workspace Creation Response ==="
+                          echo "Response Code: <+execution.steps.create_iacm_workspace.output.outputVariables.response_code>"
+                          echo "Response Body: <+execution.steps.create_iacm_workspace.output.outputVariables.response_body>"
+                          echo "==================================="
+                          
+                          RESPONSE_CODE="<+execution.steps.create_iacm_workspace.output.outputVariables.response_code>"
+                          if [ "$RESPONSE_CODE" != "200" ] && [ "$RESPONSE_CODE" != "201" ]; then
+                            echo "ERROR: Workspace creation failed with code $RESPONSE_CODE"
+                            exit 1
+                          fi
+                          echo "Workspace created successfully"
                     environmentVariables: []
                     outputVariables: []
                   timeout: 1m
                   when:
-                    stageStatus: Failure
-                    condition: <+execution.steps.create_iacm_workspace.output.outputVariables.response_code> != "200" && <+execution.steps.create_iacm_workspace.output.outputVariables.response_code> != "201"
+                    stageStatus: Success
+                    condition: <+execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "404"
               - step:
                   type: Http
                   name: Link Workspace to Template
