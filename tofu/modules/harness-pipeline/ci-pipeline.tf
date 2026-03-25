@@ -8,6 +8,9 @@ locals {
   # Validate that we have a valid codebase source
   has_valid_codebase = var.use_harness_code || (var.git_connector_ref != "" && var.git_repo_name != "")
 
+  # Effective repo name - use harness_code_repo_name if set, otherwise derive from git_repo_name
+  effective_harness_code_repo_name = var.harness_code_repo_name != "" ? var.harness_code_repo_name : var.git_repo_name
+
   # Codebase configuration differs between GitHub and Harness Code
   # GitHub requires connectorRef + repoName; Harness Code only needs repoName
   ci_codebase_github = chomp(<<-EOT
@@ -21,7 +24,7 @@ EOT
 
   ci_codebase_harness_code = chomp(<<-EOT
           codebase:
-            repoName: ${var.harness_code_repo_name}
+            repoName: ${local.effective_harness_code_repo_name}
             build: <+input>
             sparseCheckout: []
 EOT
@@ -65,7 +68,15 @@ resource "harness_platform_pipeline" "ci_build" {
           value: <+input>.default(https://app.harness.io/gratis)
       properties:
         ci:
-${local.ci_codebase_spec}
+          codebase:
+%{if var.use_harness_code ~}
+            repoName: ${local.effective_harness_code_repo_name}
+%{else ~}
+            connectorRef: ${var.git_connector_ref}
+            repoName: ${var.git_repo_name}
+%{endif ~}
+            build: <+input>
+            sparseCheckout: []
       stages:
         - stage:
             name: Build and Push
