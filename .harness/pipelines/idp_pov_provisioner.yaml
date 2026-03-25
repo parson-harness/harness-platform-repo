@@ -525,6 +525,8 @@ pipeline:
                       spec:
                         script: |
                           echo "✓ Old workspace deleted"
+                          echo "Waiting 5 seconds for IACM to process deletion..."
+                          sleep 5
                           echo "Will create fresh workspace in next stage..."
                     environmentVariables: []
                     outputVariables: []
