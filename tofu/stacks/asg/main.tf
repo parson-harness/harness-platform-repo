@@ -80,7 +80,7 @@ provider "kubernetes" {
 }
 
 provider "helm" {
-  kubernetes = {
+  kubernetes {
     host                   = var.create_delegate ? data.aws_eks_cluster.shared[0].endpoint : ""
     cluster_ca_certificate = var.create_delegate ? base64decode(data.aws_eks_cluster.shared[0].certificate_authority[0].data) : ""
     token                  = var.create_delegate ? data.aws_eks_cluster_auth.shared[0].token : ""
