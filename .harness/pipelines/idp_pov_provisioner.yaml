@@ -406,7 +406,7 @@ pipeline:
                   name: Delete Orphaned HAR Registry
                   identifier: delete_orphaned_har
                   spec:
-                    url: <+pipeline.variables.harness_endpoint>/har/api/v1/registry/har-<+pipeline.variables.owner>?space_ref=<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>
+                    url: <+pipeline.variables.harness_endpoint>/har/api/v1/v1/registry/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/har-<+pipeline.variables.owner>/+
                     method: DELETE
                     headers:
                       - key: x-api-key
