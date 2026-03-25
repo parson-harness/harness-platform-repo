@@ -82,7 +82,8 @@ resource "terraform_data" "cleanup_existing_registry" {
     var.registry_id,
     var.account_id,
     var.org_id,
-    var.project_id
+    var.project_id,
+    timestamp()  # Force cleanup to run on every apply
   ]
 }
 
