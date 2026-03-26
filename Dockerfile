@@ -9,8 +9,10 @@ RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 RUN groupadd -g 1001 appgroup && \
     useradd -u 1001 -g appgroup -m appuser
 
-# Copy the pre-built jar (built locally with mvn package)
-COPY --chown=appuser:appgroup target/*.jar app.jar
+# Copy the pre-built jar
+# Supports both Maven (target/) and Gradle (build/libs/) output directories
+ARG JAR_PATH=target/*.jar
+COPY --chown=appuser:appgroup ${JAR_PATH} app.jar
 
 # Set ownership
 RUN chown -R appuser:appgroup /app
