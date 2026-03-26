@@ -1,8 +1,8 @@
 # Build stage
-# BASE_IMAGE_REGISTRY allows pulling base image through HAR upstream proxy
-# Default: docker.io/library (public Docker Hub)
-# HAR proxy: pkg.harness.io/<account_id>/<upstream-proxy-registry>
-ARG BASE_IMAGE_REGISTRY=docker.io/library
+# BASE_IMAGE_REGISTRY: HAR upstream proxy URL for pulling base images
+# Example: pkg.harness.io/<account_id>/<upstream-proxy-registry>
+# This ARG is REQUIRED - no default to ensure HAR is always used
+ARG BASE_IMAGE_REGISTRY
 FROM ${BASE_IMAGE_REGISTRY}/eclipse-temurin:17-jre
 WORKDIR /app
 
