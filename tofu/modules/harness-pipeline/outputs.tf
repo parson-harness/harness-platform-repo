@@ -71,3 +71,13 @@ output "asg_strategy_pipeline_identifier" {
   description = "Identifier of the ASG strategy pipeline"
   value       = var.create_asg_strategy_pipeline ? harness_platform_pipeline.asg_strategy[0].identifier : null
 }
+
+output "standard_ci_gradle_id" {
+  description = "ID of the Standard CI Gradle pipeline"
+  value       = var.create_standard_ci_gradle ? harness_platform_pipeline.standard_ci_gradle[0].id : null
+}
+
+output "standard_ci_gradle_identifier" {
+  description = "Identifier of the Standard CI Gradle pipeline"
+  value       = var.create_standard_ci_gradle ? harness_platform_pipeline.standard_ci_gradle[0].identifier : null
+}

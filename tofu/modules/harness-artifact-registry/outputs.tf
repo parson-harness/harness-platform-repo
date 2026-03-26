@@ -8,8 +8,8 @@ output "registry_id" {
 }
 
 output "registry_url" {
-  description = "The URL to push/pull images from the registry"
-  value       = "pkg.harness.io/${var.account_id}/${var.org_id}/${var.project_id}/${var.registry_id}"
+  description = "The URL to push/pull images from the registry (lowercase account ID for Docker compatibility)"
+  value       = "pkg.harness.io/${lower(var.account_id)}/${var.registry_id}"
 }
 
 output "dockerhub_upstream_id" {

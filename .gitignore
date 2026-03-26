@@ -54,3 +54,4 @@ surefire-reports/
 tofu/bootstrap/dockercfg
 tofu/bootstrap/secret.yml
 tofu/bootstrap/temp_dockercfg
+.gradle/

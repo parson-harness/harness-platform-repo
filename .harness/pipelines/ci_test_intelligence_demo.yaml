@@ -171,13 +171,13 @@ pipeline:
                   name: Push to HAR
                   identifier: push_to_har
                   spec:
-                    repo: <+input>
+                    repo: toddpdemoapp
                     tags:
                       - 1.0.<+pipeline.sequenceId>
                       - latest
                     caching: true
                     optimize: true
-                    registryRef: <+input>
+                    registryRef: har-toddp
                     labels:
                       org.opencontainers.image.revision: <+codebase.commitSha>
                       org.opencontainers.image.source: <+codebase.repoUrl>
@@ -188,9 +188,7 @@ pipeline:
                       JAR_PATH: build/libs/*.jar
                       BUILD_COMMIT_SHA: <+codebase.commitSha>
                       IMAGE_TAG: 1.0.<+pipeline.sequenceId>
-                      BASE_IMAGE_REGISTRY: <+input>
-                    baseImageConnectorRefs:
-                      - <+input>
+                      BASE_IMAGE_REGISTRY: pkg.harness.io/eerjnxtns4grlg5vnnjzuw/har-toddp
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -221,8 +219,8 @@ pipeline:
                           source:
                             type: har
                             spec:
-                              registry: <+input>
-                              image: <+input>:1.0.<+pipeline.sequenceId>
+                              registry: har-toddp
+                              image: toddpdemoapp:1.0.<+pipeline.sequenceId>
                           sbom_drift:
                             base: last_generated_sbom
                     - step:
@@ -233,8 +231,8 @@ pipeline:
                           source:
                             type: har
                             spec:
-                              registry: <+input>
-                              image: <+input>:1.0.<+pipeline.sequenceId>
+                              registry: har-toddp
+                              image: toddpdemoapp:1.0.<+pipeline.sequenceId>
               - stepGroup:
                   name: Container Scans
                   identifier: container_scans
@@ -257,8 +255,8 @@ pipeline:
                               image:
                                 type: harness
                                 tag: 1.0.<+pipeline.sequenceId>
-                                registry: <+input>
-                                image_path: <+input>:1.0.<+pipeline.sequenceId>
+                                registry: har-toddp
+                                image_path: toddpdemoapp:1.0.<+pipeline.sequenceId>
                         - step:
                             type: AquaTrivy
                             name: Aqua Trivy
@@ -277,8 +275,8 @@ pipeline:
                               privileged: false
                               image:
                                 type: harness
-                                registry: <+input>
-                                image_path: <+input>:1.0.<+pipeline.sequenceId>
+                                registry: har-toddp
+                                image_path: toddpdemoapp:1.0.<+pipeline.sequenceId>
                               sbom:
                                 format: spdx-json
                             failureStrategies:

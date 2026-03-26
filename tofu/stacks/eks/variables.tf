@@ -161,9 +161,9 @@ variable "artifact_registry_type" {
 }
 
 variable "create_dockerhub_upstream" {
-  description = "Create DockerHub upstream proxy in HAR"
+  description = "Create DockerHub upstream proxy in HAR (required for pulling base images through HAR)"
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "dockerhub_username" {
@@ -236,9 +236,21 @@ variable "create_strategy_pipeline" {
 }
 
 variable "create_ci_pipeline" {
-  description = "Create the CI build pipeline"
+  description = "Create the CI build pipeline (Maven-based)"
   type        = bool
   default     = true
+}
+
+variable "create_standard_ci_gradle" {
+  description = "Create Standard CI Gradle pipeline (Gradle build, Test Intelligence, security scanning, supply chain)"
+  type        = bool
+  default     = false
+}
+
+variable "standard_ci_gradle_test_packages" {
+  description = "Java packages to scan for Test Intelligence (e.g., io.harness.demo)"
+  type        = string
+  default     = "io.harness.demo"
 }
 
 ################################################################################

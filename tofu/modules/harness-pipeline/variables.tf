@@ -420,6 +420,50 @@ variable "asg_stage_listener_rule_arn" {
 }
 
 ################################################################################
+# Standard CI Pipeline Variables
+# Naming Convention: standard_ci_<build_tool>
+# - standard_ci_gradle - Gradle/Java → Docker → HAR
+# - standard_ci_maven  - Maven/Java → Docker → HAR (ci-pipeline.tf)
+# - standard_ci_packer - Maven/Java → Packer → AMI (asg-ci-pipeline.tf)
+################################################################################
+
+variable "create_standard_ci_gradle" {
+  description = "Create Standard CI Gradle pipeline (Gradle build with Test Intelligence, security scanning, supply chain)"
+  type        = bool
+  default     = false
+}
+
+variable "standard_ci_gradle_id" {
+  description = "Identifier for Standard CI Gradle pipeline (no owner prefix needed - 1 per project)"
+  type        = string
+  default     = "standard_ci_gradle"
+}
+
+variable "standard_ci_gradle_name" {
+  description = "Display name for Standard CI Gradle pipeline"
+  type        = string
+  default     = "Standard CI - Gradle"
+}
+
+variable "standard_ci_gradle_description" {
+  description = "Description for Standard CI Gradle pipeline"
+  type        = string
+  default     = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
+}
+
+variable "standard_ci_gradle_test_packages" {
+  description = "Java packages to scan for Test Intelligence (e.g., io.harness.demo)"
+  type        = string
+  default     = "io.harness.demo"
+}
+
+variable "har_base_image_registry" {
+  description = "HAR registry URL for base images (lowercase account ID, e.g., pkg.harness.io/accountid/registry-name)"
+  type        = string
+  default     = ""
+}
+
+################################################################################
 # Common Variables
 ################################################################################
 
