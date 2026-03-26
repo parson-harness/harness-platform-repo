@@ -286,6 +286,141 @@ resource "harness_platform_policy" "require_test_reports" {
   REGO
 }
 
+# Policy: Require Harness Security Scanners
+resource "harness_platform_policy" "require_harness_scanners" {
+  count      = var.create_security_policies ? 1 : 0
+  identifier = "require_harness_scanners"
+  name       = "Require Harness Security Scanners"
+  org_id     = var.org_id
+  project_id = var.project_id
+
+  rego = <<-REGO
+    package pipeline
+
+    # Deny CI pipelines that build containers but don't have required Harness scanners
+    deny[msg] {
+      input.pipeline.stages[i].stage.type == "CI"
+      stage := input.pipeline.stages[i].stage
+      has_docker_build(stage)
+      not has_gitleaks(stage)
+      msg := sprintf("CI stage '%s' must include Gitleaks secret scanning step for security compliance.", [stage.name])
+    }
+
+    deny[msg] {
+      input.pipeline.stages[i].stage.type == "CI"
+      stage := input.pipeline.stages[i].stage
+      has_docker_build(stage)
+      not has_harness_sast(stage)
+      msg := sprintf("CI stage '%s' must include HarnessSAST step for static application security testing.", [stage.name])
+    }
+
+    deny[msg] {
+      input.pipeline.stages[i].stage.type == "CI"
+      stage := input.pipeline.stages[i].stage
+      has_docker_build(stage)
+      not has_harness_sca(stage)
+      msg := sprintf("CI stage '%s' must include HarnessSCA step for software composition analysis.", [stage.name])
+    }
+
+    # Check for Docker build steps
+    has_docker_build(stage) {
+      stage.spec.execution.steps[_].step.type == "BuildAndPushDockerRegistry"
+    }
+
+    has_docker_build(stage) {
+      stage.spec.execution.steps[_].step.type == "BuildAndPushECR"
+    }
+
+    # Check for Gitleaks
+    has_gitleaks(stage) {
+      stage.spec.execution.steps[_].step.type == "Gitleaks"
+    }
+
+    has_gitleaks(stage) {
+      stage.spec.execution.steps[_].stepGroup.steps[_].step.type == "Gitleaks"
+    }
+
+    # Check for HarnessSAST
+    has_harness_sast(stage) {
+      stage.spec.execution.steps[_].step.type == "HarnessSAST"
+    }
+
+    has_harness_sast(stage) {
+      stage.spec.execution.steps[_].stepGroup.steps[_].step.type == "HarnessSAST"
+    }
+
+    has_harness_sast(stage) {
+      stage.spec.execution.steps[_].stepGroup.steps[_].parallel[_].step.type == "HarnessSAST"
+    }
+
+    # Check for HarnessSCA
+    has_harness_sca(stage) {
+      stage.spec.execution.steps[_].step.type == "HarnessSCA"
+    }
+
+    has_harness_sca(stage) {
+      stage.spec.execution.steps[_].stepGroup.steps[_].step.type == "HarnessSCA"
+    }
+
+    has_harness_sca(stage) {
+      stage.spec.execution.steps[_].stepGroup.steps[_].parallel[_].step.type == "HarnessSCA"
+    }
+  REGO
+}
+
+# Policy: Require Code Coverage
+resource "harness_platform_policy" "require_code_coverage" {
+  count      = var.create_quality_policies ? 1 : 0
+  identifier = "require_code_coverage"
+  name       = "Require Code Coverage"
+  org_id     = var.org_id
+  project_id = var.project_id
+
+  rego = <<-REGO
+    package pipeline
+
+    # Warn if CI pipeline doesn't have code coverage step
+    warn[msg] {
+      input.pipeline.stages[i].stage.type == "CI"
+      stage := input.pipeline.stages[i].stage
+      has_test_step(stage)
+      not has_coverage_step(stage)
+      msg := sprintf("CI stage '%s' should include a code coverage step (e.g., JaCoCo) to track test coverage metrics.", [stage.name])
+    }
+
+    has_test_step(stage) {
+      stage.spec.execution.steps[_].step.type == "RunTests"
+    }
+
+    has_test_step(stage) {
+      stage.spec.execution.steps[_].stepGroup.steps[_].step.type == "RunTests"
+    }
+
+    has_test_step(stage) {
+      stage.spec.execution.steps[_].stepGroup.steps[_].parallel[_].step.type == "RunTests"
+    }
+
+    # Check for coverage step (Run step with "coverage" or "jacoco" in name/identifier)
+    has_coverage_step(stage) {
+      step := stage.spec.execution.steps[_].step
+      step.type == "Run"
+      contains(lower(step.identifier), "coverage")
+    }
+
+    has_coverage_step(stage) {
+      step := stage.spec.execution.steps[_].step
+      step.type == "Run"
+      contains(lower(step.name), "coverage")
+    }
+
+    has_coverage_step(stage) {
+      step := stage.spec.execution.steps[_].step
+      step.type == "Run"
+      contains(lower(step.identifier), "jacoco")
+    }
+  REGO
+}
+
 # Policy: Require Pipeline Tags
 resource "harness_platform_policy" "require_pipeline_tags" {
   count      = var.create_quality_policies ? 1 : 0
@@ -400,9 +535,36 @@ resource "harness_platform_policyset" "security_standards" {
     severity   = "warning"
   }
 
+  policies {
+    identifier = harness_platform_policy.require_harness_scanners[0].identifier
+    severity   = "warning"
+  }
+
   depends_on = [
     harness_platform_policy.no_hardcoded_secrets,
-    harness_platform_policy.recommend_artifact_scanning
+    harness_platform_policy.recommend_artifact_scanning,
+    harness_platform_policy.require_harness_scanners
+  ]
+}
+
+# Security Policy Set - On Run (stricter enforcement)
+resource "harness_platform_policyset" "security_standards_on_run" {
+  count      = var.create_security_policy_set ? 1 : 0
+  identifier = "security_standards_on_run"
+  name       = "Security Standards (On Run)"
+  org_id     = var.org_id
+  project_id = var.project_id
+  action     = "onrun"
+  type       = "pipeline"
+  enabled    = var.enforce_security_policies
+
+  policies {
+    identifier = harness_platform_policy.require_harness_scanners[0].identifier
+    severity   = "error"
+  }
+
+  depends_on = [
+    harness_platform_policy.require_harness_scanners
   ]
 }
 
@@ -427,8 +589,14 @@ resource "harness_platform_policyset" "quality_gates" {
     severity   = "warning"
   }
 
+  policies {
+    identifier = harness_platform_policy.require_code_coverage[0].identifier
+    severity   = "warning"
+  }
+
   depends_on = [
     harness_platform_policy.require_test_reports,
-    harness_platform_policy.require_pipeline_tags
+    harness_platform_policy.require_pipeline_tags,
+    harness_platform_policy.require_code_coverage
   ]
 }

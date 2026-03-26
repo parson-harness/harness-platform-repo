@@ -205,8 +205,8 @@ pipeline:
                               action:
                                 type: Abort
               - stepGroup:
-                  name: Supply Chain
-                  identifier: supply_chain
+                  name: Supply Chain Security
+                  identifier: supply_chain_security
                   steps:
                     - step:
                         type: SscaOrchestration
@@ -225,6 +225,16 @@ pipeline:
                               image: <+input>:1.0.<+pipeline.sequenceId>
                           sbom_drift:
                             base: last_generated_sbom
+                    - step:
+                        type: provenance
+                        name: SLSA Provenance
+                        identifier: slsa_provenance
+                        spec:
+                          source:
+                            type: har
+                            spec:
+                              registry: <+input>
+                              image: <+input>:1.0.<+pipeline.sequenceId>
               - stepGroup:
                   name: Container Scans
                   identifier: container_scans
@@ -311,8 +321,9 @@ pipeline:
                       echo "- Harness SCA: Dependency vulnerabilities"
                       echo "- Aqua Trivy: Container vulnerabilities"
                       echo ""
-                      echo "=== SUPPLY CHAIN ==="
+                      echo "=== SUPPLY CHAIN SECURITY ==="
                       echo "- SBOM Generation: SPDX-JSON format"
+                      echo "- SLSA Provenance: Build attestation"
                       echo ""
                       # Pipeline Annotations (works on K8s infrastructure)
                       # Uncomment when running on K8s:

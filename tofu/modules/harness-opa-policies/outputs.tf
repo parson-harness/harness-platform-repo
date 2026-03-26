@@ -17,6 +17,7 @@ output "security_policy_ids" {
   value = {
     no_hardcoded_secrets        = var.create_security_policies ? harness_platform_policy.no_hardcoded_secrets[0].identifier : null
     recommend_artifact_scanning = var.create_security_policies ? harness_platform_policy.recommend_artifact_scanning[0].identifier : null
+    require_harness_scanners    = var.create_security_policies ? harness_platform_policy.require_harness_scanners[0].identifier : null
   }
 }
 
@@ -25,15 +26,17 @@ output "quality_policy_ids" {
   value = {
     require_test_reports  = var.create_quality_policies ? harness_platform_policy.require_test_reports[0].identifier : null
     require_pipeline_tags = var.create_quality_policies ? harness_platform_policy.require_pipeline_tags[0].identifier : null
+    require_code_coverage = var.create_quality_policies ? harness_platform_policy.require_code_coverage[0].identifier : null
   }
 }
 
 output "policy_set_ids" {
   description = "IDs of created policy sets"
   value = {
-    ci_standards        = var.create_ci_policy_set ? harness_platform_policyset.ci_standards[0].identifier : null
-    ci_standards_on_run = var.create_ci_policy_set ? harness_platform_policyset.ci_standards_on_run[0].identifier : null
-    security_standards  = var.create_security_policy_set ? harness_platform_policyset.security_standards[0].identifier : null
-    quality_gates       = var.create_quality_policy_set ? harness_platform_policyset.quality_gates[0].identifier : null
+    ci_standards            = var.create_ci_policy_set ? harness_platform_policyset.ci_standards[0].identifier : null
+    ci_standards_on_run     = var.create_ci_policy_set ? harness_platform_policyset.ci_standards_on_run[0].identifier : null
+    security_standards      = var.create_security_policy_set ? harness_platform_policyset.security_standards[0].identifier : null
+    security_standards_on_run = var.create_security_policy_set ? harness_platform_policyset.security_standards_on_run[0].identifier : null
+    quality_gates           = var.create_quality_policy_set ? harness_platform_policyset.quality_gates[0].identifier : null
   }
 }
