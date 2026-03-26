@@ -1,5 +1,9 @@
 # Build stage
-FROM eclipse-temurin:17-jre
+# BASE_IMAGE_REGISTRY allows pulling base image through HAR upstream proxy
+# Default: docker.io/library (public Docker Hub)
+# HAR proxy: pkg.harness.io/<account_id>/<upstream-proxy-registry>
+ARG BASE_IMAGE_REGISTRY=docker.io/library
+FROM ${BASE_IMAGE_REGISTRY}/eclipse-temurin:17-jre
 WORKDIR /app
 
 # Install curl for healthcheck
