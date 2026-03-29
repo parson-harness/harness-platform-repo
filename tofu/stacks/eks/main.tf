@@ -401,10 +401,10 @@ module "harness_pipelines" {
   pipeline_tags     = ["tofu-managed", var.owner, "eks"]
 
   # Standard CI Gradle pipeline (with security scanning and supply chain)
-  # No owner prefix on identifier - 1 sandbox per project architecture
+  # Include owner prefix for multi-sandbox support in same project
   create_standard_ci_gradle        = coalesce(var.create_standard_ci_gradle, false) && (var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != "")
-  standard_ci_gradle_id            = "standard_ci_gradle"
-  standard_ci_gradle_name          = "Standard CI - Gradle"
+  standard_ci_gradle_id            = "${var.owner}_standard_ci_gradle"
+  standard_ci_gradle_name          = "${title(var.owner)} Standard CI - Gradle"
   standard_ci_gradle_description   = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
   standard_ci_gradle_test_packages = var.standard_ci_gradle_test_packages
   har_base_image_registry          = var.artifact_registry_type == "har" ? "pkg.harness.io/${lower(var.harness_account_id)}/har-${var.owner}" : ""
