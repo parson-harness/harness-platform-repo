@@ -460,32 +460,39 @@ data "aws_route53_zone" "harness_demo" {
   name  = "${var.dns_domain}."
 }
 
-# Only look up the EKS ingress ALB if we're managing DNS AND not a legacy ASG workspace
-# Legacy workspaces have deployment_targets=["asg"] which means no EKS ingress ALB exists
+# DNS management for EKS ingress ALB
+# NOTE: The ALB is created by AWS Load Balancer Controller when an Ingress is deployed.
+# For new workspaces, the ALB won't exist yet, so we skip the lookup.
+# The wildcard DNS (*.harness-demo.dev) is managed in bootstrap/dns.tf
+# Individual app DNS is handled automatically by the ingress controller annotations.
 locals {
   is_eks_deployment = !contains(var.deployment_targets, "asg") || contains(var.deployment_targets, "eks")
-  manage_eks_dns    = var.manage_dns && local.is_eks_deployment
+  # Disable ALB lookup - it causes errors for new workspaces where no ingress exists yet
+  # The wildcard DNS is managed centrally in bootstrap/dns.tf
+  manage_eks_dns = false
 }
 
-data "aws_lb" "ingress_alb" {
-  count = local.manage_eks_dns ? 1 : 0
-  tags = {
-    "ingress.k8s.aws/stack" = "harness-demo"
-  }
-}
+# ALB lookup disabled - causes "0 results" error for new workspaces
+# data "aws_lb" "ingress_alb" {
+#   count = local.manage_eks_dns ? 1 : 0
+#   tags = {
+#     "ingress.k8s.aws/stack" = "harness-demo"
+#   }
+# }
 
-resource "aws_route53_record" "wildcard" {
-  count   = local.manage_eks_dns ? 1 : 0
-  zone_id = var.route53_hosted_zone_id != "" ? var.route53_hosted_zone_id : data.aws_route53_zone.harness_demo[0].zone_id
-  name    = "*.${var.dns_domain}"
-  type    = "CNAME"
-  ttl     = 300
-  records = [data.aws_lb.ingress_alb[0].dns_name]
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
+# Wildcard DNS is managed in bootstrap/dns.tf, not per-workspace
+# resource "aws_route53_record" "wildcard" {
+#   count   = local.manage_eks_dns ? 1 : 0
+#   zone_id = var.route53_hosted_zone_id != "" ? var.route53_hosted_zone_id : data.aws_route53_zone.harness_demo[0].zone_id
+#   name    = "*.${var.dns_domain}"
+#   type    = "CNAME"
+#   ttl     = 300
+#   records = [data.aws_lb.ingress_alb[0].dns_name]
+#
+#   lifecycle {
+#     create_before_destroy = true
+#   }
+# }
 
 ################################################################################
 # Outputs
@@ -532,13 +539,13 @@ output "delegate_irsa_role_arn" {
 }
 
 output "alb_dns_name" {
-  description = "ALB DNS name for the ingress"
-  value       = local.manage_eks_dns ? data.aws_lb.ingress_alb[0].dns_name : null
+  description = "ALB DNS name for the ingress (managed centrally in bootstrap)"
+  value       = "Managed in bootstrap/dns.tf"
 }
 
 output "dns_record" {
-  description = "Wildcard DNS record managed by this stack"
-  value       = local.manage_eks_dns ? "*.${var.dns_domain} -> ${data.aws_lb.ingress_alb[0].dns_name}" : "DNS management disabled or ASG deployment"
+  description = "Wildcard DNS record (managed centrally in bootstrap)"
+  value       = "*.${var.dns_domain} -> Managed in bootstrap/dns.tf"
 }
 
 output "opa_policy_sets" {
