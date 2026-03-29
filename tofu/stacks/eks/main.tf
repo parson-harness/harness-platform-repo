@@ -460,15 +460,22 @@ data "aws_route53_zone" "harness_demo" {
   name  = "${var.dns_domain}."
 }
 
+# Only look up the EKS ingress ALB if we're managing DNS AND not a legacy ASG workspace
+# Legacy workspaces have deployment_targets=["asg"] which means no EKS ingress ALB exists
+locals {
+  is_eks_deployment = !contains(var.deployment_targets, "asg") || contains(var.deployment_targets, "eks")
+  manage_eks_dns    = var.manage_dns && local.is_eks_deployment
+}
+
 data "aws_lb" "ingress_alb" {
-  count = var.manage_dns ? 1 : 0
+  count = local.manage_eks_dns ? 1 : 0
   tags = {
     "ingress.k8s.aws/stack" = "harness-demo"
   }
 }
 
 resource "aws_route53_record" "wildcard" {
-  count   = var.manage_dns ? 1 : 0
+  count   = local.manage_eks_dns ? 1 : 0
   zone_id = var.route53_hosted_zone_id != "" ? var.route53_hosted_zone_id : data.aws_route53_zone.harness_demo[0].zone_id
   name    = "*.${var.dns_domain}"
   type    = "CNAME"
