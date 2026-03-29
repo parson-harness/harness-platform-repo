@@ -533,12 +533,12 @@ output "delegate_irsa_role_arn" {
 
 output "alb_dns_name" {
   description = "ALB DNS name for the ingress"
-  value       = var.manage_dns ? data.aws_lb.ingress_alb[0].dns_name : null
+  value       = local.manage_eks_dns ? data.aws_lb.ingress_alb[0].dns_name : null
 }
 
 output "dns_record" {
   description = "Wildcard DNS record managed by this stack"
-  value       = var.manage_dns ? "*.${var.dns_domain} -> ${data.aws_lb.ingress_alb[0].dns_name}" : "DNS management disabled"
+  value       = local.manage_eks_dns ? "*.${var.dns_domain} -> ${data.aws_lb.ingress_alb[0].dns_name}" : "DNS management disabled or ASG deployment"
 }
 
 output "opa_policy_sets" {
