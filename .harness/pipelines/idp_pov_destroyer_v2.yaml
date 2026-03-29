@@ -68,6 +68,11 @@ pipeline:
       description: Auto-approve the destroy (skip manual approval)
       required: false
       value: <+input>.default(true).allowedValues(true,false)
+    - name: create_standard_ci_gradle
+      type: String
+      description: Placeholder for workspace variable (not used in destroy)
+      required: false
+      value: "false"
   stages:
     - stage:
         name: Pre-flight
