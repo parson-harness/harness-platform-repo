@@ -121,7 +121,7 @@ pipeline:
 
                           # Force delete pipelines FIRST (they reference services/environments)
                           echo "=== Deleting Pipelines ==="
-                          for PIPELINE in ci_build k8s_canary_deploy k8s_bg_canary_deploy k8s_strategy_deploy canary_deployment blue_green_deployment strategy_choice; do
+                          for PIPELINE in ci_build standard_ci_gradle k8s_canary_deploy k8s_bg_canary_deploy k8s_strategy_deploy canary_deployment blue_green_deployment strategy_choice; do
                             echo "  Deleting pipeline: ${OWNER}_${PIPELINE}"
                             RESP=$(curl -s -w "\n%{http_code}" -X DELETE "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_${PIPELINE}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
                               -H "x-api-key: ${API_KEY}" \

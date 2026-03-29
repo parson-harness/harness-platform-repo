@@ -100,7 +100,12 @@ pipeline:
       value: <+input>.default(true).allowedValues(true,false)
     - name: create_ci_pipeline
       type: String
-      description: Create the CI build pipeline
+      description: Create the CI build pipeline (Maven-based)
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
+    - name: create_standard_ci_gradle
+      type: String
+      description: Create Standard CI Gradle pipeline (Test Intelligence, Security Scanning, Supply Chain)
       required: false
       value: <+input>.default(true).allowedValues(true,false)
     - name: acm_cert_arn
@@ -256,6 +261,11 @@ pipeline:
                           "create_ci_pipeline": {
                             "key": "create_ci_pipeline",
                             "value": "<+pipeline.variables.create_ci_pipeline>",
+                            "value_type": "string"
+                          },
+                          "create_standard_ci_gradle": {
+                            "key": "create_standard_ci_gradle",
+                            "value": "<+pipeline.variables.create_standard_ci_gradle>",
                             "value_type": "string"
                           },
                           "acm_cert_arn": {
@@ -652,6 +662,11 @@ pipeline:
                           "create_ci_pipeline": {
                             "key": "create_ci_pipeline",
                             "value": "<+pipeline.variables.create_ci_pipeline>",
+                            "value_type": "string"
+                          },
+                          "create_standard_ci_gradle": {
+                            "key": "create_standard_ci_gradle",
+                            "value": "<+pipeline.variables.create_standard_ci_gradle>",
                             "value_type": "string"
                           },
                           "acm_cert_arn": {

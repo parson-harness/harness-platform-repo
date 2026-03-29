@@ -135,6 +135,15 @@ spec:
           enum:
             - "true"
             - "false"
+        
+        create_standard_ci_gradle:
+          title: Create Standard CI Gradle Pipeline?
+          type: string
+          description: "Enterprise CI pipeline with Test Intelligence, Security Scanning, and Supply Chain"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
     
   steps:
     - id: trigger
@@ -154,5 +163,6 @@ spec:
           create_harness_environment: ${{ parameters.create_harness_environment }}
           create_prod_environment: ${{ parameters.create_prod_environment }}
           create_delegate: ${{ parameters.create_delegate }}
+          create_standard_ci_gradle: ${{ parameters.create_standard_ci_gradle }}
           git_repo_url: "https://github.com/parson-harness/harness-demo-app.git"
         apikey: ${{ parameters.token }}
