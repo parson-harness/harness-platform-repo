@@ -30,7 +30,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
       identifier: ${var.standard_ci_gradle_id}
       projectIdentifier: ${var.project_id}
       orgIdentifier: ${var.org_id}
-      description: ${var.standard_ci_gradle_description}
+      description: "${var.standard_ci_gradle_description}"
       tags:
         pipeline-type: ci
         build: gradle

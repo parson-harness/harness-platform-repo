@@ -158,7 +158,7 @@ resource "harness_platform_pipeline" "ci_build" {
                               buildTool: Maven
                               args: test -Dmaven.test.failure.ignore=true -DfailIfNoTests=false
                               packages: io.harness.demo
-                              runOnlySelectedTests: <+<+pipeline.variables.run_all_tests> == "true" ? false : true>
+                              runOnlySelectedTests: "<+<+pipeline.variables.run_all_tests> == \"true\" ? false : true>"
                               postCommand: |
                                 echo ""
                                 echo "╔══════════════════════════════════════════════════════════════╗"
