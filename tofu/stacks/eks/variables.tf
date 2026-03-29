@@ -245,6 +245,7 @@ variable "create_standard_ci_gradle" {
   description = "Create Standard CI Gradle pipeline (Gradle build, Test Intelligence, security scanning, supply chain)"
   type        = bool
   default     = false
+  nullable    = true
 }
 
 variable "standard_ci_gradle_test_packages" {

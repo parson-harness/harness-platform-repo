@@ -402,7 +402,7 @@ module "harness_pipelines" {
 
   # Standard CI Gradle pipeline (with security scanning and supply chain)
   # No owner prefix on identifier - 1 sandbox per project architecture
-  create_standard_ci_gradle        = var.create_standard_ci_gradle && (var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != "")
+  create_standard_ci_gradle        = coalesce(var.create_standard_ci_gradle, false) && (var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != "")
   standard_ci_gradle_id            = "standard_ci_gradle"
   standard_ci_gradle_name          = "Standard CI - Gradle"
   standard_ci_gradle_description   = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
