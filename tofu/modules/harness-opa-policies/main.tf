@@ -56,6 +56,15 @@ resource "harness_platform_policy" "require_tests" {
     has_test_step(stage) {
       stage.spec.execution.steps[_].stepGroup.steps[_].step.type == "Test"
     }
+
+    # Check for RunTests inside parallel blocks within stepGroups
+    has_test_step(stage) {
+      stage.spec.execution.steps[_].stepGroup.steps[_].parallel[_].step.type == "RunTests"
+    }
+
+    has_test_step(stage) {
+      stage.spec.execution.steps[_].stepGroup.steps[_].parallel[_].step.type == "Test"
+    }
   REGO
 }
 
