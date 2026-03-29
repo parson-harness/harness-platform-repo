@@ -39,10 +39,10 @@ pipeline:
       required: true
       value: acct-automation-svc-acct
     - name: target_api_key
-      type: String
+      type: Secret
       description: API Key for target Harness account
       required: false
-      value: <+input>.default(<+pipeline.variables.provisioner_api_key>)
+      value: acct-automation-svc-acct
     - name: harness_org_id
       type: String
       description: Harness Org ID
