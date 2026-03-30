@@ -232,6 +232,18 @@ variable "ci_completion_trigger_enabled" {
   default     = true
 }
 
+variable "create_har_artifact_trigger" {
+  description = "Create HAR artifact trigger for automatic Rolling deployment when new image is pushed"
+  type        = bool
+  default     = true
+}
+
+variable "har_artifact_trigger_enabled" {
+  description = "Enable the HAR artifact trigger for Rolling deployment"
+  type        = bool
+  default     = true
+}
+
 ################################################################################
 # Harness Code Repository Variables (for CI pipeline source)
 ################################################################################

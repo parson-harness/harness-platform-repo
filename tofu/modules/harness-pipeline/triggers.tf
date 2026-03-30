@@ -93,3 +93,57 @@ resource "harness_platform_triggers" "asg_cd_webhook_trigger" {
               value: <+trigger.payload.image_tag>
   TRIGGER_EOT
 }
+
+################################################################################
+# HAR Artifact Trigger for Rolling Deployment
+# Triggers CD pipeline with Rolling strategy when new artifact is pushed to HAR
+# This enables automatic first deployment after CI completes
+################################################################################
+
+resource "harness_platform_triggers" "har_artifact_trigger" {
+  count       = var.create_har_artifact_trigger && var.create_strategy_pipeline && var.har_registry_ref != "" ? 1 : 0
+  identifier  = "har_artifact_rolling_deploy"
+  name        = "HAR Artifact - Rolling Deploy"
+  org_id      = var.org_id
+  project_id  = var.project_id
+  target_id   = harness_platform_pipeline.k8s_strategy[0].identifier
+  description = "Triggers Rolling deployment when new artifact is pushed to HAR registry"
+  tags        = ["trigger-type:artifact", "auto-deploy:true", "strategy:rolling"]
+
+  depends_on = [harness_platform_pipeline.k8s_strategy]
+
+  yaml = <<-TRIGGER_EOT
+    trigger:
+      name: HAR Artifact - Rolling Deploy
+      identifier: har_artifact_rolling_deploy
+      enabled: ${var.har_artifact_trigger_enabled}
+      description: Triggers Rolling deployment when new artifact is pushed to HAR registry
+      tags:
+        trigger-type: artifact
+        auto-deploy: "true"
+        strategy: rolling
+      orgIdentifier: ${var.org_id}
+      projectIdentifier: ${var.project_id}
+      pipelineIdentifier: ${harness_platform_pipeline.k8s_strategy[0].identifier}
+      source:
+        type: Artifact
+        spec:
+          type: Har
+          spec:
+            connectorRef: account.Harness_Artifact_Registry
+            registryRef: ${var.har_registry_ref}
+            imagePath: ${var.har_image_name}
+            tag: <+trigger.artifact.build>
+            eventConditions: []
+      inputYaml: |
+        pipeline:
+          identifier: ${harness_platform_pipeline.k8s_strategy[0].identifier}
+          variables:
+            - name: deployment_strategy
+              type: String
+              value: rolling
+            - name: image_tag
+              type: String
+              value: <+trigger.artifact.build>
+  TRIGGER_EOT
+}

@@ -1040,6 +1040,76 @@ pipeline:
                           type: MarkAsSuccess
               - step:
                   type: ShellScript
+                  name: Verify DNS Resolution
+                  identifier: verify_dns
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -e
+                          
+                          OWNER="<+pipeline.variables.owner>"
+                          DOMAIN="${OWNER}.harness-demo.dev"
+                          
+                          echo "=============================================="
+                          echo "   Verifying DNS Resolution"
+                          echo "=============================================="
+                          echo ""
+                          echo "Checking: ${DOMAIN}"
+                          echo ""
+                          
+                          # Try DNS resolution with retries (DNS propagation can take time)
+                          MAX_RETRIES=3
+                          RETRY_DELAY=10
+                          DNS_OK=false
+                          
+                          for i in $(seq 1 $MAX_RETRIES); do
+                            echo "Attempt $i of $MAX_RETRIES..."
+                            if nslookup "$DOMAIN" 2>/dev/null | grep -q "Address"; then
+                              DNS_OK=true
+                              echo "✅ DNS resolution successful!"
+                              nslookup "$DOMAIN" 2>/dev/null | tail -5
+                              break
+                            else
+                              echo "⏳ DNS not resolving yet..."
+                              if [ $i -lt $MAX_RETRIES ]; then
+                                echo "   Waiting ${RETRY_DELAY}s before retry..."
+                                sleep $RETRY_DELAY
+                              fi
+                            fi
+                          done
+                          
+                          echo ""
+                          if [ "$DNS_OK" = "true" ]; then
+                            echo "✅ DNS is configured correctly for ${DOMAIN}"
+                            echo "   The app will be accessible at: https://${DOMAIN}"
+                          else
+                            echo "⚠️  WARNING: DNS resolution failed for ${DOMAIN}"
+                            echo ""
+                            echo "   This may indicate the wildcard DNS record needs updating."
+                            echo "   The shared ALB DNS may have changed."
+                            echo ""
+                            echo "   To fix, run in bootstrap directory:"
+                            echo "   kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'"
+                            echo "   tofu apply -target=aws_route53_record.wildcard -var=\"alb_dns_name=<alb-hostname>\""
+                            echo ""
+                            echo "   Continuing anyway - DNS may propagate later."
+                          fi
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 2m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: ShellScript
                   name: POV Provisioning Complete
                   identifier: pov_complete
                   spec:
@@ -1066,9 +1136,11 @@ pipeline:
                           echo "  1. Clone from Harness Code repo"
                           echo "  2. Build the Docker image"
                           echo "  3. Push to Harness Artifact Registry (har-<+pipeline.variables.owner>)"
+                          echo "  4. Trigger Rolling deployment automatically (HAR artifact trigger)"
                           echo ""
-                          echo "Once complete, deploy using:"
-                          echo "  - <+pipeline.variables.owner>_k8s_strategy_deploy"
+                          echo "Pipelines created:"
+                          echo "  - <+pipeline.variables.owner>_standard_ci_gradle (CI)"
+                          echo "  - <+pipeline.variables.owner>_k8s_strategy_deploy (CD)"
                           echo ""
                           echo "App URL: https://<+pipeline.variables.owner>.harness-demo.dev"
                           echo "=============================================="
