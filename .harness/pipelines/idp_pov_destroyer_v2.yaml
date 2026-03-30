@@ -404,6 +404,107 @@ pipeline:
         delegateSelectors:
           - parson-eks-delegate
     - stage:
+        name: AWS Cleanup
+        identifier: aws_cleanup
+        description: Clean up AWS resources using OIDC credentials (not delegate IRSA)
+        type: IACM
+        spec:
+          workspace: <+pipeline.variables.owner>_pov
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Delete IRSA Role and DNS Records
+                  identifier: delete_aws_resources
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=== AWS Resource Cleanup (using OIDC credentials) ==="
+                      echo ""
+                      OWNER="<+pipeline.variables.owner>"
+                      
+                      # Delete IRSA Role
+                      ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
+                      echo "=== IAM IRSA Role: ${ROLE_NAME} ==="
+                      
+                      # First delete inline policies
+                      POLICIES=$(aws iam list-role-policies --role-name "${ROLE_NAME}" --query 'PolicyNames[]' --output text 2>/dev/null || true)
+                      if [ -n "$POLICIES" ] && [ "$POLICIES" != "None" ]; then
+                        echo "Deleting inline policies..."
+                        for POLICY in $POLICIES; do
+                          echo -n "  Policy ${POLICY}: "
+                          aws iam delete-role-policy --role-name "${ROLE_NAME}" --policy-name "$POLICY" 2>/dev/null && echo "deleted" || echo "failed"
+                        done
+                      fi
+                      
+                      # Delete attached policies
+                      ATTACHED=$(aws iam list-attached-role-policies --role-name "${ROLE_NAME}" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null || true)
+                      if [ -n "$ATTACHED" ] && [ "$ATTACHED" != "None" ]; then
+                        echo "Detaching managed policies..."
+                        for ARN in $ATTACHED; do
+                          echo -n "  Policy ${ARN}: "
+                          aws iam detach-role-policy --role-name "${ROLE_NAME}" --policy-arn "$ARN" 2>/dev/null && echo "detached" || echo "failed"
+                        done
+                      fi
+                      
+                      # Delete the role
+                      echo -n "Role ${ROLE_NAME}: "
+                      if aws iam get-role --role-name "${ROLE_NAME}" 2>/dev/null >/dev/null; then
+                        aws iam delete-role --role-name "${ROLE_NAME}" 2>/dev/null && echo "deleted" || echo "failed"
+                      else
+                        echo "not found (ok)"
+                      fi
+                      
+                      echo ""
+                      echo "=== Route53 DNS Records ==="
+                      ZONE_ID="Z031547912F6D8STOXRA2"
+                      
+                      # Delete prod DNS record
+                      PROD_RECORD="${OWNER}.harness-demo.dev"
+                      echo -n "Record ${PROD_RECORD}: "
+                      CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                        --query "ResourceRecordSets[?Name=='${PROD_RECORD}.']" --output json 2>/dev/null)
+                      if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
+                        TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
+                        VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
+                        aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                          --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${PROD_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" 2>/dev/null && echo "deleted" || echo "failed"
+                      else
+                        echo "not found (ok)"
+                      fi
+                      
+                      # Delete stage DNS record
+                      STAGE_RECORD="${OWNER}-stage.harness-demo.dev"
+                      echo -n "Record ${STAGE_RECORD}: "
+                      CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                        --query "ResourceRecordSets[?Name=='${STAGE_RECORD}.']" --output json 2>/dev/null)
+                      if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
+                        TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
+                        VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
+                        aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                          --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${STAGE_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" 2>/dev/null && echo "deleted" || echo "failed"
+                      else
+                        echo "not found (ok)"
+                      fi
+                      
+                      echo ""
+                      echo "✓ AWS cleanup complete"
+                  timeout: 5m
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+        when:
+          pipelineStatus: Success
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: MarkAsSuccess
+    - stage:
         name: Cleanup Orphans
         identifier: cleanup_orphans
         description: Force-delete any remaining Harness resources via API
@@ -584,27 +685,8 @@ pipeline:
                           fi
 
                           echo ""
-                          echo "=== AWS IAM IRSA Role Cleanup ==="
-                          ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
-                          echo -n "IAM Role ${ROLE_NAME}: "
-                          
-                          # First delete inline policies
-                          POLICIES=$(aws iam list-role-policies --role-name "${ROLE_NAME}" --query 'PolicyNames[]' --output text 2>/dev/null || true)
-                          if [ -n "$POLICIES" ]; then
-                            for POLICY in $POLICIES; do
-                              aws iam delete-role-policy --role-name "${ROLE_NAME}" --policy-name "$POLICY" 2>/dev/null || true
-                            done
-                          fi
-                          
-                          # Then delete the role
-                          if aws iam get-role --role-name "${ROLE_NAME}" 2>/dev/null; then
-                            aws iam delete-role --role-name "${ROLE_NAME}" 2>/dev/null && echo "deleted" || echo "failed"
-                          else
-                            echo "not found (ok)"
-                          fi
-
-                          echo ""
-                          echo "✓ Kubernetes and AWS cleanup complete"
+                          echo "✓ Kubernetes cleanup complete"
+                          echo "(AWS resources cleaned up in previous IACM stage)"
                     environmentVariables: []
                     outputVariables: []
                   timeout: 5m
