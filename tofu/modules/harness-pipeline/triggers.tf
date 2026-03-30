@@ -98,10 +98,19 @@ resource "harness_platform_triggers" "asg_cd_webhook_trigger" {
 # HAR Artifact Trigger for Rolling Deployment
 # Triggers CD pipeline with Rolling strategy when new artifact is pushed to HAR
 # This enables automatic first deployment after CI completes
+#
+# NOTE: DISABLED - The "Har" artifact type is not yet supported in the Harness
+# triggers API. Supported types: GithubPackageRegistry, ArtifactoryRegistry,
+# CustomArtifact, AmazonS3, GoogleArtifactRegistry, Acr, Nexus3Registry,
+# AzureArtifacts, Ecr, Jenkins, AmazonMachineImage, DockerRegistry,
+# GoogleCloudStorage, Nexus2Registry, GceImage, Bamboo, Gcr
+#
+# TODO: Re-enable when HAR artifact triggers are supported
 ################################################################################
 
 resource "harness_platform_triggers" "har_artifact_trigger" {
-  count       = var.create_har_artifact_trigger && var.create_strategy_pipeline && var.har_registry_ref != "" ? 1 : 0
+  # DISABLED: Har artifact type not supported in triggers API yet
+  count       = false && var.create_har_artifact_trigger && var.create_strategy_pipeline && var.har_registry_ref != "" ? 1 : 0
   identifier  = "har_artifact_rolling_deploy"
   name        = "HAR Artifact - Rolling Deploy"
   org_id      = var.org_id

@@ -581,6 +581,9 @@ module "irsa_delegate_role" {
   enable_asg_permissions    = var.enable_asg_permissions
   enable_lambda_permissions = false
 
+  # Use existing role if it already exists outside of Terraform state
+  import_existing_role = var.import_existing_irsa_role
+
   tags = local.common_tags
 }
 

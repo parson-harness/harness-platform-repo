@@ -276,6 +276,12 @@ variable "enable_asg_permissions" {
   default     = false
 }
 
+variable "import_existing_irsa_role" {
+  description = "If true, use an existing IRSA role instead of creating a new one. Set to true when the role already exists outside of Terraform state (e.g., from a previous failed apply)."
+  type        = bool
+  default     = false
+}
+
 ################################################################################
 # DNS Configuration
 ################################################################################

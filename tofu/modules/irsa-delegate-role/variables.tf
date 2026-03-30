@@ -66,3 +66,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "import_existing_role" {
+  description = "If true, use an existing IAM role instead of creating a new one. Set to true when the role already exists outside of Terraform state."
+  type        = bool
+  default     = false
+}

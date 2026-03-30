@@ -18,10 +18,24 @@ data "aws_iam_openid_connect_provider" "cluster" {
   url = data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer
 }
 
+################################################################################
+# Check if role already exists (for idempotent creates)
+################################################################################
+
+data "aws_iam_role" "existing" {
+  count = var.import_existing_role ? 1 : 0
+  name  = "${var.name_prefix}-delegate-irsa-role"
+}
+
 locals {
   oidc_provider_arn = data.aws_iam_openid_connect_provider.cluster.arn
   oidc_provider_url = replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")
   account_id        = data.aws_caller_identity.current.account_id
+  
+  # Use existing role ARN if importing, otherwise use the created role
+  role_arn  = var.import_existing_role ? data.aws_iam_role.existing[0].arn : aws_iam_role.delegate[0].arn
+  role_name = var.import_existing_role ? data.aws_iam_role.existing[0].name : aws_iam_role.delegate[0].name
+  role_id   = var.import_existing_role ? data.aws_iam_role.existing[0].id : aws_iam_role.delegate[0].id
 }
 
 ################################################################################
@@ -29,7 +43,9 @@ locals {
 ################################################################################
 
 resource "aws_iam_role" "delegate" {
-  name = "${var.name_prefix}-delegate-irsa-role"
+  # Only create if not importing an existing role
+  count = var.import_existing_role ? 0 : 1
+  name  = "${var.name_prefix}-delegate-irsa-role"
 
   # Trust policy allows EKS OIDC provider to assume role via IRSA (for delegate pods)
   # Note: Self-assume is added via aws_iam_role_policy after role creation
@@ -56,7 +72,6 @@ resource "aws_iam_role" "delegate" {
     Name  = "${var.name_prefix}-delegate-irsa-role"
     Owner = var.owner
   })
-
 }
 
 ################################################################################
@@ -66,7 +81,7 @@ resource "aws_iam_role" "delegate" {
 
 resource "aws_iam_role_policy" "self_assume" {
   name = "delegate-self-assume"
-  role = aws_iam_role.delegate.id
+  role = local.role_id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -75,7 +90,7 @@ resource "aws_iam_role_policy" "self_assume" {
         Sid      = "AllowSelfAssume"
         Effect   = "Allow"
         Action   = "sts:AssumeRole"
-        Resource = aws_iam_role.delegate.arn
+        Resource = local.role_arn
       }
     ]
   })
@@ -87,7 +102,7 @@ resource "aws_iam_role_policy" "self_assume" {
 
 resource "aws_iam_role_policy" "delegate_base" {
   name = "delegate-base-permissions"
-  role = aws_iam_role.delegate.id
+  role = local.role_id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -166,7 +181,7 @@ resource "aws_iam_role_policy" "delegate_cross_account" {
   count = length(var.cross_account_role_arns) > 0 ? 1 : 0
 
   name = "delegate-cross-account-sts"
-  role = aws_iam_role.delegate.id
+  role = local.role_id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -189,7 +204,7 @@ resource "aws_iam_role_policy" "delegate_ecs" {
   count = var.enable_ecs_permissions ? 1 : 0
 
   name = "delegate-ecs-permissions"
-  role = aws_iam_role.delegate.id
+  role = local.role_id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -240,7 +255,7 @@ resource "aws_iam_role_policy" "delegate_asg" {
   count = var.enable_asg_permissions ? 1 : 0
 
   name = "delegate-asg-permissions"
-  role = aws_iam_role.delegate.id
+  role = local.role_id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -281,7 +296,7 @@ resource "aws_iam_role_policy" "delegate_lambda" {
   count = var.enable_lambda_permissions ? 1 : 0
 
   name = "delegate-lambda-permissions"
-  role = aws_iam_role.delegate.id
+  role = local.role_id
 
   policy = jsonencode({
     Version = "2012-10-17"
