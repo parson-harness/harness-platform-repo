@@ -451,7 +451,7 @@ pipeline:
                           }
 
                           echo "=== Pipelines ==="
-                          for P in ci_build k8s_strategy_deploy k8s_canary_deploy k8s_bg_canary_deploy canary_deployment blue_green_deployment strategy_choice; do
+                          for P in ci_build k8s_strategy_deploy k8s_canary_deploy k8s_bg_canary_deploy canary_deployment blue_green_deployment strategy_choice standard_ci_gradle; do
                             api_delete "${OWNER}_${P}" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_${P}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
                           done
 
