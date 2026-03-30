@@ -474,12 +474,13 @@ locals {
 
 # Individual DNS record for this sandbox: {owner}.harness-demo.dev → shared ALB
 resource "aws_route53_record" "app" {
-  count   = local.create_dns_record ? 1 : 0
-  zone_id = var.route53_hosted_zone_id != "" ? var.route53_hosted_zone_id : data.aws_route53_zone.harness_demo[0].zone_id
-  name    = "${var.owner}.${var.dns_domain}"
-  type    = "CNAME"
-  ttl     = 60
-  records = [var.shared_alb_dns_name]
+  count           = local.create_dns_record ? 1 : 0
+  zone_id         = var.route53_hosted_zone_id != "" ? var.route53_hosted_zone_id : data.aws_route53_zone.harness_demo[0].zone_id
+  name            = "${var.owner}.${var.dns_domain}"
+  type            = "CNAME"
+  ttl             = 60
+  records         = [var.shared_alb_dns_name]
+  allow_overwrite = true
 
   lifecycle {
     create_before_destroy = true
@@ -488,12 +489,13 @@ resource "aws_route53_record" "app" {
 
 # Stage environment DNS record: {owner}-stage.harness-demo.dev → shared ALB
 resource "aws_route53_record" "app_stage" {
-  count   = local.create_dns_record ? 1 : 0
-  zone_id = var.route53_hosted_zone_id != "" ? var.route53_hosted_zone_id : data.aws_route53_zone.harness_demo[0].zone_id
-  name    = "${var.owner}-stage.${var.dns_domain}"
-  type    = "CNAME"
-  ttl     = 60
-  records = [var.shared_alb_dns_name]
+  count           = local.create_dns_record ? 1 : 0
+  zone_id         = var.route53_hosted_zone_id != "" ? var.route53_hosted_zone_id : data.aws_route53_zone.harness_demo[0].zone_id
+  name            = "${var.owner}-stage.${var.dns_domain}"
+  type            = "CNAME"
+  ttl             = 60
+  records         = [var.shared_alb_dns_name]
+  allow_overwrite = true
 
   lifecycle {
     create_before_destroy = true
