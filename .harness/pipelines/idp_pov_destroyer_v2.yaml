@@ -487,6 +487,18 @@ pipeline:
                           api_delete "${OWNER}-demo-app" "${ENDPOINT}/code/api/v1/repos/${OWNER}-demo-app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
 
                           echo ""
+                          echo "=== OPA Policies ==="
+                          for POLICY in require_tests_in_ci require_cache_intelligence require_harness_cloud require_docker_layer_caching no_hardcoded_secrets recommend_artifact_scanning require_test_reports require_harness_scanners require_code_coverage require_pipeline_tags; do
+                            api_delete "$POLICY" "${ENDPOINT}/pm/api/v1/policies/${POLICY}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
+                          done
+
+                          echo ""
+                          echo "=== OPA Policy Sets ==="
+                          for POLICYSET in ci_pipeline_standards ci_pipeline_standards_on_run security_standards security_standards_on_run build_quality_gates; do
+                            api_delete "$POLICYSET" "${ENDPOINT}/pm/api/v1/policysets/${POLICYSET}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
+                          done
+
+                          echo ""
                           echo "=== Delegate Token ==="
                           # List and delete matching tokens
                           TOKENS=$(curl -s "${ENDPOINT}/ng/api/delegate-token-ng?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
@@ -572,7 +584,27 @@ pipeline:
                           fi
 
                           echo ""
-                          echo "✓ Kubernetes cleanup complete"
+                          echo "=== AWS IAM IRSA Role Cleanup ==="
+                          ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
+                          echo -n "IAM Role ${ROLE_NAME}: "
+                          
+                          # First delete inline policies
+                          POLICIES=$(aws iam list-role-policies --role-name "${ROLE_NAME}" --query 'PolicyNames[]' --output text 2>/dev/null || true)
+                          if [ -n "$POLICIES" ]; then
+                            for POLICY in $POLICIES; do
+                              aws iam delete-role-policy --role-name "${ROLE_NAME}" --policy-name "$POLICY" 2>/dev/null || true
+                            done
+                          fi
+                          
+                          # Then delete the role
+                          if aws iam get-role --role-name "${ROLE_NAME}" 2>/dev/null; then
+                            aws iam delete-role --role-name "${ROLE_NAME}" 2>/dev/null && echo "deleted" || echo "failed"
+                          else
+                            echo "not found (ok)"
+                          fi
+
+                          echo ""
+                          echo "✓ Kubernetes and AWS cleanup complete"
                     environmentVariables: []
                     outputVariables: []
                   timeout: 5m
