@@ -248,10 +248,10 @@ pipeline:
                   timeout: 1m
               - step:
                   type: Http
-                  name: Check HAR Registry
+                  name: Check HAR Upstream Proxy
                   identifier: check_har_registry
                   spec:
-                    url: <+pipeline.variables.harness_endpoint>/har/api/v1/v1/registry/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/har-<+pipeline.variables.owner>
+                    url: <+pipeline.variables.harness_endpoint>/har/api/v1/registry/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/<+pipeline.variables.owner>-dockerhub-proxy
                     method: GET
                     headers:
                       - key: x-api-key
