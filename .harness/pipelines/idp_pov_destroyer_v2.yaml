@@ -479,8 +479,8 @@ pipeline:
 
                           echo ""
                           echo "=== HAR Registry ==="
-                          api_delete "har-${OWNER}" "${ENDPOINT}/har/api/v1/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}/+"
-                          api_delete "${OWNER}-dockerhub-proxy" "${ENDPOINT}/har/api/v1/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${OWNER}-dockerhub-proxy/+"
+                          api_delete "har-${OWNER}" "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}"
+                          api_delete "${OWNER}-dockerhub-proxy" "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/${OWNER}-dockerhub-proxy"
 
                           echo ""
                           echo "=== Harness Code Repository ==="
