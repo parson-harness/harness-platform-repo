@@ -42,6 +42,8 @@ resource "harness_platform_har_registry" "dockerhub_upstream" {
 
   lifecycle {
     prevent_destroy = false
+    # If the resource was deleted outside of Terraform, recreate it
+    create_before_destroy = true
   }
 }
 
