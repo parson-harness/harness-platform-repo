@@ -289,6 +289,10 @@ pipeline:
                             echo "⚠️  Harness Code repo already deleted - state is stale"
                             echo "   Will skip Terraform and use API-only cleanup"
                             export STATE_HEALTHY="false"
+                          elif [ "$HAR_STATUS" = "404" ]; then
+                            echo "⚠️  HAR registry already deleted - state is stale"
+                            echo "   Will skip Terraform and use API-only cleanup"
+                            export STATE_HEALTHY="false"
                           else
                             echo "✓ Key resources exist - Terraform destroy can proceed"
                             export STATE_HEALTHY="true"
@@ -326,23 +330,6 @@ pipeline:
                   timeout: 10m
                   spec:
                     command: init
-              - step:
-                  type: IACMTerraformPlugin
-                  name: Remove Stale HAR Resources
-                  identifier: remove_stale_har
-                  timeout: 5m
-                  spec:
-                    command: state-rm
-                    args:
-                      - module.har[0].harness_platform_har_registry.dockerhub_upstream[0]
-                      - module.har[0].harness_platform_har_registry.registry
-                      - module.har[0].terraform_data.cleanup_existing_registry[0]
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
               - step:
                   type: IACMTerraformPlugin
                   name: Plan Destroy
