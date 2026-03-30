@@ -230,8 +230,8 @@ pipeline:
                           },
                           "harness_api_key": {
                             "key": "harness_api_key",
-                            "value": "<+pipeline.variables.target_api_key>",
-                            "value_type": "string"
+                            "value": "acct-automation-svc-acct",
+                            "value_type": "secret"
                           },
                           "harness_api_key_email": {
                             "key": "harness_api_key_email",
@@ -641,8 +641,8 @@ pipeline:
                           },
                           "harness_api_key": {
                             "key": "harness_api_key",
-                            "value": "<+pipeline.variables.target_api_key>",
-                            "value_type": "string"
+                            "value": "acct-automation-svc-acct",
+                            "value_type": "secret"
                           },
                           "harness_api_key_email": {
                             "key": "harness_api_key_email",
