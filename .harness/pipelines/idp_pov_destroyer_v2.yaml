@@ -328,6 +328,23 @@ pipeline:
                     command: init
               - step:
                   type: IACMTerraformPlugin
+                  name: Remove Stale HAR Resources
+                  identifier: remove_stale_har
+                  timeout: 5m
+                  spec:
+                    command: state-rm
+                    args:
+                      - module.har[0].harness_platform_har_registry.dockerhub_upstream[0]
+                      - module.har[0].harness_platform_har_registry.registry
+                      - module.har[0].terraform_data.cleanup_existing_registry[0]
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: IACMTerraformPlugin
                   name: Plan Destroy
                   identifier: plan_destroy
                   timeout: 15m
