@@ -118,6 +118,11 @@ pipeline:
       description: ACM certificate ARN for HTTPS ingress
       required: false
       value: <+input>.default(arn:aws:acm:us-east-1:759984737373:certificate/9c90d4f8-208d-46cd-bdc1-bc13f1759c05)
+    - name: shared_alb_dns_name
+      type: String
+      description: DNS name of the shared ALB for EKS ingress (e.g., k8s-harnessdemo-xxx.us-east-1.elb.amazonaws.com)
+      required: false
+      value: <+input>.default(k8s-harnessdemo-d1317bf02a-762333093.us-east-1.elb.amazonaws.com)
     - name: force_recreate
       type: String
       description: If workspace exists, destroy it first and recreate (clean slate). If false, will update existing workspace.
@@ -311,6 +316,11 @@ pipeline:
                           "manage_dns": {
                             "key": "manage_dns",
                             "value": "true",
+                            "value_type": "string"
+                          },
+                          "shared_alb_dns_name": {
+                            "key": "shared_alb_dns_name",
+                            "value": "<+pipeline.variables.shared_alb_dns_name>",
                             "value_type": "string"
                           }
                         },
@@ -718,6 +728,11 @@ pipeline:
                             "key": "manage_dns",
                             "value": "true",
                             "value_type": "string"
+                          },
+                          "shared_alb_dns_name": {
+                            "key": "shared_alb_dns_name",
+                            "value": "<+pipeline.variables.shared_alb_dns_name>",
+                            "value_type": "string"
                           }
                         },
                         "environment_variables": {}
@@ -1090,12 +1105,14 @@ pipeline:
                           else
                             echo "⚠️  WARNING: DNS resolution failed for ${DOMAIN}"
                             echo ""
-                            echo "   This may indicate the wildcard DNS record needs updating."
-                            echo "   The shared ALB DNS may have changed."
+                            echo "   This may indicate:"
+                            echo "   1. DNS propagation is still in progress (wait a few minutes)"
+                            echo "   2. The shared_alb_dns_name variable may be incorrect"
                             echo ""
-                            echo "   To fix, run in bootstrap directory:"
+                            echo "   Current shared ALB: <+pipeline.variables.shared_alb_dns_name>"
+                            echo ""
+                            echo "   To verify/update the ALB DNS name:"
                             echo "   kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'"
-                            echo "   tofu apply -target=aws_route53_record.wildcard -var=\"alb_dns_name=<alb-hostname>\""
                             echo ""
                             echo "   Continuing anyway - DNS may propagate later."
                           fi

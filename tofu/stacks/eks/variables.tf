@@ -281,7 +281,7 @@ variable "enable_asg_permissions" {
 ################################################################################
 
 variable "manage_dns" {
-  description = "Manage Route53 wildcard DNS record for *.harness-demo.dev"
+  description = "Create individual Route53 DNS record for {owner}.harness-demo.dev pointing to shared ALB"
   type        = bool
   default     = true
 }
@@ -294,6 +294,12 @@ variable "dns_domain" {
 
 variable "route53_hosted_zone_id" {
   description = "Route53 hosted zone ID for dns_domain. If empty, will be looked up by domain name."
+  type        = string
+  default     = ""
+}
+
+variable "shared_alb_dns_name" {
+  description = "DNS name of the shared ALB for EKS ingress (e.g., k8s-harnessdemo-xxx.us-east-1.elb.amazonaws.com). Required when manage_dns=true."
   type        = string
   default     = ""
 }
