@@ -93,6 +93,11 @@ pipeline:
       description: Artifact registry type (har or ecr)
       required: false
       value: <+input>.default(har).allowedValues(har,ecr)
+    - name: create_dockerhub_upstream
+      type: String
+      description: Create DockerHub upstream proxy for HAR (required for pulling base images)
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
     - name: create_strategy_pipeline
       type: String
       description: Create the strategy choice deployment pipeline
@@ -251,6 +256,11 @@ pipeline:
                           "artifact_registry_type": {
                             "key": "artifact_registry_type",
                             "value": "<+pipeline.variables.artifact_registry_type>",
+                            "value_type": "string"
+                          },
+                          "create_dockerhub_upstream": {
+                            "key": "create_dockerhub_upstream",
+                            "value": "<+pipeline.variables.create_dockerhub_upstream>",
                             "value_type": "string"
                           },
                           "create_strategy_pipeline": {
@@ -652,6 +662,11 @@ pipeline:
                           "artifact_registry_type": {
                             "key": "artifact_registry_type",
                             "value": "<+pipeline.variables.artifact_registry_type>",
+                            "value_type": "string"
+                          },
+                          "create_dockerhub_upstream": {
+                            "key": "create_dockerhub_upstream",
+                            "value": "<+pipeline.variables.create_dockerhub_upstream>",
                             "value_type": "string"
                           },
                           "create_strategy_pipeline": {
