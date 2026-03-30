@@ -88,10 +88,31 @@ resource "aws_route53_zone" "harness_demo" {
 }
 
 ################################################################################
-# Wildcard CNAME → Shared ALB
-# Set alb_dns_name after first deployment to activate.
-# Get the value with:
-#   kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'
+# Sentinel DNS Record → Shared ALB
+# The sentinel ingress (tofu/shared-infra/eks-cluster/sentinel-ingress.yaml)
+# keeps the shared ALB alive even when all sandbox ingresses are deleted.
+#
+# Individual sandbox DNS records are created per-sandbox in tofu/stacks/eks/main.tf
+# using the shared_alb_dns_name variable.
+#
+# Set alb_dns_name after applying the sentinel ingress:
+#   kubectl apply -f tofu/shared-infra/eks-cluster/sentinel-ingress.yaml
+#   kubectl get ingress -n harness-demo-sentinel -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'
+################################################################################
+
+resource "aws_route53_record" "sentinel" {
+  count   = var.alb_dns_name != "" ? 1 : 0
+  zone_id = aws_route53_zone.harness_demo.zone_id
+  name    = "sentinel.harness-demo.dev"
+  type    = "CNAME"
+  ttl     = 60
+  records = [var.alb_dns_name]
+}
+
+################################################################################
+# Wildcard CNAME → Shared ALB (LEGACY/FALLBACK)
+# Individual sandbox DNS is now managed per-sandbox in Terraform.
+# This wildcard is kept as a fallback for any subdomains not explicitly created.
 ################################################################################
 
 resource "aws_route53_record" "wildcard" {

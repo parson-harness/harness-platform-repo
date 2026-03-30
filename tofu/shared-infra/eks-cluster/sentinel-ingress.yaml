@@ -1,0 +1,136 @@
+################################################################################
+# Sentinel Ingress - Keeps the shared ALB alive
+#
+# This ingress ensures the AWS Load Balancer Controller maintains the shared ALB
+# even when all sandbox ingresses are deleted. Without this, deleting all sandboxes
+# would destroy the ALB, and the next sandbox would get a new ALB with a different
+# DNS name, breaking the shared_alb_dns_name configuration.
+#
+# Apply this ONCE after setting up the EKS cluster:
+#   kubectl apply -f sentinel-ingress.yaml
+#
+# The ALB DNS name can then be used as the shared_alb_dns_name in the provisioner.
+################################################################################
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: harness-demo-sentinel
+  labels:
+    app.kubernetes.io/managed-by: bootstrap
+    harness.io/purpose: alb-sentinel
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel-service
+  namespace: harness-demo-sentinel
+  labels:
+    app: sentinel
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app: sentinel
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel-deployment
+  namespace: harness-demo-sentinel
+  labels:
+    app: sentinel
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sentinel
+  template:
+    metadata:
+      labels:
+        app: sentinel
+    spec:
+      containers:
+        - name: sentinel
+          image: nginx:alpine
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              memory: "32Mi"
+              cpu: "10m"
+            limits:
+              memory: "64Mi"
+              cpu: "50m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: sentinel-nginx-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sentinel-nginx-config
+  namespace: harness-demo-sentinel
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        server_name _;
+        
+        location / {
+            default_type application/json;
+            return 200 '{"status":"ok","service":"harness-demo-sentinel","purpose":"Keeps shared ALB alive for SE sandboxes"}';
+        }
+        
+        location /health {
+            default_type application/json;
+            return 200 '{"status":"healthy"}';
+        }
+    }
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sentinel-ingress
+  namespace: harness-demo-sentinel
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/group.name: harness-demo
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP":80},{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    # Use the same certificate as sandbox apps
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:759984737373:certificate/9c90d4f8-208d-46cd-bdc1-bc13f1759c05
+spec:
+  rules:
+    - host: sentinel.harness-demo.dev
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sentinel-service
+                port:
+                  number: 80
