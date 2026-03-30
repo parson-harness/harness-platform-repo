@@ -77,3 +77,13 @@ variable "enforce_quality_policies" {
   type        = bool
   default     = true
 }
+
+################################################################################
+# Policy Scope Configuration
+################################################################################
+
+variable "policy_scope_tag" {
+  description = "Only apply policies to pipelines with this tag. If empty, applies to all pipelines. Format: 'key:value' (e.g., 'managed-by:provisioner')"
+  type        = string
+  default     = "managed-by:provisioner"
+}

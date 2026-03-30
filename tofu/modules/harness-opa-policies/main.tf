@@ -6,6 +6,11 @@
 # 1. CI Pipeline Standards - Enforce best practices for CI pipelines
 # 2. Security Standards - Ensure security requirements are met
 # 3. Build Quality Gates - Enforce quality standards
+#
+# Policy Scope:
+# By default, policies only apply to pipelines with the tag specified in
+# var.policy_scope_tag (default: "managed-by:provisioner"). This prevents
+# the policies from affecting other pipelines in the project.
 ################################################################################
 
 terraform {
@@ -15,6 +20,34 @@ terraform {
       version = ">= 0.31.0"
     }
   }
+}
+
+locals {
+  # Parse the scope tag into key and value
+  scope_tag_parts = var.policy_scope_tag != "" ? split(":", var.policy_scope_tag) : []
+  scope_tag_key   = length(local.scope_tag_parts) >= 1 ? local.scope_tag_parts[0] : ""
+  scope_tag_value = length(local.scope_tag_parts) >= 2 ? local.scope_tag_parts[1] : ""
+  
+  # Rego snippet to check if pipeline has the required scope tag
+  # If no scope tag is configured, this evaluates to true (apply to all)
+  scope_check_rego_with_tag = <<-REGO
+    # Only apply to pipelines with the required scope tag
+    in_scope {
+      input.pipeline.tags["${local.scope_tag_key}"] == "${local.scope_tag_value}"
+    }
+    
+    # Skip pipelines without the scope tag (they pass automatically)
+    in_scope {
+      not input.pipeline.tags["${local.scope_tag_key}"]
+    }
+  REGO
+  
+  scope_check_rego_all = <<-REGO
+    # No scope tag configured - apply to all pipelines
+    in_scope { true }
+  REGO
+  
+  scope_check_rego = var.policy_scope_tag != "" ? local.scope_check_rego_with_tag : local.scope_check_rego_all
 }
 
 ################################################################################
@@ -32,8 +65,11 @@ resource "harness_platform_policy" "require_tests" {
   rego = <<-REGO
     package pipeline
 
-    # Deny CI pipelines that don't have a test step
+    ${local.scope_check_rego}
+
+    # Deny CI pipelines that don't have a test step (only if in scope)
     deny[msg] {
+      in_scope
       input.pipeline.stages[i].stage.type == "CI"
       stage := input.pipeline.stages[i].stage
       not has_test_step(stage)
@@ -79,8 +115,11 @@ resource "harness_platform_policy" "require_cache_intelligence" {
   rego = <<-REGO
     package pipeline
 
-    # Warn if CI stage doesn't have Cache Intelligence enabled
+    ${local.scope_check_rego}
+
+    # Warn if CI stage doesn't have Cache Intelligence enabled (only if in scope)
     warn[msg] {
+      in_scope
       input.pipeline.stages[i].stage.type == "CI"
       stage := input.pipeline.stages[i].stage
       not cache_enabled(stage)
@@ -104,8 +143,11 @@ resource "harness_platform_policy" "require_harness_cloud" {
   rego = <<-REGO
     package pipeline
 
-    # Warn if not using Harness Cloud
+    ${local.scope_check_rego}
+
+    # Warn if not using Harness Cloud (only if in scope)
     warn[msg] {
+      in_scope
       input.pipeline.stages[i].stage.type == "CI"
       stage := input.pipeline.stages[i].stage
       not uses_harness_cloud(stage)
@@ -129,8 +171,11 @@ resource "harness_platform_policy" "require_docker_caching" {
   rego = <<-REGO
     package pipeline
 
-    # Warn if BuildAndPush steps don't have caching enabled
+    ${local.scope_check_rego}
+
+    # Warn if BuildAndPush steps don't have caching enabled (only if in scope)
     warn[msg] {
+      in_scope
       input.pipeline.stages[i].stage.type == "CI"
       stage := input.pipeline.stages[i].stage
       step := stage.spec.execution.steps[_].step
@@ -178,8 +223,11 @@ resource "harness_platform_policy" "no_hardcoded_secrets" {
 
     import future.keywords.in
 
-    # Deny pipelines with potential hardcoded secrets
+    ${local.scope_check_rego}
+
+    # Deny pipelines with potential hardcoded secrets (only if in scope)
     deny[msg] {
+      in_scope
       walk(input.pipeline, [path, value])
       is_string(value)
       looks_like_secret(value)
@@ -221,8 +269,11 @@ resource "harness_platform_policy" "recommend_artifact_scanning" {
   rego = <<-REGO
     package pipeline
 
-    # Advisory: Recommend STO scanning for production pipelines
+    ${local.scope_check_rego}
+
+    # Advisory: Recommend STO scanning for production pipelines (only if in scope)
     warn[msg] {
+      in_scope
       input.pipeline.stages[i].stage.type == "CI"
       has_docker_build(input.pipeline.stages[i].stage)
       not has_security_scan(input.pipeline)
@@ -262,8 +313,11 @@ resource "harness_platform_policy" "require_test_reports" {
   rego = <<-REGO
     package pipeline
 
-    # Warn if test steps don't publish reports
+    ${local.scope_check_rego}
+
+    # Warn if test steps don't publish reports (only if in scope)
     warn[msg] {
+      in_scope
       input.pipeline.stages[i].stage.type == "CI"
       stage := input.pipeline.stages[i].stage
       step := stage.spec.execution.steps[_].step
@@ -273,6 +327,7 @@ resource "harness_platform_policy" "require_test_reports" {
     }
 
     warn[msg] {
+      in_scope
       input.pipeline.stages[i].stage.type == "CI"
       stage := input.pipeline.stages[i].stage
       step := stage.spec.execution.steps[_].stepGroup.steps[_].step
@@ -306,8 +361,11 @@ resource "harness_platform_policy" "require_harness_scanners" {
   rego = <<-REGO
     package pipeline
 
-    # Deny CI pipelines that build containers but don't have required Harness scanners
+    ${local.scope_check_rego}
+
+    # Deny CI pipelines that build containers but don't have required Harness scanners (only if in scope)
     deny[msg] {
+      in_scope
       input.pipeline.stages[i].stage.type == "CI"
       stage := input.pipeline.stages[i].stage
       has_docker_build(stage)
@@ -316,6 +374,7 @@ resource "harness_platform_policy" "require_harness_scanners" {
     }
 
     deny[msg] {
+      in_scope
       input.pipeline.stages[i].stage.type == "CI"
       stage := input.pipeline.stages[i].stage
       has_docker_build(stage)
@@ -324,6 +383,7 @@ resource "harness_platform_policy" "require_harness_scanners" {
     }
 
     deny[msg] {
+      in_scope
       input.pipeline.stages[i].stage.type == "CI"
       stage := input.pipeline.stages[i].stage
       has_docker_build(stage)
@@ -388,8 +448,11 @@ resource "harness_platform_policy" "require_code_coverage" {
   rego = <<-REGO
     package pipeline
 
-    # Warn if CI pipeline doesn't have code coverage step
+    ${local.scope_check_rego}
+
+    # Warn if CI pipeline doesn't have code coverage step (only if in scope)
     warn[msg] {
+      in_scope
       input.pipeline.stages[i].stage.type == "CI"
       stage := input.pipeline.stages[i].stage
       has_test_step(stage)
@@ -441,13 +504,17 @@ resource "harness_platform_policy" "require_pipeline_tags" {
   rego = <<-REGO
     package pipeline
 
-    # Warn if pipeline doesn't have required tags
+    ${local.scope_check_rego}
+
+    # Warn if pipeline doesn't have required tags (only if in scope)
     warn[msg] {
+      in_scope
       not input.pipeline.tags
       msg := "Pipeline should have tags for better organization and filtering (e.g., pipeline-type, team, environment)."
     }
 
     warn[msg] {
+      in_scope
       input.pipeline.tags
       not has_pipeline_type_tag
       msg := "Pipeline should have a 'pipeline-type' tag (e.g., ci, cd, security) for categorization."

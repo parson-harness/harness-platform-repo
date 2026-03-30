@@ -11,7 +11,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.asg_ci_pipeline_description
-  tags        = ["pipeline-type:ci", "build:packer", "deployment:asg"]
+  tags        = ["pipeline-type:ci", "build:packer", "deployment:asg", "managed-by:provisioner"]
 
   yaml = <<-CI_EOT
     pipeline:
@@ -24,6 +24,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
         pipeline-type: ci
         build: packer
         deployment: asg
+        managed-by: provisioner
       variables:
         - name: auto_deploy
           type: String

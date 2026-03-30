@@ -22,7 +22,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.standard_ci_gradle_description
-  tags        = ["pipeline-type:ci", "build:gradle", "standard-template:true", "harness-intelligence:enabled", "security-scanning:enabled"]
+  tags        = ["pipeline-type:ci", "build:gradle", "standard-template:true", "harness-intelligence:enabled", "security-scanning:enabled", "managed-by:provisioner"]
 
   yaml = <<-GRADLE_CI_EOT
     pipeline:
@@ -36,6 +36,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
         build: gradle
         standard-template: "true"
         harness-intelligence: enabled
+        managed-by: provisioner
         security-scanning: enabled
       properties:
         ci:

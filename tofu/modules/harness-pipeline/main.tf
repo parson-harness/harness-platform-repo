@@ -26,7 +26,7 @@ resource "harness_platform_pipeline" "k8s_canary" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = "DEPRECATED: Use ${var.strategy_pipeline_id} with deployment_strategy=canary instead. ${var.canary_pipeline_description}"
-  tags        = ["deployment-type:kubernetes", "strategy:canary", "deprecated:true"]
+  tags        = ["deployment-type:kubernetes", "strategy:canary", "deprecated:true", "managed-by:provisioner"]
 
   yaml = <<-EOT
     pipeline:
@@ -39,6 +39,7 @@ resource "harness_platform_pipeline" "k8s_canary" {
         deployment-type: kubernetes
         strategy: canary
         deprecated: "true"
+        managed-by: provisioner
       variables:
         - name: image_tag
           type: String
@@ -99,7 +100,7 @@ resource "harness_platform_pipeline" "k8s_blue_green_canary" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.blue_green_pipeline_description
-  tags        = ["deployment-type:kubernetes", "strategy:blue-green-canary"]
+  tags        = ["deployment-type:kubernetes", "strategy:blue-green-canary", "managed-by:provisioner"]
 
   yaml = <<-EOT
     pipeline:
@@ -111,6 +112,7 @@ resource "harness_platform_pipeline" "k8s_blue_green_canary" {
       tags:
         deployment-type: kubernetes
         strategy: blue-green-canary
+        managed-by: provisioner
       variables:
         - name: image_tag
           type: String

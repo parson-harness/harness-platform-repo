@@ -22,7 +22,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.asg_strategy_pipeline_description
-  tags        = ["deployment-type:asg", "strategy:multi-strategy"]
+  tags        = ["deployment-type:asg", "strategy:multi-strategy", "managed-by:provisioner"]
 
   yaml = <<-ASG_EOT
     pipeline:
@@ -34,6 +34,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
       tags:
         deployment-type: asg
         strategy: multi-strategy
+        managed-by: provisioner
       variables:
         - name: deployment_strategy
           type: String

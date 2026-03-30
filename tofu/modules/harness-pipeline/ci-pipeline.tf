@@ -50,7 +50,7 @@ resource "harness_platform_pipeline" "ci_build" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.ci_pipeline_description
-  tags        = ["pipeline-type:ci", "build:docker", "harness-intelligence:enabled"]
+  tags        = ["pipeline-type:ci", "build:docker", "harness-intelligence:enabled", "managed-by:provisioner"]
 
   yaml = <<-CI_EOT
     pipeline:
@@ -63,6 +63,7 @@ resource "harness_platform_pipeline" "ci_build" {
         pipeline-type: ci
         build: docker
         harness-intelligence: enabled
+        managed-by: provisioner
       variables:
         - name: auto_deploy
           type: String

@@ -16,7 +16,7 @@ resource "harness_platform_pipeline" "k8s_strategy" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.strategy_pipeline_description
-  tags        = ["deployment-type:kubernetes", "strategy:multi-strategy"]
+  tags        = ["deployment-type:kubernetes", "strategy:multi-strategy", "managed-by:provisioner"]
 
   yaml = <<-STRATEGY_EOT
     pipeline:
@@ -28,6 +28,7 @@ resource "harness_platform_pipeline" "k8s_strategy" {
       tags:
         deployment-type: kubernetes
         strategy: multi-strategy
+        managed-by: provisioner
       variables:
         - name: deployment_strategy
           type: String
