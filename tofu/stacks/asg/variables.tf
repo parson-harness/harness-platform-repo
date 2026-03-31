@@ -230,6 +230,19 @@ variable "github_repo_name" {
   default     = "parson-harness/harness-demo-app"
 }
 
+variable "github_pat" {
+  description = "GitHub PAT for importing repo to Harness Code (needs repo read access). Only required for private repos."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "github_repo_is_public" {
+  description = "Whether the source GitHub repo is public (no auth needed for import)"
+  type        = bool
+  default     = true
+}
+
 variable "git_branch" {
   description = "Git branch for manifests"
   type        = string

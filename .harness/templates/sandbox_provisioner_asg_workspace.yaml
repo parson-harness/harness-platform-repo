@@ -199,14 +199,20 @@ template:
         status: manual
         locked: false
         type: String
-      - key: github_connector_ref
-        value: parsongh
+      - key: github_repo_name
+        value: <+pipeline.variables.source_github_repo>
         value_type: string
         status: manual
         locked: false
         type: String
-      - key: github_repo_name
-        value: <+pipeline.variables.source_github_repo>
+      - key: github_pat
+        value: github_pat
+        value_type: secret
+        status: manual
+        locked: false
+        type: Secret
+      - key: github_repo_is_public
+        value: "true"
         value_type: string
         status: manual
         locked: false
@@ -218,7 +224,7 @@ template:
         locked: false
         type: String
       - key: use_harness_code
-        value: "false"
+        value: "true"
         value_type: string
         status: manual
         locked: false

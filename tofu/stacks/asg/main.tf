@@ -131,6 +131,28 @@ locals {
   resolved_project_id = module.harness_org_project.project_id
 }
 
+module "harness_code_repo" {
+  source = "../../modules/harness-code-repo"
+  count  = var.use_harness_code ? 1 : 0
+
+  harness_account_id = var.harness_account_id
+  org_id             = local.resolved_org_id
+  project_id         = local.resolved_project_id
+
+  repo_identifier  = "${var.owner}-demo-app"
+  repo_description = "Demo app for ${var.owner} POV - imported from GitHub"
+  default_branch   = "main"
+
+  import_from_scm = true
+  source_provider = "github"
+  source_host     = "https://github.com"
+  source_repo     = var.github_repo_name
+  source_username = "x-access-token"
+  source_password = var.github_repo_is_public ? "" : var.github_pat
+
+  depends_on = [module.harness_org_project]
+}
+
 ################################################################################
 # AWS Infrastructure - VPC, ALB, ASG
 ################################################################################
@@ -338,7 +360,7 @@ module "harness_service_asg" {
     }
   ]
 
-  depends_on = [module.harness_connectors, module.asg]
+  depends_on = [module.harness_connectors, module.asg, module.harness_code_repo]
 }
 
 ################################################################################
@@ -416,7 +438,7 @@ module "harness_pipelines_asg" {
   create_ci_pipeline         = false
 
   # ASG CI pipeline: Gradle + CI Intelligence + security scans → Packer AMI build
-  create_asg_ci_pipeline      = var.create_asg_ci_pipeline
+  create_asg_ci_pipeline      = var.create_asg_ci_pipeline && (var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != "")
   asg_ci_pipeline_id          = "${var.owner}_asg_ci_build"
   asg_ci_pipeline_name        = "${title(var.owner)} ASG CI Build"
   asg_ci_pipeline_description = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning, and Packer AMI bake"
@@ -443,7 +465,7 @@ module "harness_pipelines_asg" {
   har_upstream_proxy_ref = ""
   har_image_name         = ""
 
-  depends_on = [module.harness_service_asg, module.harness_environment_dev]
+  depends_on = [module.harness_service_asg, module.harness_environment_dev, module.harness_code_repo]
 }
 
 ################################################################################
