@@ -30,15 +30,14 @@ locals {
   
   # Rego snippet to check if pipeline has the required scope tag
   # If no scope tag is configured, this evaluates to true (apply to all)
+  # 
+  # IMPORTANT: in_scope is ONLY true when the pipeline has the required tag.
+  # Pipelines WITHOUT the tag are NOT in scope, so deny rules won't fire.
   scope_check_rego_with_tag = <<-REGO
     # Only apply to pipelines with the required scope tag
+    # Pipelines without this tag will NOT match, so deny rules won't fire
     in_scope {
       input.pipeline.tags["${local.scope_tag_key}"] == "${local.scope_tag_value}"
-    }
-    
-    # Skip pipelines without the scope tag (they pass automatically)
-    in_scope {
-      not input.pipeline.tags["${local.scope_tag_key}"]
     }
   REGO
   
