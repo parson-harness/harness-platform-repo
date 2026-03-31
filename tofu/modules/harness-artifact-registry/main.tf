@@ -38,6 +38,8 @@ resource "harness_platform_har_registry" "dockerhub_upstream" {
     }
   }
 
+  depends_on = [terraform_data.cleanup_existing_registry]
+
   parent_ref = "${var.account_id}/${var.org_id}/${var.project_id}"
 
   lifecycle {
