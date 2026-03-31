@@ -891,14 +891,18 @@ pipeline:
                     command: init
               - step:
                   type: Run
-                  name: Import Orphaned Resources
-                  identifier: import_orphaned_resources
+                  name: Fix Stale State
+                  identifier: fix_stale_state
                   spec:
                     shell: Bash
                     command: |
                       echo "=============================================="
-                      echo "  Import Orphaned Resources Into State"
+                      echo "  Fix Stale State - Remove 404'd Resources"
                       echo "=============================================="
+                      echo ""
+                      echo "If the previous run partially applied then resources"
+                      echo "were deleted outside Terraform, the state has stale"
+                      echo "entries that crash plan during refresh. Remove them."
                       echo ""
 
                       # Find the tofu binary
@@ -907,33 +911,87 @@ pipeline:
                         TOFU=$(which tofu 2>/dev/null || which terraform 2>/dev/null || echo "")
                       fi
                       if [ -z "$TOFU" ]; then
-                        echo "WARNING: Cannot find tofu/terraform binary, skipping import"
+                        echo "WARNING: Cannot find tofu/terraform binary, skipping state fix"
                         exit 0
                       fi
                       echo "Using binary: $TOFU"
                       echo ""
 
-                      OWNER="<+pipeline.variables.owner>"
-                      ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
-
-                      echo "=== IRSA Delegate Role ==="
-                      echo "Checking if role '${ROLE_NAME}' exists but is not in state..."
-                      echo ""
-
-                      # Check if already in state
-                      if $TOFU state list 2>/dev/null | grep -q 'module.irsa_delegate_role\[0\].aws_iam_role.delegate\[0\]'; then
-                        echo "  Role already in state - no import needed"
-                      else
-                        echo "  Role NOT in state - attempting import..."
-                        if $TOFU import 'module.irsa_delegate_role[0].aws_iam_role.delegate[0]' "$ROLE_NAME" 2>&1; then
-                          echo "  ✓ Successfully imported orphaned IRSA role into state"
-                          echo "  Terraform will adopt it instead of creating a new one"
-                        else
-                          echo "  Role does not exist in AWS or import failed - will create fresh"
-                        fi
+                      # Check if there's any state at all
+                      RESOURCE_COUNT=$($TOFU state list 2>/dev/null | wc -l)
+                      if [ "$RESOURCE_COUNT" -eq 0 ]; then
+                        echo "No resources in state - fresh workspace, nothing to fix"
+                        exit 0
                       fi
+                      echo "Resources in state: ${RESOURCE_COUNT}"
                       echo ""
-                      echo "Import check complete. Proceeding to plan..."
+
+                      # Function to check a Harness resource and remove from state if 404
+                      check_and_remove() {
+                        local LABEL="$1"
+                        local CHECK_URL="$2"
+                        local STATE_ADDR="$3"
+
+                        echo -n "  ${LABEL}: "
+
+                        # First check if it's even in state
+                        if ! $TOFU state list 2>/dev/null | grep -qF "${STATE_ADDR}"; then
+                          echo "not in state (skip)"
+                          return
+                        fi
+
+                        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${CHECK_URL}" \
+                          -H "x-api-key: <+pipeline.variables.target_api_key>")
+
+                        if [ "$HTTP_CODE" = "404" ]; then
+                          echo "404 - removing from state"
+                          $TOFU state rm "${STATE_ADDR}" 2>/dev/null || echo "    (state rm failed)"
+                        elif [ "$HTTP_CODE" = "200" ]; then
+                          echo "exists (OK)"
+                        else
+                          echo "HTTP ${HTTP_CODE} - leaving in state"
+                        fi
+                      }
+
+                      OWNER="<+pipeline.variables.owner>"
+                      ENDPOINT="<+pipeline.variables.harness_endpoint>"
+                      ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
+                      ORG_ID="<+pipeline.variables.harness_org_id>"
+                      PROJECT_ID="<+pipeline.variables.harness_project_id>"
+
+                      echo "=== Harness Artifact Registry ==="
+                      check_and_remove \
+                        "HAR upstream proxy (${OWNER}-dockerhub-proxy)" \
+                        "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/${OWNER}-dockerhub-proxy/%2B" \
+                        'module.har[0].harness_platform_har_registry.dockerhub_upstream[0]'
+
+                      check_and_remove \
+                        "HAR virtual registry (har-${OWNER})" \
+                        "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}/%2B" \
+                        'module.har[0].harness_platform_har_registry.registry'
+
+                      # Also remove the cleanup terraform_data if HAR is gone
+                      HAR_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+                        "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/${OWNER}-dockerhub-proxy/%2B" \
+                        -H "x-api-key: <+pipeline.variables.target_api_key>")
+                      if [ "$HAR_STATUS" = "404" ]; then
+                        echo -n "  HAR cleanup data: "
+                        $TOFU state rm 'module.har[0].terraform_data.cleanup_existing_registry[0]' 2>/dev/null && echo "removed" || echo "(not in state)"
+                      fi
+
+                      echo ""
+                      echo "=== Harness Code Repository ==="
+                      check_and_remove \
+                        "Code repo (${OWNER}-demo-app)" \
+                        "${ENDPOINT}/code/api/v1/repos/${OWNER}-demo-app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
+                        'module.harness_code_repo[0].harness_platform_repo.main[0]'
+
+                      echo ""
+                      echo "=== Updated State ==="
+                      RESOURCE_COUNT=$($TOFU state list 2>/dev/null | wc -l)
+                      echo "Resources remaining in state: ${RESOURCE_COUNT}"
+                      echo ""
+                      echo "State fix complete. Proceeding to plan..."
                   failureStrategies:
                     - onFailure:
                         errors:
