@@ -95,8 +95,9 @@ resource "terraform_data" "cleanup_existing_registry" {
     var.registry_id,
     var.account_id,
     var.org_id,
-    var.project_id,
-    timestamp()  # Force cleanup to run on every apply
+    var.project_id
+    # Removed timestamp() - cleanup should only run when identifiers change,
+    # not on every apply (which would delete resources before recreating them)
   ]
 }
 
