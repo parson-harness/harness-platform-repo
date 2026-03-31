@@ -406,110 +406,107 @@ pipeline:
     - stage:
         name: AWS Cleanup
         identifier: aws_cleanup
-        description: Clean up AWS resources using account-level AWS connector with OIDC
-        type: CI
+        description: Clean up AWS resources using delegate with IRSA permissions
+        type: Custom
         spec:
-          cloneCodebase: false
-          caching:
-            enabled: false
           execution:
             steps:
               - step:
-                  type: Run
+                  type: ShellScript
                   name: Delete IRSA Role and DNS Records
                   identifier: delete_aws_resources
                   spec:
-                    connectorRef: aws_oidc_iacm
-                    image: amazon/aws-cli:latest
                     shell: Bash
-                    command: |
-                      echo "=== AWS Resource Cleanup (using OIDC credentials) ==="
-                      echo ""
-                      OWNER="<+pipeline.variables.owner>"
-                      
-                      # Verify AWS credentials are working
-                      echo "Verifying AWS credentials..."
-                      aws sts get-caller-identity || { echo "ERROR: AWS credentials not configured"; exit 1; }
-                      echo ""
-                      
-                      # Delete IRSA Role
-                      ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
-                      echo "=== IAM IRSA Role: ${ROLE_NAME} ==="
-                      
-                      # Check if role exists first
-                      if aws iam get-role --role-name "${ROLE_NAME}" 2>/dev/null >/dev/null; then
-                        echo "Role found, deleting..."
-                        
-                        # First delete inline policies
-                        POLICIES=$(aws iam list-role-policies --role-name "${ROLE_NAME}" --query 'PolicyNames[]' --output text 2>/dev/null || true)
-                        if [ -n "$POLICIES" ] && [ "$POLICIES" != "None" ]; then
-                          echo "Deleting inline policies..."
-                          for POLICY in $POLICIES; do
-                            echo -n "  Policy ${POLICY}: "
-                            aws iam delete-role-policy --role-name "${ROLE_NAME}" --policy-name "$POLICY" && echo "deleted" || echo "failed"
-                          done
-                        fi
-                        
-                        # Delete attached policies
-                        ATTACHED=$(aws iam list-attached-role-policies --role-name "${ROLE_NAME}" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null || true)
-                        if [ -n "$ATTACHED" ] && [ "$ATTACHED" != "None" ]; then
-                          echo "Detaching managed policies..."
-                          for ARN in $ATTACHED; do
-                            echo -n "  Policy ${ARN}: "
-                            aws iam detach-role-policy --role-name "${ROLE_NAME}" --policy-arn "$ARN" && echo "detached" || echo "failed"
-                          done
-                        fi
-                        
-                        # Delete the role
-                        echo -n "Role ${ROLE_NAME}: "
-                        aws iam delete-role --role-name "${ROLE_NAME}" && echo "deleted" || echo "failed"
-                      else
-                        echo "Role ${ROLE_NAME}: not found (ok)"
-                      fi
-                      
-                      echo ""
-                      echo "=== Route53 DNS Records ==="
-                      ZONE_ID="Z031547912F6D8STOXRA2"
-                      
-                      # Delete prod DNS record
-                      PROD_RECORD="${OWNER}.harness-demo.dev"
-                      echo -n "Record ${PROD_RECORD}: "
-                      CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
-                        --query "ResourceRecordSets[?Name=='${PROD_RECORD}.']" --output json 2>/dev/null)
-                      if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
-                        TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
-                        VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
-                        aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
-                          --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${PROD_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" && echo "deleted" || echo "failed"
-                      else
-                        echo "not found (ok)"
-                      fi
-                      
-                      # Delete stage DNS record
-                      STAGE_RECORD="${OWNER}-stage.harness-demo.dev"
-                      echo -n "Record ${STAGE_RECORD}: "
-                      CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
-                        --query "ResourceRecordSets[?Name=='${STAGE_RECORD}.']" --output json 2>/dev/null)
-                      if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
-                        TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
-                        VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
-                        aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
-                          --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${STAGE_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" && echo "deleted" || echo "failed"
-                      else
-                        echo "not found (ok)"
-                      fi
-                      
-                      echo ""
-                      echo "✓ AWS cleanup complete"
-                    envVariables:
-                      AWS_DEFAULT_REGION: us-east-1
+                    executionTarget: {}
+                    delegateSelectors:
+                      - parson-eks-delegate
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== AWS Resource Cleanup (using parson-eks-delegate IRSA) ==="
+                          echo ""
+                          OWNER="<+pipeline.variables.owner>"
+                          
+                          # Verify AWS credentials are working
+                          echo "Verifying AWS credentials..."
+                          aws sts get-caller-identity || { echo "ERROR: AWS credentials not configured"; exit 1; }
+                          echo ""
+                          
+                          # Delete IRSA Role
+                          ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
+                          echo "=== IAM IRSA Role: ${ROLE_NAME} ==="
+                          
+                          # Check if role exists first
+                          if aws iam get-role --role-name "${ROLE_NAME}" 2>/dev/null >/dev/null; then
+                            echo "Role found, deleting..."
+                            
+                            # First delete inline policies
+                            POLICIES=$(aws iam list-role-policies --role-name "${ROLE_NAME}" --query 'PolicyNames[]' --output text 2>/dev/null || true)
+                            if [ -n "$POLICIES" ] && [ "$POLICIES" != "None" ]; then
+                              echo "Deleting inline policies..."
+                              for POLICY in $POLICIES; do
+                                echo -n "  Policy ${POLICY}: "
+                                aws iam delete-role-policy --role-name "${ROLE_NAME}" --policy-name "$POLICY" && echo "deleted" || echo "failed"
+                              done
+                            fi
+                            
+                            # Delete attached policies
+                            ATTACHED=$(aws iam list-attached-role-policies --role-name "${ROLE_NAME}" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null || true)
+                            if [ -n "$ATTACHED" ] && [ "$ATTACHED" != "None" ]; then
+                              echo "Detaching managed policies..."
+                              for ARN in $ATTACHED; do
+                                echo -n "  Policy ${ARN}: "
+                                aws iam detach-role-policy --role-name "${ROLE_NAME}" --policy-arn "$ARN" && echo "detached" || echo "failed"
+                              done
+                            fi
+                            
+                            # Delete the role
+                            echo -n "Role ${ROLE_NAME}: "
+                            aws iam delete-role --role-name "${ROLE_NAME}" && echo "deleted" || echo "failed"
+                          else
+                            echo "Role ${ROLE_NAME}: not found (ok)"
+                          fi
+                          
+                          echo ""
+                          echo "=== Route53 DNS Records ==="
+                          ZONE_ID="Z031547912F6D8STOXRA2"
+                          
+                          # Delete prod DNS record
+                          PROD_RECORD="${OWNER}.harness-demo.dev"
+                          echo -n "Record ${PROD_RECORD}: "
+                          CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                            --query "ResourceRecordSets[?Name=='${PROD_RECORD}.']" --output json 2>/dev/null)
+                          if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
+                            TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
+                            VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
+                            aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                              --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${PROD_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" && echo "deleted" || echo "failed"
+                          else
+                            echo "not found (ok)"
+                          fi
+                          
+                          # Delete stage DNS record
+                          STAGE_RECORD="${OWNER}-stage.harness-demo.dev"
+                          echo -n "Record ${STAGE_RECORD}: "
+                          CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                            --query "ResourceRecordSets[?Name=='${STAGE_RECORD}.']" --output json 2>/dev/null)
+                          if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
+                            TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
+                            VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
+                            aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                              --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${STAGE_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" && echo "deleted" || echo "failed"
+                          else
+                            echo "not found (ok)"
+                          fi
+                          
+                          echo ""
+                          echo "✓ AWS cleanup complete"
+                    environmentVariables:
+                      - name: AWS_DEFAULT_REGION
+                        type: String
+                        value: us-east-1
                   timeout: 5m
-          platform:
-            os: Linux
-            arch: Amd64
-          runtime:
-            type: Cloud
-            spec: {}
         when:
           pipelineStatus: Success
         failureStrategies:
