@@ -411,6 +411,21 @@ pipeline:
                         'module.harness_code_repo[0].harness_platform_repo.main[0]'
 
                       echo ""
+                      echo "=== IRSA Delegate Role (Import Orphaned) ==="
+                      ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
+                      echo -n "  IRSA role (${ROLE_NAME}): "
+                      if $TOFU state list 2>/dev/null | grep -q 'module.irsa_delegate_role\[0\].aws_iam_role.delegate\[0\]'; then
+                        echo "already in state"
+                      else
+                        echo "NOT in state - attempting import..."
+                        if $TOFU import 'module.irsa_delegate_role[0].aws_iam_role.delegate[0]' "$ROLE_NAME" 2>&1; then
+                          echo "  ✓ Imported orphaned IRSA role - Terraform destroy will now delete it"
+                        else
+                          echo "  Role does not exist in AWS or import failed (OK - nothing to destroy)"
+                        fi
+                      fi
+
+                      echo ""
                       echo "=== Current State ==="
                       RESOURCE_COUNT=$($TOFU state list 2>/dev/null | wc -l)
                       echo "Resources remaining in state: ${RESOURCE_COUNT}"

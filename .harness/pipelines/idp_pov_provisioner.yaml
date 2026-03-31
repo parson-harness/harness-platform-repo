@@ -890,6 +890,58 @@ pipeline:
                   spec:
                     command: init
               - step:
+                  type: Run
+                  name: Import Orphaned Resources
+                  identifier: import_orphaned_resources
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=============================================="
+                      echo "  Import Orphaned Resources Into State"
+                      echo "=============================================="
+                      echo ""
+
+                      # Find the tofu binary
+                      TOFU=$(find /harness/.iacmbin-*/opentofu/tofu -type f 2>/dev/null | head -1)
+                      if [ -z "$TOFU" ]; then
+                        TOFU=$(which tofu 2>/dev/null || which terraform 2>/dev/null || echo "")
+                      fi
+                      if [ -z "$TOFU" ]; then
+                        echo "WARNING: Cannot find tofu/terraform binary, skipping import"
+                        exit 0
+                      fi
+                      echo "Using binary: $TOFU"
+                      echo ""
+
+                      OWNER="<+pipeline.variables.owner>"
+                      ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
+
+                      echo "=== IRSA Delegate Role ==="
+                      echo "Checking if role '${ROLE_NAME}' exists but is not in state..."
+                      echo ""
+
+                      # Check if already in state
+                      if $TOFU state list 2>/dev/null | grep -q 'module.irsa_delegate_role\[0\].aws_iam_role.delegate\[0\]'; then
+                        echo "  Role already in state - no import needed"
+                      else
+                        echo "  Role NOT in state - attempting import..."
+                        if $TOFU import 'module.irsa_delegate_role[0].aws_iam_role.delegate[0]' "$ROLE_NAME" 2>&1; then
+                          echo "  ✓ Successfully imported orphaned IRSA role into state"
+                          echo "  Terraform will adopt it instead of creating a new one"
+                        else
+                          echo "  Role does not exist in AWS or import failed - will create fresh"
+                        fi
+                      fi
+                      echo ""
+                      echo "Import check complete. Proceeding to plan..."
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+                          spec: {}
+              - step:
                   type: IACMTerraformPlugin
                   name: Plan
                   identifier: plan
