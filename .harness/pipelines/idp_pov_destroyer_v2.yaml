@@ -445,6 +445,13 @@ pipeline:
                   timeout: 15m
                   spec:
                     command: plan-destroy
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+                          spec: {}
               - step:
                   type: Run
                   name: Show Destroy Plan

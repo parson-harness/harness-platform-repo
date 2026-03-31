@@ -438,6 +438,85 @@ pipeline:
                     environmentVariables: []
                     outputVariables: []
                   timeout: 1m
+              - step:
+                  type: ShellScript
+                  name: Check State Health
+                  identifier: check_state_health
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    delegateSelectors:
+                      - parson-eks-delegate
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Checking State Health ==="
+                          echo ""
+                          STATE_STALE="false"
+
+                          OWNER="<+pipeline.variables.owner>"
+                          ENDPOINT="<+pipeline.variables.harness_endpoint>"
+                          ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
+                          ORG_ID="<+pipeline.variables.harness_org_id>"
+                          PROJECT_ID="<+pipeline.variables.harness_project_id>"
+                          API_KEY="<+pipeline.variables.target_api_key>"
+
+                          # Check if workspace has any state (GET workspace state info)
+                          WS_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                            "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces/${OWNER}_pov/state" \
+                            -H "Harness-Account: ${ACCOUNT_ID}" \
+                            -H "x-api-key: ${API_KEY}")
+                          echo "Workspace state: HTTP ${WS_CODE}"
+
+                          if [ "$WS_CODE" = "404" ] || [ "$WS_CODE" = "400" ]; then
+                            echo "No state found - workspace is fresh, nothing to check"
+                            export STATE_STALE="false"
+                          else
+                            # Check HAR upstream proxy
+                            HAR_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                              "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/${OWNER}-dockerhub-proxy/%2B" \
+                              -H "x-api-key: ${API_KEY}")
+                            echo "HAR upstream proxy: HTTP ${HAR_CODE}"
+
+                            # Check HAR virtual registry
+                            REG_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                              "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}/%2B" \
+                              -H "x-api-key: ${API_KEY}")
+                            echo "HAR virtual registry: HTTP ${REG_CODE}"
+
+                            # Check Code repo
+                            REPO_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                              "${ENDPOINT}/code/api/v1/repos/${OWNER}-demo-app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
+                              -H "x-api-key: ${API_KEY}")
+                            echo "Code repo: HTTP ${REPO_CODE}"
+
+                            if [ "$HAR_CODE" = "404" ] || [ "$REG_CODE" = "404" ]; then
+                              echo ""
+                              echo "⚠️  State is STALE - HAR resources in state but deleted from Harness"
+                              echo "Will delete and recreate workspace to start fresh"
+                              STATE_STALE="true"
+                            else
+                              echo ""
+                              echo "✓ State appears healthy"
+                            fi
+                          fi
+                    environmentVariables: []
+                    outputVariables:
+                      - name: state_stale
+                        type: String
+                        value: STATE_STALE
+                  timeout: 1m
+                  when:
+                    stageStatus: Success
+                    condition: <+execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200"
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+                          spec: {}
     - stage:
         name: Destroy Existing
         identifier: destroy_existing
@@ -526,11 +605,11 @@ pipeline:
     - stage:
         name: Delete Old Workspace
         identifier: delete_old_workspace
-        description: Delete the IACM workspace after Terraform destroy
+        description: Delete the IACM workspace after Terraform destroy or when state is stale
         type: Custom
         when:
           pipelineStatus: Success
-          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.force_recreate> == "true"
+          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200" && (<+pipeline.variables.force_recreate> == "true" || <+pipeline.stages.create_workspace.spec.execution.steps.check_state_health.output.outputVariables.state_stale>.default("false") == "true")
         spec:
           execution:
             steps:
@@ -569,11 +648,11 @@ pipeline:
     - stage:
         name: Recreate Workspace
         identifier: recreate_workspace
-        description: Create fresh IACM workspace after force_recreate destroy
+        description: Create fresh IACM workspace after force_recreate destroy or stale state recovery
         type: Custom
         when:
           pipelineStatus: Success
-          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.force_recreate> == "true"
+          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200" && (<+pipeline.variables.force_recreate> == "true" || <+pipeline.stages.create_workspace.spec.execution.steps.check_state_health.output.outputVariables.state_stale>.default("false") == "true")
         spec:
           execution:
             steps:
@@ -889,116 +968,6 @@ pipeline:
                   timeout: 10m
                   spec:
                     command: init
-              - step:
-                  type: Run
-                  name: Fix Stale State
-                  identifier: fix_stale_state
-                  spec:
-                    shell: Bash
-                    command: |
-                      echo "=============================================="
-                      echo "  Fix Stale State - Remove 404'd Resources"
-                      echo "=============================================="
-                      echo ""
-                      echo "If the previous run partially applied then resources"
-                      echo "were deleted outside Terraform, the state has stale"
-                      echo "entries that crash plan during refresh. Remove them."
-                      echo ""
-
-                      # Find the tofu binary
-                      TOFU=$(find /harness/.iacmbin-*/opentofu/tofu -type f 2>/dev/null | head -1)
-                      if [ -z "$TOFU" ]; then
-                        TOFU=$(which tofu 2>/dev/null || which terraform 2>/dev/null || echo "")
-                      fi
-                      if [ -z "$TOFU" ]; then
-                        echo "WARNING: Cannot find tofu/terraform binary, skipping state fix"
-                        exit 0
-                      fi
-                      echo "Using binary: $TOFU"
-                      echo ""
-
-                      # Check if there's any state at all
-                      RESOURCE_COUNT=$($TOFU state list 2>/dev/null | wc -l)
-                      if [ "$RESOURCE_COUNT" -eq 0 ]; then
-                        echo "No resources in state - fresh workspace, nothing to fix"
-                        exit 0
-                      fi
-                      echo "Resources in state: ${RESOURCE_COUNT}"
-                      echo ""
-
-                      # Function to check a Harness resource and remove from state if 404
-                      check_and_remove() {
-                        local LABEL="$1"
-                        local CHECK_URL="$2"
-                        local STATE_ADDR="$3"
-
-                        echo -n "  ${LABEL}: "
-
-                        # First check if it's even in state
-                        if ! $TOFU state list 2>/dev/null | grep -qF "${STATE_ADDR}"; then
-                          echo "not in state (skip)"
-                          return
-                        fi
-
-                        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${CHECK_URL}" \
-                          -H "x-api-key: <+pipeline.variables.target_api_key>")
-
-                        if [ "$HTTP_CODE" = "404" ]; then
-                          echo "404 - removing from state"
-                          $TOFU state rm "${STATE_ADDR}" 2>/dev/null || echo "    (state rm failed)"
-                        elif [ "$HTTP_CODE" = "200" ]; then
-                          echo "exists (OK)"
-                        else
-                          echo "HTTP ${HTTP_CODE} - leaving in state"
-                        fi
-                      }
-
-                      OWNER="<+pipeline.variables.owner>"
-                      ENDPOINT="<+pipeline.variables.harness_endpoint>"
-                      ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
-                      ORG_ID="<+pipeline.variables.harness_org_id>"
-                      PROJECT_ID="<+pipeline.variables.harness_project_id>"
-
-                      echo "=== Harness Artifact Registry ==="
-                      check_and_remove \
-                        "HAR upstream proxy (${OWNER}-dockerhub-proxy)" \
-                        "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/${OWNER}-dockerhub-proxy/%2B" \
-                        'module.har[0].harness_platform_har_registry.dockerhub_upstream[0]'
-
-                      check_and_remove \
-                        "HAR virtual registry (har-${OWNER})" \
-                        "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}/%2B" \
-                        'module.har[0].harness_platform_har_registry.registry'
-
-                      # Also remove the cleanup terraform_data if HAR is gone
-                      HAR_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-                        "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/${OWNER}-dockerhub-proxy/%2B" \
-                        -H "x-api-key: <+pipeline.variables.target_api_key>")
-                      if [ "$HAR_STATUS" = "404" ]; then
-                        echo -n "  HAR cleanup data: "
-                        $TOFU state rm 'module.har[0].terraform_data.cleanup_existing_registry[0]' 2>/dev/null && echo "removed" || echo "(not in state)"
-                      fi
-
-                      echo ""
-                      echo "=== Harness Code Repository ==="
-                      check_and_remove \
-                        "Code repo (${OWNER}-demo-app)" \
-                        "${ENDPOINT}/code/api/v1/repos/${OWNER}-demo-app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
-                        'module.harness_code_repo[0].harness_platform_repo.main[0]'
-
-                      echo ""
-                      echo "=== Updated State ==="
-                      RESOURCE_COUNT=$($TOFU state list 2>/dev/null | wc -l)
-                      echo "Resources remaining in state: ${RESOURCE_COUNT}"
-                      echo ""
-                      echo "State fix complete. Proceeding to plan..."
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
-                          spec: {}
               - step:
                   type: IACMTerraformPlugin
                   name: Plan
