@@ -19,11 +19,17 @@ data "aws_iam_openid_connect_provider" "cluster" {
 }
 
 ################################################################################
-# Check if role already exists (for idempotent creates)
+# Auto-detect if IRSA role already exists (handles EntityAlreadyExists)
+# This covers the case where a previous destroyer run couldn't delete the
+# role (e.g., delegate lacked IAM permissions) and state was lost.
 ################################################################################
 
+data "aws_iam_roles" "existing_delegate" {
+  name_regex = "^${var.name_prefix}-delegate-irsa-role$"
+}
+
 data "aws_iam_role" "existing" {
-  count = var.import_existing_role ? 1 : 0
+  count = local.should_adopt ? 1 : 0
   name  = "${var.name_prefix}-delegate-irsa-role"
 }
 
@@ -31,11 +37,16 @@ locals {
   oidc_provider_arn = data.aws_iam_openid_connect_provider.cluster.arn
   oidc_provider_url = replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")
   account_id        = data.aws_caller_identity.current.account_id
-  
-  # Use existing role ARN if importing, otherwise use the created role
-  role_arn  = var.import_existing_role ? data.aws_iam_role.existing[0].arn : aws_iam_role.delegate[0].arn
-  role_name = var.import_existing_role ? data.aws_iam_role.existing[0].name : aws_iam_role.delegate[0].name
-  role_id   = var.import_existing_role ? data.aws_iam_role.existing[0].id : aws_iam_role.delegate[0].id
+
+  # Auto-detect: if the role already exists in AWS, adopt it instead of creating
+  role_preexists = length(data.aws_iam_roles.existing_delegate.names) > 0
+  should_adopt   = local.role_preexists || var.import_existing_role
+  should_create  = !local.should_adopt
+
+  # Use existing role if adopting, otherwise use the created role
+  role_arn  = local.should_adopt ? data.aws_iam_role.existing[0].arn : aws_iam_role.delegate[0].arn
+  role_name = local.should_adopt ? data.aws_iam_role.existing[0].name : aws_iam_role.delegate[0].name
+  role_id   = local.should_adopt ? data.aws_iam_role.existing[0].id : aws_iam_role.delegate[0].id
 }
 
 ################################################################################
@@ -43,8 +54,8 @@ locals {
 ################################################################################
 
 resource "aws_iam_role" "delegate" {
-  # Only create if not importing an existing role
-  count = var.import_existing_role ? 0 : 1
+  # Only create if role doesn't already exist in AWS
+  count = local.should_create ? 1 : 0
   name  = "${var.name_prefix}-delegate-irsa-role"
 
   # Trust policy allows EKS OIDC provider to assume role via IRSA (for delegate pods)
