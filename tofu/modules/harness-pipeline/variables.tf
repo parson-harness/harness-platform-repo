@@ -326,7 +326,7 @@ variable "asg_aws_secret_key_secret" {
 ################################################################################
 
 variable "create_asg_ci_pipeline" {
-  description = "Create ASG CI pipeline (Maven build + Packer AMI — separate from EKS Docker CI pipeline)"
+  description = "Create ASG CI pipeline (Gradle build, CI Intelligence, security scans, and Packer AMI bake — separate from EKS Docker CI pipeline)"
   type        = bool
   default     = false
 }
@@ -346,7 +346,7 @@ variable "asg_ci_pipeline_name" {
 variable "asg_ci_pipeline_description" {
   description = "Description for the ASG CI pipeline"
   type        = string
-  default     = "Builds Java JAR and bakes it into an AWS AMI using Packer"
+  default     = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning, and Packer AMI bake"
 }
 
 ################################################################################
@@ -436,7 +436,7 @@ variable "asg_stage_listener_rule_arn" {
 # Naming Convention: standard_ci_<build_tool>
 # - standard_ci_gradle - Gradle/Java → Docker → HAR
 # - standard_ci_maven  - Maven/Java → Docker → HAR (ci-pipeline.tf)
-# - standard_ci_packer - Maven/Java → Packer → AMI (asg-ci-pipeline.tf)
+# - standard_ci_packer - Gradle/Java → Packer → AMI (asg-ci-pipeline.tf)
 ################################################################################
 
 variable "create_standard_ci_gradle" {

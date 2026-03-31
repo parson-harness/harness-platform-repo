@@ -883,11 +883,11 @@ module "harness_pipelines_asg" {
   # EKS Docker CI pipeline is NOT created for ASG-only deployments
   create_ci_pipeline = false
 
-  # ASG CI pipeline: Maven → Packer AMI build (separate from EKS Docker CI pipeline)
+  # ASG CI pipeline: Gradle + CI Intelligence + security scans → Packer AMI build (separate from EKS Docker CI pipeline)
   create_asg_ci_pipeline      = (local.enable_asg && !(local.enable_eks || local.enable_ecs || local.enable_lambda)) ? var.create_ci_pipeline : false
   asg_ci_pipeline_id          = "${var.owner}_asg_ci_build"
   asg_ci_pipeline_name        = "${title(var.owner)} ASG CI Build"
-  asg_ci_pipeline_description = "Builds Java JAR and bakes into AWS AMI using Packer"
+  asg_ci_pipeline_description = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning, and Packer AMI bake"
   git_connector_ref       = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   git_repo_name           = var.github_repo_name
   har_registry_ref        = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""

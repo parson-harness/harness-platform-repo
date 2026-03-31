@@ -11,7 +11,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.asg_ci_pipeline_description
-  tags        = ["pipeline-type:ci", "build:packer", "deployment:asg", "managed-by:provisioner"]
+  tags        = ["pipeline-type:ci", "build:gradle-packer", "deployment:asg", "standard-template:true", "harness-intelligence:enabled", "security-scanning:enabled", "managed-by:provisioner"]
 
   yaml = <<-CI_EOT
     pipeline:
@@ -22,9 +22,12 @@ resource "harness_platform_pipeline" "asg_ci_build" {
       description: ${var.asg_ci_pipeline_description}
       tags:
         pipeline-type: ci
-        build: packer
+        build: gradle-packer
         deployment: asg
+        standard-template: "true"
+        harness-intelligence: enabled
         managed-by: provisioner
+        security-scanning: enabled
       variables:
         - name: auto_deploy
           type: String
@@ -39,53 +42,179 @@ resource "harness_platform_pipeline" "asg_ci_build" {
       properties:
         ci:
           codebase:
-            repoName: ${var.harness_code_repo_name}
+%{if var.use_harness_code~}
+            repoName: ${local.effective_harness_code_repo_name}
+%{else~}
+            connectorRef: ${var.git_connector_ref}
+            repoName: ${var.git_repo_name}
+%{endif~}
             build: <+input>
             sparseCheckout: []
       stages:
         - stage:
-            name: Build AMI
-            identifier: build_ami
-            description: Build Java JAR and bake into AWS AMI using Packer
+            name: Build - Test - Scan - Bake AMI
+            identifier: build_test_scan_bake_ami
+            description: CI Intelligence + Security Scanning + Packer AMI Build
             type: CI
             spec:
               cloneCodebase: true
+              caching:
+                enabled: true
+                paths: []
+              sharedPaths:
+                - /var/run
+                - /root/.gradle
               platform:
                 os: Linux
                 arch: Amd64
               runtime:
                 type: Cloud
                 spec: {}
+              buildIntelligence:
+                enabled: true
               execution:
                 steps:
                   - step:
+                      type: Gitleaks
+                      name: Gitleaks Secret Scan
+                      identifier: gitleaks
+                      spec:
+                        mode: orchestration
+                        config: default
+                        target:
+                          type: repository
+                          detection: auto
+                        advanced:
+                          log:
+                            level: info
+                  - stepGroup:
+                      name: Build and Test
+                      identifier: build_and_test
+                      steps:
+                        - parallel:
+                            - step:
+                                type: RunTests
+                                name: Test Intelligence
+                                identifier: test_intelligence
+                                spec:
+                                  connectorRef: account.harnessImage
+                                  image: gradle:8.5-jdk17
+                                  language: Java
+                                  buildTool: Gradle
+                                  args: test --build-cache
+                                  packages: ${var.standard_ci_gradle_test_packages}
+                                  runOnlySelectedTests: true
+                                  enableTestSplitting: true
+                                  testSplitStrategy: ClassTiming
+                                  reports:
+                                    type: JUnit
+                                    spec:
+                                      paths:
+                                        - build/test-results/test/*.xml
+                            - step:
+                                type: Run
+                                name: Build Intelligence
+                                identifier: build_intelligence
+                                spec:
+                                  connectorRef: account.harnessImage
+                                  image: gradle:8.5-jdk17
+                                  shell: Sh
+                                  command: |
+                                    echo "=== GRADLE BUILD INTELLIGENCE ==="
+                                    gradle build -x test --build-cache --parallel
+                                    echo "Build artifacts:"
+                                    ls -la build/libs/
+                  - step:
                       type: Run
-                      name: Build Java App
-                      identifier: build_java
+                      name: Code Coverage
+                      identifier: code_coverage
                       spec:
                         connectorRef: account.harnessImage
-                        image: maven:3.9-eclipse-temurin-17
-                        shell: Bash
+                        image: gradle:8.5-jdk17
+                        shell: Sh
                         command: |
-                          echo "========================================"
-                          echo "  BUILDING JAVA APPLICATION"
-                          echo "========================================"
-                          echo "Java version:"
-                          java -version
+                          echo "=== GENERATING CODE COVERAGE REPORT ==="
+                          gradle jacocoTestReport
                           echo ""
-                          echo "Maven version:"
-                          mvn -version
-                          echo ""
-                          echo "Running: mvn clean package -DskipTests"
-                          mvn clean package -DskipTests
-                          ls -la target/*.jar
-                          echo "Build complete!"
+                          echo "=== COVERAGE SUMMARY ==="
+                          if [ -f build/reports/jacoco/test/jacocoTestReport.xml ]; then
+                            INSTRUCTION_COVERED=$(grep -o 'type="INSTRUCTION" missed="[0-9]*" covered="[0-9]*"' build/reports/jacoco/test/jacocoTestReport.xml | head -1 | grep -o 'covered="[0-9]*"' | grep -o '[0-9]*')
+                            INSTRUCTION_MISSED=$(grep -o 'type="INSTRUCTION" missed="[0-9]*" covered="[0-9]*"' build/reports/jacoco/test/jacocoTestReport.xml | head -1 | grep -o 'missed="[0-9]*"' | grep -o '[0-9]*')
+                            if [ -n "$INSTRUCTION_COVERED" ] && [ -n "$INSTRUCTION_MISSED" ]; then
+                              TOTAL=$((INSTRUCTION_COVERED + INSTRUCTION_MISSED))
+                              if [ $TOTAL -gt 0 ]; then
+                                COVERAGE=$((INSTRUCTION_COVERED * 100 / TOTAL))
+                                echo "Instruction Coverage: $${COVERAGE}%"
+                              fi
+                            fi
+                          fi
+                          echo "Full report: build/reports/jacoco/test/html/index.html"
+                        reports:
+                          type: JUnit
+                          spec:
+                            paths:
+                              - build/reports/jacoco/test/jacocoTestReport.xml
+                  - stepGroup:
+                      name: SAST Scans
+                      identifier: sast_scans
+                      steps:
+                        - parallel:
+                            - step:
+                                type: HarnessSAST
+                                name: Harness SAST
+                                identifier: harness_sast
+                                spec:
+                                  mode: orchestration
+                                  config: default
+                                  target:
+                                    type: repository
+                                    detection: auto
+                                  advanced:
+                                    log:
+                                      level: info
+                            - step:
+                                type: Semgrep
+                                name: Semgrep
+                                identifier: semgrep
+                                spec:
+                                  mode: orchestration
+                                  config: default
+                                  target:
+                                    type: repository
+                                    detection: auto
+                                  advanced:
+                                    log:
+                                      level: info
+                                failureStrategies:
+                                  - onFailure:
+                                      errors:
+                                        - AllErrors
+                                      action:
+                                        type: Ignore
+                  - step:
+                      type: HarnessSCA
+                      name: Harness SCA
+                      identifier: harness_sca
+                      spec:
+                        mode: orchestration
+                        config: default
+                        target:
+                          type: repository
+                          detection: auto
+                        advanced:
+                          log:
+                            level: info
+                      when:
+                        stageStatus: Success
+                        condition: '"true" == "false"'
                   - step:
                       type: Run
                       name: Build Info
                       identifier: build_info
                       spec:
-                        shell: Bash
+                        connectorRef: account.harnessImage
+                        image: alpine:latest
+                        shell: Sh
                         command: |
                           echo "========================================"
                           echo "  BUILD INFORMATION"
@@ -102,9 +231,12 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                             BRANCH_SAFE=$(echo "<+codebase.branch>" | sed 's/[^a-zA-Z0-9]/-/g')
                             IMAGE_TAG="$${BRANCH_SAFE}-<+pipeline.sequenceId>"
                           fi
+                          AMI_NAME="harness-demo-app-${var.asg_packer_owner}-$${IMAGE_TAG}"
                           echo "AMI Version Tag: $IMAGE_TAG"
+                          echo "AMI Name:        $AMI_NAME"
                         outputVariables:
                           - name: IMAGE_TAG
+                          - name: AMI_NAME
                   - step:
                       type: Run
                       name: Build AMI with Packer
@@ -118,11 +250,20 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                           echo "  PACKER AMI BUILD"
                           echo "======================================="
                           echo "AMI Version: $APP_VERSION"
+                          echo "AMI Name:    $AMI_NAME"
                           echo "Owner:       $OWNER"
                           echo "Region:      $AWS_DEFAULT_REGION"
                           echo ""
 
-                          JAR_PATH=$(find /harness/target -name "*.jar" ! -name "*.original" | head -1)
+                          JAR_PATH=$(find /harness/build/libs -name "*.jar" ! -name "*-plain.jar" | head -1)
+                          if [ -z "$JAR_PATH" ]; then
+                            JAR_PATH=$(find /harness/build/libs -name "*.jar" | head -1)
+                          fi
+                          if [ -z "$JAR_PATH" ]; then
+                            echo "ERROR: No Gradle JAR found in /harness/build/libs"
+                            ls -R /harness/build || true
+                            exit 1
+                          fi
                           echo "JAR path: $JAR_PATH"
                           ls -la "$JAR_PATH"
 
@@ -150,45 +291,65 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                             cat /tmp/packer_output.txt
                             exit 1
                           fi
-                          echo "AMI_ID: $AMI_ID"
+                          echo "AMI_ID:   $AMI_ID"
+                          echo "AMI_NAME: $AMI_NAME"
                         envVariables:
                           APP_VERSION: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
+                          AMI_NAME: <+execution.steps.build_info.output.outputVariables.AMI_NAME>
                           OWNER: ${var.asg_packer_owner}
                           AWS_ACCESS_KEY_ID: <+secrets.getValue("${var.asg_aws_access_key_secret}")>
                           AWS_SECRET_ACCESS_KEY: <+secrets.getValue("${var.asg_aws_secret_key_secret}")>
                           AWS_DEFAULT_REGION: ${var.asg_packer_region}
                         outputVariables:
                           - name: AMI_ID
+                          - name: AMI_NAME
                   - step:
                       type: Run
                       name: Build Summary
                       identifier: build_summary
                       spec:
-                        shell: Bash
+                        connectorRef: account.harnessImage
+                        image: alpine:latest
+                        shell: Sh
                         command: |
                           echo "========================================"
                           echo "  BUILD COMPLETE"
                           echo "========================================"
                           echo "AMI Version Tag: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>"
+                          echo "AMI Name:        <+execution.steps.packer_build_ami.output.outputVariables.AMI_NAME>"
                           echo "AMI ID:          <+execution.steps.packer_build_ami.output.outputVariables.AMI_ID>"
+                          echo ""
+                          echo "=== HARNESS CI INTELLIGENCE FEATURES ==="
+                          echo "- Test Intelligence: Runs only affected tests"
+                          echo "- Test Splitting: Parallelizes test execution"
+                          echo "- Build Intelligence: Caches compiled classes"
+                          echo "- Cache Intelligence: Auto-caches Gradle dependencies"
+                          echo ""
+                          echo "=== SECURITY SCANNING ==="
+                          echo "- Gitleaks: Secret detection"
+                          echo "- Harness SAST: Static analysis"
+                          echo "- Semgrep: Code patterns"
+                          echo "- Harness SCA: Configured but temporarily skipped"
                           echo ""
                           echo "New EC2 instances start the JAR (baked into AMI) via systemd."
                           echo ""
                           echo "To deploy this AMI, run the ASG strategy pipeline:"
-                          echo "  Use image_tag: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>"
+                          echo "  Use image_tag: <+execution.steps.packer_build_ami.output.outputVariables.AMI_NAME>"
                           echo "========================================="
                   - step:
                       type: Run
                       name: Trigger CD Pipeline
                       identifier: trigger_cd
                       spec:
-                        shell: Bash
+                        connectorRef: account.harnessImage
+                        image: curlimages/curl:8.7.1
+                        shell: Sh
                         command: |
                           if [ "$AUTO_DEPLOY" = "true" ]; then
                             echo "========================================"
                             echo "  AUTO-DEPLOYING (Rolling Strategy)"
                             echo "========================================"
-                            AMI_NAME="harness-demo-app-$${PACKER_OWNER}-$${IMAGE_TAG}"
+                            AMI_NAME="$OUTPUT_AMI_NAME"
                             echo "Triggering ASG deployment with AMI name: $AMI_NAME"
 
                             WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.asg_strategy_pipeline_id}&triggerIdentifier=asg_auto_deploy_webhook"
@@ -213,8 +374,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                             echo "Auto-deploy is disabled. To deploy, run the ASG strategy pipeline manually."
                           fi
                         envVariables:
-                          IMAGE_TAG: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
-                          PACKER_OWNER: ${var.asg_packer_owner}
+                          OUTPUT_AMI_NAME: <+execution.steps.packer_build_ami.output.outputVariables.AMI_NAME>
                           AUTO_DEPLOY: <+pipeline.variables.auto_deploy>
                           HARNESS_ENDPOINT: <+pipeline.variables.harness_endpoint>
                           ACCOUNT_ID: <+account.identifier>

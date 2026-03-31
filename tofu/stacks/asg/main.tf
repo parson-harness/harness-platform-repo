@@ -415,11 +415,11 @@ module "harness_pipelines_asg" {
   create_strategy_pipeline   = false
   create_ci_pipeline         = false
 
-  # ASG CI pipeline: Maven → Packer AMI build
+  # ASG CI pipeline: Gradle + CI Intelligence + security scans → Packer AMI build
   create_asg_ci_pipeline      = var.create_asg_ci_pipeline
   asg_ci_pipeline_id          = "${var.owner}_asg_ci_build"
   asg_ci_pipeline_name        = "${title(var.owner)} ASG CI Build"
-  asg_ci_pipeline_description = "Builds Java JAR and bakes into AWS AMI using Packer"
+  asg_ci_pipeline_description = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning, and Packer AMI bake"
   git_connector_ref           = var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   git_repo_name               = var.github_repo_name
   use_harness_code            = var.use_harness_code
@@ -428,6 +428,7 @@ module "harness_pipelines_asg" {
   harness_org_id              = local.resolved_org_id
   harness_project_id          = local.resolved_project_id
   harness_api_key             = var.harness_api_key
+  standard_ci_gradle_test_packages = var.standard_ci_gradle_test_packages
 
   asg_packer_owner          = var.owner
   asg_packer_region         = var.aws_region
