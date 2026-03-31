@@ -9,28 +9,21 @@ orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
   description: |
-    ADVANCED: Provision a complete Harness demo in a customer's own AWS environment.
+    ADVANCED: Provision a complete Harness demo in a customer's Harness account.
     
-    ⚠️  This option requires the customer to set up their own AWS infrastructure.
+    ⚠️  This workflow targets the current canonical POV provisioner pipeline.
     
     What gets created:
-    - NEW EKS cluster in customer's AWS account
-    - VPC, subnets, NAT gateways
-    - IAM roles for IRSA (delegate permissions)
     - Harness CI/CD pipelines
     - Harness Service and Environments
-    - Harness Artifact Registry
+    - Harness Artifact Registry or ASG delivery resources depending on target
     
     Prerequisites (REQUIRED):
-    1. Customer AWS account with admin permissions
-    2. OIDC AWS Connector in customer's Harness account
-       - Must have permissions: EKS, VPC, IAM, EC2
-       - See: https://developer.harness.io/docs/platform/connectors/cloud-providers/ref-cloud-providers/aws-connector-settings-reference
-    3. Customer Harness account with IACM enabled
-    4. Customer API key with admin permissions
+    1. Customer Harness account with IACM enabled
+    2. Customer API key with admin permissions
+    3. Existing cluster access for EKS targets, or the required shared-cluster inputs for ASG targets
     
-    Estimated provisioning time: 20-30 minutes (EKS cluster creation)
-    Estimated AWS cost: ~$150/month for EKS + node groups
+    Estimated provisioning time depends on the selected target and any existing workspace state.
   tags:
     - customer-self-hosted
     - iacm
@@ -39,21 +32,21 @@ metadata:
 spec:
   presentation:
     customTitle: Customer Self-Hosted (Advanced)
-    customSubTitle: "⚠️ Creates AWS infrastructure in customer's account - requires OIDC AWS connector"
+    customSubTitle: "⚠️ Advanced cross-account provisioning into a customer Harness project"
     customCreateButtonText: Provision Infrastructure
   
   output:
     links:
       - title: Pipeline Execution
         url: ${{ steps.trigger.output.PipelineUrl }}
-      - title: CD Pipeline (Strategy Choice)
-        url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_k8s_strategy_deploy/pipeline-studio
-      - title: CD Pipeline (Canary)
-        url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_k8s_canary_deploy/pipeline-studio
-      - title: CD Pipeline (Blue-Green)
-        url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_k8s_bg_canary_deploy/pipeline-studio
-      - title: CI Pipeline
-        url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines/${{ parameters.owner }}_ci_build/pipeline-studio
+      - title: EKS App URL
+        url: http://${{ parameters.owner }}.harness-demo.dev
+      - title: ASG App URL
+        url: https://${{ parameters.owner }}-asg.harness-demo.dev
+      - title: Project Pipelines
+        url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/pipelines
+      - title: Project Services
+        url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/services
       - title: Artifact Registry
         url: https://app.harness.io/ng/account/${{ parameters.harness_account_id }}/all/orgs/${{ parameters.harness_org_id }}/projects/${{ parameters.harness_project_id }}/artifacts
   
@@ -82,8 +75,8 @@ spec:
         - harness_account_id
         - harness_org_id
         - harness_project_id
-        - harness_api_key
-        - harness_api_key_email
+        - target_api_key
+        - target_api_key_email
       properties:
         harness_account_id:
           title: Customer Account ID
@@ -115,53 +108,34 @@ spec:
           type: string
           description: "Customer's Harness Project ID"
         
-        harness_api_key:
+        target_api_key:
           title: Customer API Key
           type: string
           description: "Customer's Harness API Key with admin permissions"
           ui:widget: password
         
-        harness_api_key_email:
+        target_api_key_email:
           title: API Key Email
           type: string
           description: "Email associated with the customer's API key"
           format: email
     
-    - title: AWS Infrastructure
-      required:
-        - aws_region
+    - title: Infrastructure
       properties:
-        create_eks_cluster:
-          title: Create New EKS Cluster
+        deployment_target:
+          title: Deployment Target
           type: string
-          description: "Create a new EKS cluster in customer's AWS account"
-          default: "true"
+          description: "Where to deploy the demo app"
+          default: eks
           enum:
-            - "true"
-            - "false"
-          ui:help: "⚠️ Requires OIDC AWS connector with EKS, VPC, IAM permissions"
+            - eks
+            - asg
         
-        aws_region:
-          title: AWS Region
+        eks_cluster_name:
+          title: EKS Cluster Name
           type: string
-          description: "AWS region for infrastructure"
-          default: "us-west-2"
-          enum:
-            - "us-east-1"
-            - "us-east-2"
-            - "us-west-1"
-            - "us-west-2"
-            - "eu-west-1"
-            - "eu-central-1"
-            - "ap-southeast-1"
-            - "ap-northeast-1"
-        
-        existing_cluster_name:
-          title: Existing EKS Cluster Name
-          type: string
-          description: "If not creating new cluster, provide existing cluster name"
-          ui:options:
-            hidden: ${{ parameters.create_eks_cluster === "true" }}
+          description: "Cluster name used by the canonical provisioner workflows"
+          default: "harness-eks-parson"
     
     - title: Harness Resources
       properties:
@@ -182,24 +156,14 @@ spec:
           enum:
             - "true"
             - "false"
-        
-        create_delegate:
-          title: Create Delegate?
-          type: string
-          description: "Create a new Harness delegate in the cluster"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-    
+
     - title: Application Source
       properties:
-        git_repo_url:
-          title: Git Repository URL
+        source_github_repo:
+          title: Source GitHub Repo
           type: string
-          description: "Git repository URL for the demo app source code"
-          default: "https://github.com/parson-harness/harness-demo-app.git"
-          ui:help: "Customer can fork this repo and use their own URL"
+          description: "Source GitHub repository to import into Harness Code"
+          default: "parson-harness/harness-demo-app"
     
     - title: Advanced Options
       properties:
@@ -225,14 +189,12 @@ spec:
           harness_endpoint: ${{ parameters.harness_cluster }}
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
-          harness_api_key: ${{ parameters.harness_api_key }}
-          harness_api_key_email: ${{ parameters.harness_api_key_email }}
-          deployment_targets: "eks"
-          create_eks_cluster: ${{ parameters.create_eks_cluster }}
-          existing_cluster_name: ${{ parameters.existing_cluster_name }}
+          target_api_key: ${{ parameters.target_api_key }}
+          target_api_key_email: ${{ parameters.target_api_key_email }}
+          deployment_target: ${{ parameters.deployment_target }}
+          eks_cluster_name: ${{ parameters.eks_cluster_name }}
           create_harness_environment: ${{ parameters.create_harness_environment }}
           create_prod_environment: ${{ parameters.create_prod_environment }}
-          create_delegate: ${{ parameters.create_delegate }}
-          git_repo_url: ${{ parameters.git_repo_url }}
+          source_github_repo: ${{ parameters.source_github_repo }}
           force_recreate: ${{ parameters.force_recreate }}
         apikey: ${{ parameters.token }}

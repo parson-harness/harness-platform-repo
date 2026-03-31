@@ -62,17 +62,29 @@ spec:
           description: "Project where the sandbox exists"
           default: parson
           ui:field: HarnessProjectPicker
+
+    - title: Destruction Options
+      properties:
+        deployment_target:
+          title: Deployment Target
+          type: string
+          description: "Which target stack should be destroyed"
+          default: eks
+          enum:
+            - eks
+            - asg
     
   steps:
     - id: trigger
       name: Destroying SE Sandbox
       action: trigger:harness-custom-pipeline
       input:
-        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/idp_pov_destroyer/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
+        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/idp_pov_destroyer_v2/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
         inputset:
           owner: ${{ parameters.owner }}
           harness_account_id: <+account.identifier>
           harness_endpoint: "https://app.harness.io/gratis"
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
+          deployment_target: ${{ parameters.deployment_target }}
         apikey: ${{ parameters.token }}
