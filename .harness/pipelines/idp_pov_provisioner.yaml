@@ -3,7 +3,7 @@ pipeline:
   identifier: idp_pov_provisioner
   projectIdentifier: parson
   orgIdentifier: sandbox
-  description: IDP-triggered pipeline that creates an IACM workspace and provisions a POV environment using the decoupled EKS stack
+  description: IDP-triggered pipeline that creates an IACM workspace and provisions a POV environment using the decoupled EKS or ASG stacks
   tags:
     idp: "true"
     pov: "true"
@@ -18,6 +18,11 @@ pipeline:
       description: Owner name (lowercase, used for resource naming and workspace ID)
       required: true
       value: <+input>
+    - name: deployment_target
+      type: String
+      description: Deployment target stack to provision
+      required: false
+      value: <+input>.default(eks).allowedValues(eks,asg)
     - name: harness_account_id
       type: String
       description: Target Harness Account ID (for cross-account provisioning)
@@ -113,6 +118,16 @@ pipeline:
       description: Create Standard CI Gradle pipeline (Test Intelligence, Security Scanning, Supply Chain) - RECOMMENDED
       required: false
       value: <+input>.default(true).allowedValues(true,false)
+    - name: create_asg_strategy_pipeline
+      type: String
+      description: Create the ASG strategy deployment pipeline
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
+    - name: create_asg_ci_pipeline
+      type: String
+      description: Create the ASG CI pipeline
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
     - name: acm_cert_arn
       type: String
       description: ACM certificate ARN for HTTPS ingress
@@ -132,7 +147,7 @@ pipeline:
     - stage:
         name: Create Workspace from Template
         identifier: create_workspace
-        description: Create a new IACM workspace from the POV_Provisioner template using "Use Template" linkage
+        description: Create a new IACM workspace from the selected EKS or ASG template using "Use Template" linkage
         type: Custom
         spec:
           execution:
@@ -330,7 +345,223 @@ pipeline:
                   timeout: 2m
                   when:
                     stageStatus: Success
-                    condition: <+execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "404"
+                    condition: <+execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "404" && <+pipeline.variables.deployment_target> == "eks"
+              - step:
+                  type: Http
+                  name: Create IACM Workspace ASG
+                  identifier: create_iacm_workspace_asg
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces
+                    method: POST
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    inputVariables: []
+                    outputVariables:
+                      - name: workspace_id
+                        value: <+json.select("identifier", httpResponseBody)>
+                        type: String
+                      - name: response_body
+                        value: <+httpResponseBody>
+                        type: String
+                      - name: response_code
+                        value: <+httpResponseCode>
+                        type: String
+                    requestBody: |
+                      {
+                        "identifier": "<+pipeline.variables.owner>_pov",
+                        "name": "<+pipeline.variables.owner> POV Workspace (ASG)",
+                        "description": "POV environment for <+pipeline.variables.owner> - ASG stack (Terraform creates Harness Code repo)",
+                        "provisioner": "opentofu",
+                        "provisioner_version": "1.11.2",
+                        "repository_connector": "parsongh",
+                        "repository": "harness-demo-app",
+                        "repository_branch": "main",
+                        "repository_path": "tofu/stacks/asg",
+                        "provider_connector": "aws_oidc_iacm",
+                        "cost_estimation_enabled": true,
+                        "provider_connectors": [
+                          {
+                            "connector_ref": "aws_oidc_iacm",
+                            "type": "aws"
+                          }
+                        ],
+                        "default_pipelines": {
+                          "provision": {
+                            "project_pipeline": "pov_provisioning"
+                          },
+                          "destroy": {
+                            "project_pipeline": "pov_destroy"
+                          }
+                        },
+                        "terraform_variables": {
+                          "owner": {
+                            "key": "owner",
+                            "value": "<+pipeline.variables.owner>",
+                            "value_type": "string"
+                          },
+                          "harness_account_id": {
+                            "key": "harness_account_id",
+                            "value": "<+pipeline.variables.harness_account_id>",
+                            "value_type": "string"
+                          },
+                          "harness_endpoint": {
+                            "key": "harness_endpoint",
+                            "value": "<+pipeline.variables.harness_endpoint>",
+                            "value_type": "string"
+                          },
+                          "harness_api_key": {
+                            "key": "harness_api_key",
+                            "value": "acct-automation-svc-acct",
+                            "value_type": "secret"
+                          },
+                          "harness_org_id": {
+                            "key": "harness_org_id",
+                            "value": "<+pipeline.variables.harness_org_id>",
+                            "value_type": "string"
+                          },
+                          "harness_project_id": {
+                            "key": "harness_project_id",
+                            "value": "<+pipeline.variables.harness_project_id>",
+                            "value_type": "string"
+                          },
+                          "create_harness_org": {
+                            "key": "create_harness_org",
+                            "value": "<+pipeline.variables.create_harness_org>",
+                            "value_type": "string"
+                          },
+                          "create_harness_project": {
+                            "key": "create_harness_project",
+                            "value": "<+pipeline.variables.create_harness_project>",
+                            "value_type": "string"
+                          },
+                          "aws_region": {
+                            "key": "aws_region",
+                            "value": "us-east-1",
+                            "value_type": "string"
+                          },
+                          "instance_type": {
+                            "key": "instance_type",
+                            "value": "t3.small",
+                            "value_type": "string"
+                          },
+                          "asg_min_size": {
+                            "key": "asg_min_size",
+                            "value": "1",
+                            "value_type": "string"
+                          },
+                          "asg_desired_capacity": {
+                            "key": "asg_desired_capacity",
+                            "value": "1",
+                            "value_type": "string"
+                          },
+                          "asg_max_size": {
+                            "key": "asg_max_size",
+                            "value": "4",
+                            "value_type": "string"
+                          },
+                          "asg_canary_instance_count": {
+                            "key": "asg_canary_instance_count",
+                            "value": "1",
+                            "value_type": "string"
+                          },
+                          "create_asg_strategy_pipeline": {
+                            "key": "create_asg_strategy_pipeline",
+                            "value": "<+pipeline.variables.create_asg_strategy_pipeline>",
+                            "value_type": "string"
+                          },
+                          "create_asg_ci_pipeline": {
+                            "key": "create_asg_ci_pipeline",
+                            "value": "<+pipeline.variables.create_asg_ci_pipeline>",
+                            "value_type": "string"
+                          },
+                          "standard_ci_gradle_test_packages": {
+                            "key": "standard_ci_gradle_test_packages",
+                            "value": "io.harness.demo",
+                            "value_type": "string"
+                          },
+                          "acm_cert_arn": {
+                            "key": "acm_cert_arn",
+                            "value": "<+pipeline.variables.acm_cert_arn>",
+                            "value_type": "string"
+                          },
+                          "create_dns_record": {
+                            "key": "create_dns_record",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "route53_zone_name": {
+                            "key": "route53_zone_name",
+                            "value": "harness-demo.dev",
+                            "value_type": "string"
+                          },
+                          "create_delegate": {
+                            "key": "create_delegate",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "eks_cluster_name": {
+                            "key": "eks_cluster_name",
+                            "value": "<+pipeline.variables.eks_cluster_name>",
+                            "value_type": "string"
+                          },
+                          "aws_auth_type": {
+                            "key": "aws_auth_type",
+                            "value": "irsa",
+                            "value_type": "string"
+                          },
+                          "enable_cross_account_access": {
+                            "key": "enable_cross_account_access",
+                            "value": "false",
+                            "value_type": "string"
+                          },
+                          "cross_account_role_arn": {
+                            "key": "cross_account_role_arn",
+                            "value": "",
+                            "value_type": "string"
+                          },
+                          "cross_account_external_id": {
+                            "key": "cross_account_external_id",
+                            "value": "",
+                            "value_type": "string"
+                          },
+                          "github_repo_name": {
+                            "key": "github_repo_name",
+                            "value": "<+pipeline.variables.source_github_repo>",
+                            "value_type": "string"
+                          },
+                          "github_pat": {
+                            "key": "github_pat",
+                            "value": "github_pat",
+                            "value_type": "secret"
+                          },
+                          "github_repo_is_public": {
+                            "key": "github_repo_is_public",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "git_branch": {
+                            "key": "git_branch",
+                            "value": "main",
+                            "value_type": "string"
+                          },
+                          "use_harness_code": {
+                            "key": "use_harness_code",
+                            "value": "true",
+                            "value_type": "string"
+                          }
+                        },
+                        "environment_variables": {}
+                      }
+                    assertion: "true"
+                  timeout: 2m
+                  when:
+                    stageStatus: Success
+                    condition: <+execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "404" && <+pipeline.variables.deployment_target> == "asg"
               - step:
                   type: ShellScript
                   name: Validate Workspace Creation
@@ -358,7 +589,35 @@ pipeline:
                   timeout: 1m
                   when:
                     stageStatus: Success
-                    condition: <+execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "404"
+                    condition: <+execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "404" && <+pipeline.variables.deployment_target> == "eks"
+              - step:
+                  type: ShellScript
+                  name: Validate Workspace Creation ASG
+                  identifier: validate_workspace_creation_asg
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "=== Workspace Creation Response ==="
+                          echo "Response Code: <+execution.steps.create_iacm_workspace_asg.output.outputVariables.response_code>"
+                          echo "Response Body: <+execution.steps.create_iacm_workspace_asg.output.outputVariables.response_body>"
+                          echo "==================================="
+
+                          RESPONSE_CODE="<+execution.steps.create_iacm_workspace_asg.output.outputVariables.response_code>"
+                          if [ "$RESPONSE_CODE" != "200" ] && [ "$RESPONSE_CODE" != "201" ]; then
+                            echo "ERROR: Workspace creation failed with code $RESPONSE_CODE"
+                            exit 1
+                          fi
+                          echo "Workspace created successfully"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m
+                  when:
+                    stageStatus: Success
+                    condition: <+execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "404" && <+pipeline.variables.deployment_target> == "asg"
               - step:
                   type: Http
                   name: Link Workspace to Template
@@ -381,6 +640,40 @@ pipeline:
                       }
                     assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201 || <+httpResponseCode> == 409
                   timeout: 1m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.deployment_target> == "eks"
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Http
+                  name: Link Workspace to ASG Template
+                  identifier: link_workspace_template_asg
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspace/templates
+                    method: POST
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    requestBody: |
+                      {
+                        "template_id": "Sandbox_Provisioner_ASG",
+                        "version": "1.0",
+                        "workspace_id": "<+pipeline.variables.owner>_pov"
+                      }
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201 || <+httpResponseCode> == 409
+                  timeout: 1m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.deployment_target> == "asg"
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -425,16 +718,29 @@ pipeline:
                       type: Inline
                       spec:
                         script: |
-                          echo "=== IACM Workspace Created (EKS Stack) ==="
-                          echo "Workspace ID: <+pipeline.variables.owner>_pov"
-                          echo "Stack: tofu/stacks/eks"
-                          echo ""
-                          echo "Owner: <+pipeline.variables.owner>"
-                          echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
-                          echo "Org: <+pipeline.variables.harness_org_id>"
-                          echo "Project: <+pipeline.variables.harness_project_id>"
-                          echo ""
-                          echo "Proceeding to provision Harness entities..."
+                          if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
+                            echo "=== IACM Workspace Created (ASG Stack) ==="
+                            echo "Workspace ID: <+pipeline.variables.owner>_pov"
+                            echo "Stack: tofu/stacks/asg"
+                            echo ""
+                            echo "Owner: <+pipeline.variables.owner>"
+                            echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
+                            echo "Org: <+pipeline.variables.harness_org_id>"
+                            echo "Project: <+pipeline.variables.harness_project_id>"
+                            echo ""
+                            echo "Proceeding to provision Harness entities..."
+                          else
+                            echo "=== IACM Workspace Created (EKS Stack) ==="
+                            echo "Workspace ID: <+pipeline.variables.owner>_pov"
+                            echo "Stack: tofu/stacks/eks"
+                            echo ""
+                            echo "Owner: <+pipeline.variables.owner>"
+                            echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
+                            echo "Org: <+pipeline.variables.harness_org_id>"
+                            echo "Project: <+pipeline.variables.harness_project_id>"
+                            echo ""
+                            echo "Proceeding to provision Harness entities..."
+                          fi
                     environmentVariables: []
                     outputVariables: []
                   timeout: 1m
@@ -454,6 +760,7 @@ pipeline:
                           echo "=== Checking State Health ==="
                           echo ""
                           STATE_STALE="false"
+                          TARGET="<+pipeline.variables.deployment_target>"
 
                           OWNER="<+pipeline.variables.owner>"
                           ENDPOINT="<+pipeline.variables.harness_endpoint>"
@@ -473,32 +780,41 @@ pipeline:
                             echo "No state found - workspace is fresh, nothing to check"
                             export STATE_STALE="false"
                           else
-                            # Check HAR upstream proxy
-                            HAR_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-                              "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/${OWNER}-dockerhub-proxy/%2B" \
-                              -H "x-api-key: ${API_KEY}")
-                            echo "HAR upstream proxy: HTTP ${HAR_CODE}"
-
-                            # Check HAR virtual registry
-                            REG_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-                              "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}/%2B" \
-                              -H "x-api-key: ${API_KEY}")
-                            echo "HAR virtual registry: HTTP ${REG_CODE}"
-
-                            # Check Code repo
                             REPO_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
                               "${ENDPOINT}/code/api/v1/repos/${OWNER}-demo-app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
                               -H "x-api-key: ${API_KEY}")
                             echo "Code repo: HTTP ${REPO_CODE}"
 
-                            if [ "$HAR_CODE" = "404" ] || [ "$REG_CODE" = "404" ]; then
-                              echo ""
-                              echo "⚠️  State is STALE - HAR resources in state but deleted from Harness"
-                              echo "Will delete and recreate workspace to start fresh"
-                              STATE_STALE="true"
+                            if [ "$TARGET" = "asg" ]; then
+                              if [ "$REPO_CODE" = "404" ]; then
+                                echo ""
+                                echo "⚠️  State is STALE - Harness Code repo is missing"
+                                echo "Will delete and recreate workspace to start fresh"
+                                STATE_STALE="true"
+                              else
+                                echo ""
+                                echo "✓ State appears healthy"
+                              fi
                             else
-                              echo ""
-                              echo "✓ State appears healthy"
+                              HAR_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                                "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/${OWNER}-dockerhub-proxy/%2B" \
+                                -H "x-api-key: ${API_KEY}")
+                              echo "HAR upstream proxy: HTTP ${HAR_CODE}"
+
+                              REG_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+                                "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}/%2B" \
+                                -H "x-api-key: ${API_KEY}")
+                              echo "HAR virtual registry: HTTP ${REG_CODE}"
+
+                              if [ "$HAR_CODE" = "404" ] || [ "$REG_CODE" = "404" ] || [ "$REPO_CODE" = "404" ]; then
+                                echo ""
+                                echo "⚠️  State is STALE - key EKS resources in state were deleted from Harness"
+                                echo "Will delete and recreate workspace to start fresh"
+                                STATE_STALE="true"
+                              else
+                                echo ""
+                                echo "✓ State appears healthy"
+                              fi
                             fi
                           fi
                     environmentVariables: []
@@ -818,6 +1134,214 @@ pipeline:
                       }
                     assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201
                   timeout: 2m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.deployment_target> == "eks"
+              - step:
+                  type: Http
+                  name: Create Fresh Workspace ASG
+                  identifier: create_fresh_workspace_asg
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces
+                    method: POST
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    requestBody: |
+                      {
+                        "identifier": "<+pipeline.variables.owner>_pov",
+                        "name": "<+pipeline.variables.owner> POV Workspace (ASG)",
+                        "description": "POV environment for <+pipeline.variables.owner> - ASG stack (recreated)",
+                        "provisioner": "opentofu",
+                        "provisioner_version": "1.11.2",
+                        "repository_connector": "parsongh",
+                        "repository": "harness-demo-app",
+                        "repository_branch": "main",
+                        "repository_path": "tofu/stacks/asg",
+                        "provider_connector": "aws_oidc_iacm",
+                        "cost_estimation_enabled": true,
+                        "provider_connectors": [
+                          {
+                            "connector_ref": "aws_oidc_iacm",
+                            "type": "aws"
+                          }
+                        ],
+                        "default_pipelines": {
+                          "provision": {
+                            "project_pipeline": "pov_provisioning"
+                          },
+                          "destroy": {
+                            "project_pipeline": "pov_destroy"
+                          }
+                        },
+                        "terraform_variables": {
+                          "owner": {
+                            "key": "owner",
+                            "value": "<+pipeline.variables.owner>",
+                            "value_type": "string"
+                          },
+                          "harness_account_id": {
+                            "key": "harness_account_id",
+                            "value": "<+pipeline.variables.harness_account_id>",
+                            "value_type": "string"
+                          },
+                          "harness_endpoint": {
+                            "key": "harness_endpoint",
+                            "value": "<+pipeline.variables.harness_endpoint>",
+                            "value_type": "string"
+                          },
+                          "harness_api_key": {
+                            "key": "harness_api_key",
+                            "value": "acct-automation-svc-acct",
+                            "value_type": "secret"
+                          },
+                          "harness_org_id": {
+                            "key": "harness_org_id",
+                            "value": "<+pipeline.variables.harness_org_id>",
+                            "value_type": "string"
+                          },
+                          "harness_project_id": {
+                            "key": "harness_project_id",
+                            "value": "<+pipeline.variables.harness_project_id>",
+                            "value_type": "string"
+                          },
+                          "create_harness_org": {
+                            "key": "create_harness_org",
+                            "value": "<+pipeline.variables.create_harness_org>",
+                            "value_type": "string"
+                          },
+                          "create_harness_project": {
+                            "key": "create_harness_project",
+                            "value": "<+pipeline.variables.create_harness_project>",
+                            "value_type": "string"
+                          },
+                          "aws_region": {
+                            "key": "aws_region",
+                            "value": "us-east-1",
+                            "value_type": "string"
+                          },
+                          "instance_type": {
+                            "key": "instance_type",
+                            "value": "t3.small",
+                            "value_type": "string"
+                          },
+                          "asg_min_size": {
+                            "key": "asg_min_size",
+                            "value": "1",
+                            "value_type": "string"
+                          },
+                          "asg_desired_capacity": {
+                            "key": "asg_desired_capacity",
+                            "value": "1",
+                            "value_type": "string"
+                          },
+                          "asg_max_size": {
+                            "key": "asg_max_size",
+                            "value": "4",
+                            "value_type": "string"
+                          },
+                          "asg_canary_instance_count": {
+                            "key": "asg_canary_instance_count",
+                            "value": "1",
+                            "value_type": "string"
+                          },
+                          "create_asg_strategy_pipeline": {
+                            "key": "create_asg_strategy_pipeline",
+                            "value": "<+pipeline.variables.create_asg_strategy_pipeline>",
+                            "value_type": "string"
+                          },
+                          "create_asg_ci_pipeline": {
+                            "key": "create_asg_ci_pipeline",
+                            "value": "<+pipeline.variables.create_asg_ci_pipeline>",
+                            "value_type": "string"
+                          },
+                          "standard_ci_gradle_test_packages": {
+                            "key": "standard_ci_gradle_test_packages",
+                            "value": "io.harness.demo",
+                            "value_type": "string"
+                          },
+                          "acm_cert_arn": {
+                            "key": "acm_cert_arn",
+                            "value": "<+pipeline.variables.acm_cert_arn>",
+                            "value_type": "string"
+                          },
+                          "create_dns_record": {
+                            "key": "create_dns_record",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "route53_zone_name": {
+                            "key": "route53_zone_name",
+                            "value": "harness-demo.dev",
+                            "value_type": "string"
+                          },
+                          "create_delegate": {
+                            "key": "create_delegate",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "eks_cluster_name": {
+                            "key": "eks_cluster_name",
+                            "value": "<+pipeline.variables.eks_cluster_name>",
+                            "value_type": "string"
+                          },
+                          "aws_auth_type": {
+                            "key": "aws_auth_type",
+                            "value": "irsa",
+                            "value_type": "string"
+                          },
+                          "enable_cross_account_access": {
+                            "key": "enable_cross_account_access",
+                            "value": "false",
+                            "value_type": "string"
+                          },
+                          "cross_account_role_arn": {
+                            "key": "cross_account_role_arn",
+                            "value": "",
+                            "value_type": "string"
+                          },
+                          "cross_account_external_id": {
+                            "key": "cross_account_external_id",
+                            "value": "",
+                            "value_type": "string"
+                          },
+                          "github_repo_name": {
+                            "key": "github_repo_name",
+                            "value": "<+pipeline.variables.source_github_repo>",
+                            "value_type": "string"
+                          },
+                          "github_pat": {
+                            "key": "github_pat",
+                            "value": "github_pat",
+                            "value_type": "secret"
+                          },
+                          "github_repo_is_public": {
+                            "key": "github_repo_is_public",
+                            "value": "true",
+                            "value_type": "string"
+                          },
+                          "git_branch": {
+                            "key": "git_branch",
+                            "value": "main",
+                            "value_type": "string"
+                          },
+                          "use_harness_code": {
+                            "key": "use_harness_code",
+                            "value": "true",
+                            "value_type": "string"
+                          }
+                        },
+                        "environment_variables": {}
+                      }
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201
+                  timeout: 2m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.deployment_target> == "asg"
               - step:
                   type: ShellScript
                   name: Fresh Workspace Created
@@ -829,7 +1353,11 @@ pipeline:
                       type: Inline
                       spec:
                         script: |
-                          echo "✓ Fresh workspace created: <+pipeline.variables.owner>_pov"
+                          if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
+                            echo "✓ Fresh ASG workspace created: <+pipeline.variables.owner>_pov"
+                          else
+                            echo "✓ Fresh EKS workspace created: <+pipeline.variables.owner>_pov"
+                          fi
                           echo "Proceeding to provision..."
                     environmentVariables: []
                     outputVariables: []
@@ -885,14 +1413,23 @@ pipeline:
                           api_delete "${OWNER}_ci_build" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_ci_build?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
                           api_delete "${OWNER}_standard_ci_gradle" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_standard_ci_gradle?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
                           api_delete "${OWNER}_k8s_strategy_deploy" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_k8s_strategy_deploy?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
+                          api_delete "${OWNER}_asg_ci_build" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_asg_ci_build?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
+                          api_delete "${OWNER}_asg_strategy_deploy" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_asg_strategy_deploy?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
 
                           echo ""
                           echo "=== Service ==="
                           api_delete "${OWNER}_demo_app" "${ENDPOINT}/ng/api/servicesV2/${OWNER}_demo_app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
+                          api_delete "${OWNER}_demo_app_asg" "${ENDPOINT}/ng/api/servicesV2/${OWNER}_demo_app_asg?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
 
                           echo ""
                           echo "=== Environments ==="
                           api_delete "${OWNER}_dev" "${ENDPOINT}/ng/api/environmentsV2/${OWNER}_dev?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
+
+                          echo ""
+                          echo "=== Infrastructures ==="
+                          api_delete "${OWNER}_k8s_dev" "${ENDPOINT}/ng/api/infrastructures/${OWNER}_k8s_dev?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_dev&forceDelete=true"
+                          api_delete "${OWNER}_k8s_prod" "${ENDPOINT}/ng/api/infrastructures/${OWNER}_k8s_prod?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_prod&forceDelete=true"
+                          api_delete "${OWNER}_asg_dev" "${ENDPOINT}/ng/api/infrastructures/${OWNER}_asg_dev?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_dev&forceDelete=true"
 
                           echo ""
                           echo "=== Connectors ==="
@@ -906,6 +1443,114 @@ pipeline:
                           echo ""
                           echo "=== Harness Code Repo ==="
                           api_delete "${OWNER}-demo-app" "${ENDPOINT}/code/api/v1/repos/${OWNER}-demo-app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
+
+                          if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
+                            echo ""
+                            echo "=== ASG AWS Resources ==="
+                            ASG_PREFIX="harness-demo-${OWNER}-asg"
+
+                            ASGS=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[?starts_with(AutoScalingGroupName, '${ASG_PREFIX}')].AutoScalingGroupName" --output text 2>/dev/null || true)
+                            if [ -n "$ASGS" ] && [ "$ASGS" != "None" ]; then
+                              for ASG in $ASGS; do
+                                echo "  ${ASG}: deleting"
+                                aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" --min-size 0 --max-size 0 --desired-capacity 0 2>/dev/null || true
+                                aws autoscaling delete-auto-scaling-group --auto-scaling-group-name "$ASG" --force-delete 2>/dev/null || true
+                              done
+                            else
+                              echo "  No ASGs found with prefix ${ASG_PREFIX}"
+                            fi
+
+                            LT_ID=$(aws ec2 describe-launch-templates --filters "Name=launch-template-name,Values=${ASG_PREFIX}-lt" --query 'LaunchTemplates[0].LaunchTemplateId' --output text 2>/dev/null || true)
+                            if [ -n "$LT_ID" ] && [ "$LT_ID" != "None" ]; then
+                              echo "  ${ASG_PREFIX}-lt: deleting"
+                              aws ec2 delete-launch-template --launch-template-id "$LT_ID" 2>/dev/null || true
+                            else
+                              echo "  ${ASG_PREFIX}-lt: not found"
+                            fi
+
+                            ALB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?LoadBalancerName=='${ASG_PREFIX}-alb'].LoadBalancerArn" --output text 2>/dev/null || true)
+                            if [ -n "$ALB_ARN" ] && [ "$ALB_ARN" != "None" ]; then
+                              echo "  ${ASG_PREFIX}-alb: deleting"
+                              aws elbv2 delete-load-balancer --load-balancer-arn "$ALB_ARN" 2>/dev/null || true
+                            else
+                              echo "  ${ASG_PREFIX}-alb: not found"
+                            fi
+
+                            for TG in "${ASG_PREFIX}-prod-tg" "${ASG_PREFIX}-stage-tg"; do
+                              TG_ARN=$(aws elbv2 describe-target-groups --names "$TG" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)
+                              if [ -n "$TG_ARN" ] && [ "$TG_ARN" != "None" ]; then
+                                echo "  ${TG}: deleting"
+                                aws elbv2 delete-target-group --target-group-arn "$TG_ARN" 2>/dev/null || true
+                              else
+                                echo "  ${TG}: not found"
+                              fi
+                            done
+
+                            PROFILE_NAME="${ASG_PREFIX}-instance-profile"
+                            ROLE_NAME_APP="${ASG_PREFIX}-instance-role"
+                            if aws iam get-instance-profile --instance-profile-name "$PROFILE_NAME" 2>/dev/null >/dev/null; then
+                              echo "  ${PROFILE_NAME}: deleting"
+                              aws iam remove-role-from-instance-profile --instance-profile-name "$PROFILE_NAME" --role-name "$ROLE_NAME_APP" 2>/dev/null || true
+                              aws iam delete-instance-profile --instance-profile-name "$PROFILE_NAME" 2>/dev/null || true
+                            else
+                              echo "  ${PROFILE_NAME}: not found"
+                            fi
+
+                            if aws iam get-role --role-name "$ROLE_NAME_APP" 2>/dev/null >/dev/null; then
+                              APP_POLICIES=$(aws iam list-role-policies --role-name "$ROLE_NAME_APP" --query 'PolicyNames[]' --output text 2>/dev/null || true)
+                              if [ -n "$APP_POLICIES" ] && [ "$APP_POLICIES" != "None" ]; then
+                                for POLICY in $APP_POLICIES; do
+                                  aws iam delete-role-policy --role-name "$ROLE_NAME_APP" --policy-name "$POLICY" 2>/dev/null || true
+                                done
+                              fi
+                              APP_ATTACHED=$(aws iam list-attached-role-policies --role-name "$ROLE_NAME_APP" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null || true)
+                              if [ -n "$APP_ATTACHED" ] && [ "$APP_ATTACHED" != "None" ]; then
+                                for ARN in $APP_ATTACHED; do
+                                  aws iam detach-role-policy --role-name "$ROLE_NAME_APP" --policy-arn "$ARN" 2>/dev/null || true
+                                done
+                              fi
+                              aws iam delete-role --role-name "$ROLE_NAME_APP" 2>/dev/null || true
+                              echo "  ${ROLE_NAME_APP}: deleted"
+                            else
+                              echo "  ${ROLE_NAME_APP}: not found"
+                            fi
+
+                            VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${ASG_PREFIX}-vpc" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || true)
+                            if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+                              for SG in $(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=${VPC_ID}" --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text 2>/dev/null || true); do
+                                aws ec2 delete-security-group --group-id "$SG" 2>/dev/null || true
+                              done
+                              for SUBNET in $(aws ec2 describe-subnets --filters "Name=vpc-id,Values=${VPC_ID}" --query 'Subnets[].SubnetId' --output text 2>/dev/null || true); do
+                                aws ec2 delete-subnet --subnet-id "$SUBNET" 2>/dev/null || true
+                              done
+                              for RT in $(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=${VPC_ID}" --query 'RouteTables[?Associations[?Main!=`true`]].RouteTableId' --output text 2>/dev/null || true); do
+                                for ASSOC in $(aws ec2 describe-route-tables --route-table-ids "$RT" --query 'RouteTables[0].Associations[?Main!=`true`].RouteTableAssociationId' --output text 2>/dev/null || true); do
+                                  aws ec2 disassociate-route-table --association-id "$ASSOC" 2>/dev/null || true
+                                done
+                                aws ec2 delete-route-table --route-table-id "$RT" 2>/dev/null || true
+                              done
+                              for IGW in $(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=${VPC_ID}" --query 'InternetGateways[].InternetGatewayId' --output text 2>/dev/null || true); do
+                                aws ec2 detach-internet-gateway --internet-gateway-id "$IGW" --vpc-id "$VPC_ID" 2>/dev/null || true
+                                aws ec2 delete-internet-gateway --internet-gateway-id "$IGW" 2>/dev/null || true
+                              done
+                              aws ec2 delete-vpc --vpc-id "$VPC_ID" 2>/dev/null || true
+                              echo "  ${ASG_PREFIX}-vpc: delete attempted"
+                            else
+                              echo "  ${ASG_PREFIX}-vpc: not found"
+                            fi
+
+                            ZONE_ID="Z031547912F6D8STOXRA2"
+                            DNS_RECORD="${OWNER}-asg.harness-demo.dev"
+                            CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" --query "ResourceRecordSets[?Name=='${DNS_RECORD}.']" --output json 2>/dev/null)
+                            if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
+                              TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
+                              VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
+                              aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${DNS_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" 2>/dev/null || true
+                              echo "  ${DNS_RECORD}: delete attempted"
+                            else
+                              echo "  ${DNS_RECORD}: not found"
+                            fi
+                          fi
 
                           echo ""
                           echo "=== K8s Namespace ==="
@@ -938,6 +1583,9 @@ pipeline:
                       - name: ENDPOINT
                         type: String
                         value: <+pipeline.variables.harness_endpoint>
+                      - name: AWS_DEFAULT_REGION
+                        type: String
+                        value: us-east-1
                     outputVariables: []
                   timeout: 10m
                   failureStrategies:
@@ -982,9 +1630,14 @@ pipeline:
                   spec:
                     shell: Bash
                     command: |
-                      echo "=== POV Provisioning Plan Summary (EKS Stack) ==="
+                      if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
+                        echo "=== POV Provisioning Plan Summary (ASG Stack) ==="
+                      else
+                        echo "=== POV Provisioning Plan Summary (EKS Stack) ==="
+                      fi
                       echo "Owner: <+pipeline.variables.owner>"
                       echo "Workspace: <+pipeline.variables.owner>_pov"
+                      echo "Deployment Target: <+pipeline.variables.deployment_target>"
                       echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
                       echo "Account: <+pipeline.variables.harness_account_id>"
                       echo "Org: <+pipeline.variables.harness_org_id>"
@@ -1023,28 +1676,52 @@ pipeline:
                   spec:
                     shell: Bash
                     command: |
-                      echo "=============================================="
-                      echo "   POV Environment Ready! (EKS Stack)"
-                      echo "=============================================="
-                      echo ""
-                      echo "Owner: <+pipeline.variables.owner>"
-                      echo "Workspace: <+pipeline.variables.owner>_pov"
-                      echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
-                      echo ""
-                      echo "Access your POV at:"
-                      echo "  Harness: <+pipeline.variables.harness_endpoint>"
-                      echo "  Org: <+pipeline.variables.harness_org_id>"
-                      echo "  Project: <+pipeline.variables.harness_project_id>"
-                      echo ""
-                      echo "Resources created:"
-                      echo "  - K8s Namespace: harness-demo-<+pipeline.variables.owner>"
-                      echo "  - Service: <+pipeline.variables.owner>_demo_app"
-                      echo "  - Environment: <+pipeline.variables.owner>_dev"
-                      echo "  - Pipeline: <+pipeline.variables.owner>_k8s_strategy_deploy"
-                      echo ""
-                      echo "To destroy this POV, run the 'IDP POV Destroyer' pipeline"
-                      echo "with owner: <+pipeline.variables.owner>"
-                      echo ""
+                      if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
+                        echo "=============================================="
+                        echo "   POV Environment Ready! (ASG Stack)"
+                        echo "=============================================="
+                        echo ""
+                        echo "Owner: <+pipeline.variables.owner>"
+                        echo "Workspace: <+pipeline.variables.owner>_pov"
+                        echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
+                        echo ""
+                        echo "Access your POV at:"
+                        echo "  Harness: <+pipeline.variables.harness_endpoint>"
+                        echo "  Org: <+pipeline.variables.harness_org_id>"
+                        echo "  Project: <+pipeline.variables.harness_project_id>"
+                        echo ""
+                        echo "Resources created:"
+                        echo "  - Service: <+pipeline.variables.owner>_demo_app_asg"
+                        echo "  - Environment: <+pipeline.variables.owner>_dev"
+                        echo "  - Pipeline: <+pipeline.variables.owner>_asg_strategy_deploy"
+                        echo ""
+                        echo "To destroy this POV, run the 'IDP POV Destroyer' pipeline"
+                        echo "with owner: <+pipeline.variables.owner> and deployment_target: asg"
+                        echo ""
+                      else
+                        echo "=============================================="
+                        echo "   POV Environment Ready! (EKS Stack)"
+                        echo "=============================================="
+                        echo ""
+                        echo "Owner: <+pipeline.variables.owner>"
+                        echo "Workspace: <+pipeline.variables.owner>_pov"
+                        echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
+                        echo ""
+                        echo "Access your POV at:"
+                        echo "  Harness: <+pipeline.variables.harness_endpoint>"
+                        echo "  Org: <+pipeline.variables.harness_org_id>"
+                        echo "  Project: <+pipeline.variables.harness_project_id>"
+                        echo ""
+                        echo "Resources created:"
+                        echo "  - K8s Namespace: harness-demo-<+pipeline.variables.owner>"
+                        echo "  - Service: <+pipeline.variables.owner>_demo_app"
+                        echo "  - Environment: <+pipeline.variables.owner>_dev"
+                        echo "  - Pipeline: <+pipeline.variables.owner>_k8s_strategy_deploy"
+                        echo ""
+                        echo "To destroy this POV, run the 'IDP POV Destroyer' pipeline"
+                        echo "with owner: <+pipeline.variables.owner> and deployment_target: eks"
+                        echo ""
+                      fi
 
                       if [ -f /harness/outputs.json ]; then
                         echo "Terraform Outputs:"
@@ -1053,7 +1730,7 @@ pipeline:
     - stage:
         name: Trigger CI Build
         identifier: trigger_ci_build
-        description: Trigger the CI pipeline to build initial Docker image (prefers Gradle CI if enabled)
+        description: Trigger the initial CI pipeline for the selected EKS or ASG stack
         type: Custom
         spec:
           execution:
@@ -1088,7 +1765,7 @@ pipeline:
                   timeout: 2m
                   when:
                     stageStatus: Success
-                    condition: <+pipeline.variables.create_standard_ci_gradle> == "true"
+                    condition: <+pipeline.variables.deployment_target> == "eks" && <+pipeline.variables.create_standard_ci_gradle> == "true"
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -1125,7 +1802,44 @@ pipeline:
                   timeout: 2m
                   when:
                     stageStatus: Success
-                    condition: <+pipeline.variables.create_ci_pipeline> == "true" && <+pipeline.variables.create_standard_ci_gradle> != "true"
+                    condition: <+pipeline.variables.deployment_target> == "eks" && <+pipeline.variables.create_ci_pipeline> == "true" && <+pipeline.variables.create_standard_ci_gradle> != "true"
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: Http
+                  name: Trigger ASG CI Pipeline
+                  identifier: trigger_asg_ci
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/pipeline/api/pipeline/execute/<+pipeline.variables.owner>_asg_ci_build?accountIdentifier=<+pipeline.variables.harness_account_id>&orgIdentifier=<+pipeline.variables.harness_org_id>&projectIdentifier=<+pipeline.variables.harness_project_id>&moduleType=CI
+                    method: POST
+                    headers:
+                      - key: x-api-key
+                        value: <+pipeline.variables.target_api_key>
+                      - key: Content-Type
+                        value: application/yaml
+                    requestBody: |
+                      pipeline:
+                        identifier: <+pipeline.variables.owner>_asg_ci_build
+                        properties:
+                          ci:
+                            codebase:
+                              build:
+                                type: branch
+                                spec:
+                                  branch: main
+                    assertion: <+httpResponseCode> == 200
+                    outputVariables:
+                      - name: ci_execution_id
+                        value: <+json.select("data.planExecution.uuid", httpResponseBody)>
+                        type: String
+                  timeout: 2m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.deployment_target> == "asg" && <+pipeline.variables.create_asg_ci_pipeline> == "true"
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -1147,7 +1861,11 @@ pipeline:
                           set -e
                           
                           OWNER="<+pipeline.variables.owner>"
-                          DOMAIN="${OWNER}.harness-demo.dev"
+                          if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
+                            DOMAIN="${OWNER}-asg.harness-demo.dev"
+                          else
+                            DOMAIN="${OWNER}.harness-demo.dev"
+                          fi
                           
                           echo "=============================================="
                           echo "   Verifying DNS Resolution"
@@ -1184,16 +1902,24 @@ pipeline:
                           else
                             echo "⚠️  WARNING: DNS resolution failed for ${DOMAIN}"
                             echo ""
-                            echo "   This may indicate:"
-                            echo "   1. DNS propagation is still in progress (wait a few minutes)"
-                            echo "   2. The shared_alb_dns_name variable may be incorrect"
-                            echo ""
-                            echo "   Current shared ALB: <+pipeline.variables.shared_alb_dns_name>"
-                            echo ""
-                            echo "   To verify/update the ALB DNS name:"
-                            echo "   kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'"
-                            echo ""
-                            echo "   Continuing anyway - DNS may propagate later."
+                            if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
+                              echo "   This may indicate:"
+                              echo "   1. DNS propagation is still in progress (wait a few minutes)"
+                              echo "   2. The ASG Route53 record has not propagated yet"
+                              echo ""
+                              echo "   Continuing anyway - DNS may propagate later."
+                            else
+                              echo "   This may indicate:"
+                              echo "   1. DNS propagation is still in progress (wait a few minutes)"
+                              echo "   2. The shared_alb_dns_name variable may be incorrect"
+                              echo ""
+                              echo "   Current shared ALB: <+pipeline.variables.shared_alb_dns_name>"
+                              echo ""
+                              echo "   To verify/update the ALB DNS name:"
+                              echo "   kubectl get ingress -A -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}'"
+                              echo ""
+                              echo "   Continuing anyway - DNS may propagate later."
+                            fi
                           fi
                     environmentVariables: []
                     outputVariables: []
@@ -1215,31 +1941,58 @@ pipeline:
                       type: Inline
                       spec:
                         script: |
-                          echo "=============================================="
-                          echo "   POV Provisioning Complete! (EKS Stack)"
-                          echo "=============================================="
-                          echo ""
-                          echo "Owner: <+pipeline.variables.owner>"
-                          echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
-                          echo ""
-                          echo "Harness Code Repo: <+pipeline.variables.owner>-demo-app"
-                          echo "  (Terraform-managed, imported from: <+pipeline.variables.source_github_repo>)"
-                          echo ""
-                          echo "All resources are managed by Terraform state."
-                          echo "To destroy, run 'terraform destroy' or the POV Destroyer pipeline."
-                          echo ""
-                          echo "The CI build will:"
-                          echo "  1. Clone from Harness Code repo"
-                          echo "  2. Build the Docker image"
-                          echo "  3. Push to Harness Artifact Registry (har-<+pipeline.variables.owner>)"
-                          echo "  4. Trigger Rolling deployment automatically (HAR artifact trigger)"
-                          echo ""
-                          echo "Pipelines created:"
-                          echo "  - <+pipeline.variables.owner>_standard_ci_gradle (CI)"
-                          echo "  - <+pipeline.variables.owner>_k8s_strategy_deploy (CD)"
-                          echo ""
-                          echo "App URL: https://<+pipeline.variables.owner>.harness-demo.dev"
-                          echo "=============================================="
+                          if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
+                            echo "=============================================="
+                            echo "   POV Provisioning Complete! (ASG Stack)"
+                            echo "=============================================="
+                            echo ""
+                            echo "Owner: <+pipeline.variables.owner>"
+                            echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
+                            echo ""
+                            echo "Harness Code Repo: <+pipeline.variables.owner>-demo-app"
+                            echo "  (Terraform-managed, imported from: <+pipeline.variables.source_github_repo>)"
+                            echo ""
+                            echo "All resources are managed by Terraform state."
+                            echo "To destroy, run 'terraform destroy' or the POV Destroyer pipeline."
+                            echo ""
+                            echo "The CI build will:"
+                            echo "  1. Clone from Harness Code repo"
+                            echo "  2. Build the application and bake a Packer AMI"
+                            echo "  3. Publish the AMI name for ASG deployment"
+                            echo ""
+                            echo "Pipelines created:"
+                            echo "  - <+pipeline.variables.owner>_asg_ci_build (CI)"
+                            echo "  - <+pipeline.variables.owner>_asg_strategy_deploy (CD)"
+                            echo ""
+                            echo "App URL: https://<+pipeline.variables.owner>-asg.harness-demo.dev"
+                            echo "=============================================="
+                          else
+                            echo "=============================================="
+                            echo "   POV Provisioning Complete! (EKS Stack)"
+                            echo "=============================================="
+                            echo ""
+                            echo "Owner: <+pipeline.variables.owner>"
+                            echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
+                            echo ""
+                            echo "Harness Code Repo: <+pipeline.variables.owner>-demo-app"
+                            echo "  (Terraform-managed, imported from: <+pipeline.variables.source_github_repo>)"
+                            echo ""
+                            echo "All resources are managed by Terraform state."
+                            echo "To destroy, run 'terraform destroy' or the POV Destroyer pipeline."
+                            echo ""
+                            echo "The CI build will:"
+                            echo "  1. Clone from Harness Code repo"
+                            echo "  2. Build the Docker image"
+                            echo "  3. Push to Harness Artifact Registry (har-<+pipeline.variables.owner>)"
+                            echo "  4. Trigger Rolling deployment automatically (HAR artifact trigger)"
+                            echo ""
+                            echo "Pipelines created:"
+                            echo "  - <+pipeline.variables.owner>_standard_ci_gradle (CI)"
+                            echo "  - <+pipeline.variables.owner>_k8s_strategy_deploy (CD)"
+                            echo ""
+                            echo "App URL: https://<+pipeline.variables.owner>.harness-demo.dev"
+                            echo "=============================================="
+                          fi
                     environmentVariables: []
                     outputVariables: []
                   timeout: 1m

@@ -23,6 +23,11 @@ pipeline:
       description: Owner name (identifies the workspace to destroy)
       required: true
       value: <+input>
+    - name: deployment_target
+      type: String
+      description: Deployment target stack to destroy
+      required: false
+      value: <+input>.default(eks).allowedValues(eks,asg)
     - name: harness_account_id
       type: String
       description: Target Harness Account ID
@@ -120,6 +125,7 @@ pipeline:
                           echo ""
                           echo "Owner: <+pipeline.variables.owner>"
                           echo "Workspace: <+pipeline.variables.owner>_pov"
+                          echo "Deployment Target: <+pipeline.variables.deployment_target>"
                           echo "Org: <+pipeline.variables.harness_org_id>"
                           echo "Project: <+pipeline.variables.harness_project_id>"
                           echo ""
@@ -168,46 +174,44 @@ pipeline:
                       type: Inline
                       spec:
                         script: |
-                          echo "=============================================="
-                          echo "  Unblocking Terraform Destroy"
-                          echo "=============================================="
-                          echo ""
-                          echo "Deleting K8s deployments that would block Harness service deletion..."
-                          echo ""
-
-                          OWNER="<+pipeline.variables.owner>"
-                          NAMESPACE="harness-demo-${OWNER}"
-
-                          # Check if namespace exists
-                          if kubectl get namespace "${NAMESPACE}" 2>/dev/null; then
-                            echo "Found namespace: ${NAMESPACE}"
-                            
-                            # Delete all deployments (this removes "active instances" from Harness)
-                            echo "  Deleting deployments..."
-                            kubectl delete deployment --all -n "${NAMESPACE}" --wait=false 2>/dev/null || true
-                            
-                            # Delete all services
-                            echo "  Deleting services..."
-                            kubectl delete service --all -n "${NAMESPACE}" --wait=false 2>/dev/null || true
-                            
-                            # Delete all pods (force cleanup)
-                            echo "  Deleting pods..."
-                            kubectl delete pod --all -n "${NAMESPACE}" --grace-period=0 --force 2>/dev/null || true
-                            
-                            # Wait briefly for cleanup
-                            echo "  Waiting for resources to terminate..."
-                            sleep 5
-                            
-                            # Show remaining resources
+                          if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
+                            echo "=============================================="
+                            echo "  Unblocking Terraform Destroy"
+                            echo "=============================================="
                             echo ""
-                            echo "Remaining resources in ${NAMESPACE}:"
-                            kubectl get all -n "${NAMESPACE}" 2>/dev/null || echo "  (namespace empty or deleted)"
+                            echo "ASG target selected - no app Kubernetes deployments to remove"
+                            echo "Delegate namespace cleanup happens later"
                           else
-                            echo "Namespace ${NAMESPACE} does not exist - nothing to clean up"
+                            echo "=============================================="
+                            echo "  Unblocking Terraform Destroy"
+                            echo "=============================================="
+                            echo ""
+                            echo "Deleting K8s deployments that would block Harness service deletion..."
+                            echo ""
+
+                            OWNER="<+pipeline.variables.owner>"
+                            NAMESPACE="harness-demo-${OWNER}"
+
+                            if kubectl get namespace "${NAMESPACE}" 2>/dev/null; then
+                              echo "Found namespace: ${NAMESPACE}"
+                              echo "  Deleting deployments..."
+                              kubectl delete deployment --all -n "${NAMESPACE}" --wait=false 2>/dev/null || true
+                              echo "  Deleting services..."
+                              kubectl delete service --all -n "${NAMESPACE}" --wait=false 2>/dev/null || true
+                              echo "  Deleting pods..."
+                              kubectl delete pod --all -n "${NAMESPACE}" --grace-period=0 --force 2>/dev/null || true
+                              echo "  Waiting for resources to terminate..."
+                              sleep 5
+                              echo ""
+                              echo "Remaining resources in ${NAMESPACE}:"
+                              kubectl get all -n "${NAMESPACE}" 2>/dev/null || echo "  (namespace empty or deleted)"
+                            else
+                              echo "Namespace ${NAMESPACE} does not exist - nothing to clean up"
+                            fi
                           fi
 
                           echo ""
-                          echo "✓ K8s deployments cleared - Terraform can now delete Harness service"
+                          echo "✓ Destroy unblocked"
                     environmentVariables: []
                     outputVariables: []
                   timeout: 5m
@@ -262,6 +266,9 @@ pipeline:
                         type: String
                     assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
                   timeout: 1m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.deployment_target> == "eks"
               - step:
                   type: ShellScript
                   name: Evaluate State Health
@@ -278,24 +285,40 @@ pipeline:
                           echo "=============================================="
                           echo ""
                           REPO_STATUS="<+execution.steps.check_code_repo.output.outputVariables.repo_exists>"
-                          HAR_STATUS="<+execution.steps.check_har_registry.output.outputVariables.har_exists>"
+                          TARGET="<+pipeline.variables.deployment_target>"
+
+                          if [ "$TARGET" = "asg" ]; then
+                            HAR_STATUS="SKIPPED"
+                          else
+                            HAR_STATUS="<+execution.steps.check_har_registry.output.outputVariables.har_exists>"
+                          fi
 
                           echo "Harness Code Repo: $REPO_STATUS"
                           echo "HAR Registry: $HAR_STATUS"
                           echo ""
 
-                          # If key resources are 404, state is corrupted - skip Terraform
-                          if [ "$REPO_STATUS" = "404" ]; then
-                            echo "⚠️  Harness Code repo already deleted - state is stale"
-                            echo "   Will skip Terraform and use API-only cleanup"
-                            export STATE_HEALTHY="false"
-                          elif [ "$HAR_STATUS" = "404" ]; then
-                            echo "⚠️  HAR registry already deleted - state is stale"
-                            echo "   Will skip Terraform and use API-only cleanup"
-                            export STATE_HEALTHY="false"
+                          if [ "$TARGET" = "asg" ]; then
+                            if [ "$REPO_STATUS" = "404" ]; then
+                              echo "⚠️  Harness Code repo already deleted - state is stale"
+                              echo "   Will skip Terraform and use AWS/API cleanup"
+                              export STATE_HEALTHY="false"
+                            else
+                              echo "✓ Key resources exist - Terraform destroy can proceed"
+                              export STATE_HEALTHY="true"
+                            fi
                           else
-                            echo "✓ Key resources exist - Terraform destroy can proceed"
-                            export STATE_HEALTHY="true"
+                            if [ "$REPO_STATUS" = "404" ]; then
+                              echo "⚠️  Harness Code repo already deleted - state is stale"
+                              echo "   Will skip Terraform and use API-only cleanup"
+                              export STATE_HEALTHY="false"
+                            elif [ "$HAR_STATUS" = "404" ]; then
+                              echo "⚠️  HAR registry already deleted - state is stale"
+                              echo "   Will skip Terraform and use API-only cleanup"
+                              export STATE_HEALTHY="false"
+                            else
+                              echo "✓ Key resources exist - Terraform destroy can proceed"
+                              export STATE_HEALTHY="true"
+                            fi
                           fi
                     environmentVariables: []
                     outputVariables:
@@ -542,6 +565,8 @@ pipeline:
                           echo "=== AWS Resource Cleanup (using parson-eks-delegate IRSA) ==="
                           echo ""
                           OWNER="<+pipeline.variables.owner>"
+                          TARGET="<+pipeline.variables.deployment_target>"
+                          NAME_PREFIX="harness-demo-${OWNER}"
                           
                           # Verify AWS credentials are working
                           echo "Verifying AWS credentials..."
@@ -584,35 +609,144 @@ pipeline:
                           fi
                           
                           echo ""
+                          if [ "$TARGET" = "asg" ]; then
+                            echo "=== ASG AWS Resources ==="
+
+                            ASG_PREFIX="${NAME_PREFIX}-asg"
+                            ASGS=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[?starts_with(AutoScalingGroupName, '${ASG_PREFIX}')].AutoScalingGroupName" --output text 2>/dev/null || true)
+                            if [ -n "$ASGS" ] && [ "$ASGS" != "None" ]; then
+                              for ASG in $ASGS; do
+                                echo "ASG ${ASG}: deleting"
+                                aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" --min-size 0 --max-size 0 --desired-capacity 0 2>/dev/null || true
+                                aws autoscaling delete-auto-scaling-group --auto-scaling-group-name "$ASG" --force-delete 2>/dev/null || true
+                              done
+                            else
+                              echo "No ASGs found with prefix ${ASG_PREFIX}"
+                            fi
+
+                            LT_NAME="${ASG_PREFIX}-lt"
+                            LT_ID=$(aws ec2 describe-launch-templates --filters "Name=launch-template-name,Values=${LT_NAME}" --query 'LaunchTemplates[0].LaunchTemplateId' --output text 2>/dev/null || true)
+                            if [ -n "$LT_ID" ] && [ "$LT_ID" != "None" ]; then
+                              echo "Launch Template ${LT_NAME}: deleting"
+                              aws ec2 delete-launch-template --launch-template-id "$LT_ID" 2>/dev/null || true
+                            else
+                              echo "Launch Template ${LT_NAME}: not found (ok)"
+                            fi
+
+                            ALB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?LoadBalancerName=='${ASG_PREFIX}-alb'].LoadBalancerArn" --output text 2>/dev/null || true)
+                            if [ -n "$ALB_ARN" ] && [ "$ALB_ARN" != "None" ]; then
+                              echo "ALB ${ASG_PREFIX}-alb: deleting"
+                              aws elbv2 delete-load-balancer --load-balancer-arn "$ALB_ARN" 2>/dev/null || true
+                            else
+                              echo "ALB ${ASG_PREFIX}-alb: not found (ok)"
+                            fi
+
+                            for TG in "${ASG_PREFIX}-prod-tg" "${ASG_PREFIX}-stage-tg"; do
+                              TG_ARN=$(aws elbv2 describe-target-groups --names "$TG" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)
+                              if [ -n "$TG_ARN" ] && [ "$TG_ARN" != "None" ]; then
+                                echo "Target Group ${TG}: deleting"
+                                aws elbv2 delete-target-group --target-group-arn "$TG_ARN" 2>/dev/null || true
+                              else
+                                echo "Target Group ${TG}: not found (ok)"
+                              fi
+                            done
+
+                            PROFILE_NAME="${ASG_PREFIX}-instance-profile"
+                            ROLE_NAME_APP="${ASG_PREFIX}-instance-role"
+                            if aws iam get-instance-profile --instance-profile-name "$PROFILE_NAME" 2>/dev/null >/dev/null; then
+                              echo "Instance Profile ${PROFILE_NAME}: deleting"
+                              aws iam remove-role-from-instance-profile --instance-profile-name "$PROFILE_NAME" --role-name "$ROLE_NAME_APP" 2>/dev/null || true
+                              aws iam delete-instance-profile --instance-profile-name "$PROFILE_NAME" 2>/dev/null || true
+                            else
+                              echo "Instance Profile ${PROFILE_NAME}: not found (ok)"
+                            fi
+
+                            if aws iam get-role --role-name "$ROLE_NAME_APP" 2>/dev/null >/dev/null; then
+                              echo "Instance Role ${ROLE_NAME_APP}: deleting"
+                              APP_POLICIES=$(aws iam list-role-policies --role-name "$ROLE_NAME_APP" --query 'PolicyNames[]' --output text 2>/dev/null || true)
+                              if [ -n "$APP_POLICIES" ] && [ "$APP_POLICIES" != "None" ]; then
+                                for POLICY in $APP_POLICIES; do
+                                  aws iam delete-role-policy --role-name "$ROLE_NAME_APP" --policy-name "$POLICY" 2>/dev/null || true
+                                done
+                              fi
+                              APP_ATTACHED=$(aws iam list-attached-role-policies --role-name "$ROLE_NAME_APP" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null || true)
+                              if [ -n "$APP_ATTACHED" ] && [ "$APP_ATTACHED" != "None" ]; then
+                                for ARN in $APP_ATTACHED; do
+                                  aws iam detach-role-policy --role-name "$ROLE_NAME_APP" --policy-arn "$ARN" 2>/dev/null || true
+                                done
+                              fi
+                              aws iam delete-role --role-name "$ROLE_NAME_APP" 2>/dev/null || true
+                            else
+                              echo "Instance Role ${ROLE_NAME_APP}: not found (ok)"
+                            fi
+
+                            VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${ASG_PREFIX}-vpc" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || true)
+                            if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
+                              for SG in $(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=${VPC_ID}" --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text 2>/dev/null || true); do
+                                aws ec2 delete-security-group --group-id "$SG" 2>/dev/null || true
+                              done
+                              for SUBNET in $(aws ec2 describe-subnets --filters "Name=vpc-id,Values=${VPC_ID}" --query 'Subnets[].SubnetId' --output text 2>/dev/null || true); do
+                                aws ec2 delete-subnet --subnet-id "$SUBNET" 2>/dev/null || true
+                              done
+                              for RT in $(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=${VPC_ID}" --query 'RouteTables[?Associations[?Main!=`true`]].RouteTableId' --output text 2>/dev/null || true); do
+                                for ASSOC in $(aws ec2 describe-route-tables --route-table-ids "$RT" --query 'RouteTables[0].Associations[?Main!=`true`].RouteTableAssociationId' --output text 2>/dev/null || true); do
+                                  aws ec2 disassociate-route-table --association-id "$ASSOC" 2>/dev/null || true
+                                done
+                                aws ec2 delete-route-table --route-table-id "$RT" 2>/dev/null || true
+                              done
+                              for IGW in $(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=${VPC_ID}" --query 'InternetGateways[].InternetGatewayId' --output text 2>/dev/null || true); do
+                                aws ec2 detach-internet-gateway --internet-gateway-id "$IGW" --vpc-id "$VPC_ID" 2>/dev/null || true
+                                aws ec2 delete-internet-gateway --internet-gateway-id "$IGW" 2>/dev/null || true
+                              done
+                              aws ec2 delete-vpc --vpc-id "$VPC_ID" 2>/dev/null || true
+                            else
+                              echo "VPC ${ASG_PREFIX}-vpc: not found (ok)"
+                            fi
+                          fi
+
+                          echo ""
                           echo "=== Route53 DNS Records ==="
                           ZONE_ID="Z031547912F6D8STOXRA2"
-                          
-                          # Delete prod DNS record
-                          PROD_RECORD="${OWNER}.harness-demo.dev"
-                          echo -n "Record ${PROD_RECORD}: "
-                          CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
-                            --query "ResourceRecordSets[?Name=='${PROD_RECORD}.']" --output json 2>/dev/null)
-                          if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
-                            TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
-                            VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
-                            aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
-                              --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${PROD_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" && echo "deleted" || echo "failed"
+
+                          if [ "$TARGET" = "asg" ]; then
+                            PROD_RECORD="${OWNER}-asg.harness-demo.dev"
+                            echo -n "Record ${PROD_RECORD}: "
+                            CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                              --query "ResourceRecordSets[?Name=='${PROD_RECORD}.']" --output json 2>/dev/null)
+                            if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
+                              TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
+                              VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
+                              aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                                --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${PROD_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" && echo "deleted" || echo "failed"
+                            else
+                              echo "not found (ok)"
+                            fi
                           else
-                            echo "not found (ok)"
-                          fi
-                          
-                          # Delete stage DNS record
-                          STAGE_RECORD="${OWNER}-stage.harness-demo.dev"
-                          echo -n "Record ${STAGE_RECORD}: "
-                          CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
-                            --query "ResourceRecordSets[?Name=='${STAGE_RECORD}.']" --output json 2>/dev/null)
-                          if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
-                            TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
-                            VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
-                            aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
-                              --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${STAGE_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" && echo "deleted" || echo "failed"
-                          else
-                            echo "not found (ok)"
+                            PROD_RECORD="${OWNER}.harness-demo.dev"
+                            echo -n "Record ${PROD_RECORD}: "
+                            CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                              --query "ResourceRecordSets[?Name=='${PROD_RECORD}.']" --output json 2>/dev/null)
+                            if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
+                              TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
+                              VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
+                              aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                                --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${PROD_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" && echo "deleted" || echo "failed"
+                            else
+                              echo "not found (ok)"
+                            fi
+
+                            STAGE_RECORD="${OWNER}-stage.harness-demo.dev"
+                            echo -n "Record ${STAGE_RECORD}: "
+                            CURRENT=$(aws route53 list-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                              --query "ResourceRecordSets[?Name=='${STAGE_RECORD}.']" --output json 2>/dev/null)
+                            if [ "$CURRENT" != "[]" ] && [ -n "$CURRENT" ]; then
+                              TTL=$(echo "$CURRENT" | jq -r '.[0].TTL')
+                              VALUE=$(echo "$CURRENT" | jq -r '.[0].ResourceRecords[0].Value')
+                              aws route53 change-resource-record-sets --hosted-zone-id "${ZONE_ID}" \
+                                --change-batch "{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"${STAGE_RECORD}\",\"Type\":\"CNAME\",\"TTL\":${TTL},\"ResourceRecords\":[{\"Value\":\"${VALUE}\"}]}}]}" && echo "deleted" || echo "failed"
+                            else
+                              echo "not found (ok)"
+                            fi
                           fi
                           
                           echo ""
@@ -681,16 +815,21 @@ pipeline:
                           for P in ci_build k8s_strategy_deploy k8s_canary_deploy k8s_bg_canary_deploy canary_deployment blue_green_deployment strategy_choice standard_ci_gradle; do
                             api_delete "${OWNER}_${P}" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_${P}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
                           done
+                          for P in asg_ci_build asg_strategy_deploy; do
+                            api_delete "${OWNER}_${P}" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_${P}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
+                          done
 
                           echo ""
                           echo "=== Service ==="
                           api_delete "${OWNER}_demo_app" "${ENDPOINT}/ng/api/servicesV2/${OWNER}_demo_app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
+                          api_delete "${OWNER}_demo_app_asg" "${ENDPOINT}/ng/api/servicesV2/${OWNER}_demo_app_asg?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
 
                           echo ""
                           echo "=== Infrastructures ==="
                           for ENV in dev prod; do
                             api_delete "${OWNER}_k8s_${ENV}" "${ENDPOINT}/ng/api/infrastructures/${OWNER}_k8s_${ENV}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_${ENV}&forceDelete=true"
                           done
+                          api_delete "${OWNER}_asg_dev" "${ENDPOINT}/ng/api/infrastructures/${OWNER}_asg_dev?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_dev&forceDelete=true"
 
                           echo ""
                           echo "=== Environments ==="
@@ -871,12 +1010,13 @@ pipeline:
                           echo "=============================================="
                           echo ""
                           echo "Owner: <+pipeline.variables.owner>"
+                          echo "Deployment Target: <+pipeline.variables.deployment_target>"
                           echo ""
                           echo "Cleanup Summary:"
-                          echo "  ✓ K8s deployments deleted (unblocked Terraform)"
+                          echo "  ✓ Destroy unblock step completed"
                           echo "  ✓ Terraform destroy completed"
                           echo "  ✓ Orphaned resources force-deleted"
-                          echo "  ✓ K8s namespaces deleted"
+                          echo "  ✓ AWS and Kubernetes cleanup completed"
                           echo "  ✓ IACM workspace deleted"
                           echo ""
                           echo "The POV environment for '<+pipeline.variables.owner>' no longer exists."
@@ -912,6 +1052,7 @@ pipeline:
                           echo "=============================================="
                           echo ""
                           echo "Owner: <+pipeline.variables.owner>"
+                          echo "Deployment Target: <+pipeline.variables.deployment_target>"
                           echo ""
                           echo "No IACM workspace was found for this owner."
                           echo "Performed API-only cleanup of orphaned resources."
@@ -919,7 +1060,7 @@ pipeline:
                           echo "Cleanup Summary:"
                           echo "  ○ Terraform destroy skipped (no state)"
                           echo "  ✓ Orphaned Harness resources force-deleted"
-                          echo "  ✓ K8s namespaces deleted"
+                          echo "  ✓ AWS and Kubernetes cleanup completed"
                           echo ""
                           echo "Any resources matching '<+pipeline.variables.owner>_*' pattern have been removed."
                     environmentVariables: []
