@@ -117,6 +117,12 @@ The demo app and pipelines should highlight:
 - **Root Cause**: `in_scope` rule was true for ALL pipelines
 - **Solution**: Only pipelines with `managed-by:provisioner` tag are evaluated
 
+### Destroyer HAR 404 During Terraform Refresh
+- **Problem**: `terraform plan -destroy` fails with `404 Not Found` on `harness_platform_har_registry.dockerhub_upstream`
+- **Root Cause**: Previous destroyer run's Cleanup Orphans stage deleted HAR via API, corrupting Terraform state. Next run tries to refresh a resource that no longer exists. The Harness provider hard-errors on 404 instead of treating it as "already deleted."
+- **Solution**: Wired up `state_healthy` output from Check State Health stage to gate the Terraform Destroy stage condition. When HAR or Code Repo are already 404, skip Terraform and let API cleanup handle everything.
+- **Pattern**: Any time Cleanup Orphans deletes a resource that Terraform still tracks, the next run will have stale state. The Check State Health stage exists specifically to detect this.
+
 ### Route53 Record Conflicts
 - **Problem**: `InvalidChangeBatch: Tried to create resource record set but it already exists`
 - **Solution**: `allow_overwrite = true` on Route53 records

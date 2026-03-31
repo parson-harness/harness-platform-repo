@@ -312,7 +312,7 @@ pipeline:
         type: IACM
         when:
           pipelineStatus: Success
-          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.skip_terraform_destroy> == "false"
+          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.skip_terraform_destroy> == "false" && <+pipeline.stages.check_state_health.spec.execution.steps.evaluate_state_health.output.outputVariables.state_healthy> == "true"
         spec:
           platform:
             os: Linux
