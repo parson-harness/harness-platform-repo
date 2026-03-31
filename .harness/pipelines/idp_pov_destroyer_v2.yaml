@@ -251,7 +251,7 @@ pipeline:
                   name: Check HAR Upstream Proxy
                   identifier: check_har_registry
                   spec:
-                    url: <+pipeline.variables.harness_endpoint>/har/api/v1/registry/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/<+pipeline.variables.owner>-dockerhub-proxy
+                    url: <+pipeline.variables.harness_endpoint>/har/api/v1/registry/<+pipeline.variables.harness_account_id>/<+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>/<+pipeline.variables.owner>-dockerhub-proxy/%2B
                     method: GET
                     headers:
                       - key: x-api-key
@@ -312,7 +312,7 @@ pipeline:
         type: IACM
         when:
           pipelineStatus: Success
-          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.skip_terraform_destroy> == "false" && <+pipeline.stages.check_state_health.spec.execution.steps.evaluate_state_health.output.outputVariables.state_healthy> == "true"
+          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.skip_terraform_destroy> == "false"
         spec:
           platform:
             os: Linux
