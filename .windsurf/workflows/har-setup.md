@@ -60,9 +60,28 @@ module "har" {
 
 ## Common Issues
 
-### Upstream Proxy Not Linked
+### Upstream Proxy Missing After Destroyer
 
 **Symptom**: `eclipse-temurin:17-jre: not found` in CI build
+
+**Timeline Pattern**:
+1. Destroyer runs → deletes HAR resources (Cleanup Orphans stage)
+2. CI pipeline triggers (git push) before provisioner runs
+3. CI fails because upstream proxy doesn't exist
+
+**Check**:
+```bash
+# List registries - look for {owner}-dockerhub-proxy
+harness_list(resource_type='registry', org_id='sandbox', project_id='parson')
+```
+
+**Resolution**:
+1. **Re-run Provisioner** (recommended) - recreates all resources
+2. **Manual fix** - see API calls below
+
+### Upstream Proxy Not Linked
+
+**Symptom**: `eclipse-temurin:17-jre: not found` but upstream proxy exists
 
 **Check**:
 ```bash
@@ -71,9 +90,9 @@ harness_get(resource_type='registry', org_id='sandbox', project_id='parson', res
 # Look for: config.upstreamProxies should contain "{owner}-dockerhub-proxy"
 ```
 
-**Cause**: The cleanup script with `timestamp()` was deleting the upstream before creation
+**Cause**: Virtual registry exists but upstream proxy not in upstreamProxies list
 
-**Fix**: Re-run provisioner (fix has been applied to remove timestamp trigger)
+**Fix**: Re-run provisioner or manually link via API (see below)
 
 ### Upstream Proxy Doesn't Exist
 
