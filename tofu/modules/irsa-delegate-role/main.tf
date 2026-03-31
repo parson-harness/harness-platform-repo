@@ -19,7 +19,7 @@ data "aws_iam_openid_connect_provider" "cluster" {
 }
 
 ################################################################################
-# Check if role already exists (for idempotent creates)
+# Check if role already exists (for explicit import mode)
 ################################################################################
 
 data "aws_iam_role" "existing" {
@@ -31,11 +31,93 @@ locals {
   oidc_provider_arn = data.aws_iam_openid_connect_provider.cluster.arn
   oidc_provider_url = replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")
   account_id        = data.aws_caller_identity.current.account_id
+  irsa_role_name    = "${var.name_prefix}-delegate-irsa-role"
   
   # Use existing role ARN if importing, otherwise use the created role
   role_arn  = var.import_existing_role ? data.aws_iam_role.existing[0].arn : aws_iam_role.delegate[0].arn
   role_name = var.import_existing_role ? data.aws_iam_role.existing[0].name : aws_iam_role.delegate[0].name
   role_id   = var.import_existing_role ? data.aws_iam_role.existing[0].id : aws_iam_role.delegate[0].id
+}
+
+################################################################################
+# Pre-Create Cleanup: Delete orphaned IRSA role if it exists outside state
+# This handles the case where a previous destroyer run couldn't delete the
+# role (e.g., Terraform Destroy was skipped) and the role is now orphaned.
+# Same pattern as the HAR cleanup in harness-artifact-registry module.
+################################################################################
+
+resource "terraform_data" "cleanup_existing_irsa_role" {
+  count = var.import_existing_role ? 0 : 1
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/sh", "-c"]
+    command     = <<-EOT
+      set +e
+      ROLE_NAME="${local.irsa_role_name}"
+      echo "=== Pre-create IRSA Role Cleanup ==="
+      echo "Checking for orphaned role: $ROLE_NAME"
+
+      # Helper: call IAM API via curl --aws-sigv4
+      iam_get() {
+        curl -s --aws-sigv4 "aws:amz:us-east-1:iam" \
+          --user "$${AWS_ACCESS_KEY_ID}:$${AWS_SECRET_ACCESS_KEY}" \
+          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
+          "https://iam.amazonaws.com/$1"
+      }
+      iam_post() {
+        curl -s --aws-sigv4 "aws:amz:us-east-1:iam" \
+          --user "$${AWS_ACCESS_KEY_ID}:$${AWS_SECRET_ACCESS_KEY}" \
+          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
+          -d "$1" "https://iam.amazonaws.com/"
+      }
+
+      # Check if role exists
+      RESPONSE=$(iam_get "?Action=GetRole&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
+      if echo "$RESPONSE" | grep -q "NoSuchEntity"; then
+        echo "  Role does not exist - nothing to clean up"
+        exit 0
+      fi
+      if ! echo "$RESPONSE" | grep -q "<RoleName>"; then
+        echo "  Could not verify role status (credentials may not support curl --aws-sigv4)"
+        echo "  Continuing - Terraform will attempt to create the role"
+        exit 0
+      fi
+
+      echo "  Found orphaned role - deleting before Terraform creates it fresh..."
+
+      # Delete inline policies (must be removed before role can be deleted)
+      POLICIES_XML=$(iam_get "?Action=ListRolePolicies&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
+      for POLICY in $(echo "$POLICIES_XML" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
+        echo "    Deleting inline policy: $POLICY"
+        iam_post "Action=DeleteRolePolicy&RoleName=$${ROLE_NAME}&PolicyName=$${POLICY}&Version=2010-05-08" 2>/dev/null || true
+      done
+
+      # Detach managed policies (if any)
+      ATTACHED_XML=$(iam_get "?Action=ListAttachedRolePolicies&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
+      for ARN in $(echo "$ATTACHED_XML" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
+        echo "    Detaching managed policy: $ARN"
+        iam_post "Action=DetachRolePolicy&RoleName=$${ROLE_NAME}&PolicyArn=$${ARN}&Version=2010-05-08" 2>/dev/null || true
+      done
+
+      # Delete the role
+      echo "    Deleting role: $ROLE_NAME"
+      DELETE_RESP=$(iam_post "Action=DeleteRole&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
+      if echo "$DELETE_RESP" | grep -q "DeleteRoleResponse"; then
+        echo "  ✓ Successfully deleted orphaned IRSA role"
+      else
+        echo "  Warning: Delete response: $DELETE_RESP"
+      fi
+
+      sleep 1
+      echo "=== Cleanup complete ==="
+      exit 0
+    EOT
+  }
+
+  triggers_replace = [
+    local.irsa_role_name,
+    local.account_id
+  ]
 }
 
 ################################################################################
@@ -45,7 +127,9 @@ locals {
 resource "aws_iam_role" "delegate" {
   # Only create if not importing an existing role
   count = var.import_existing_role ? 0 : 1
-  name  = "${var.name_prefix}-delegate-irsa-role"
+  name  = local.irsa_role_name
+
+  depends_on = [terraform_data.cleanup_existing_irsa_role]
 
   # Trust policy allows EKS OIDC provider to assume role via IRSA (for delegate pods)
   # Note: Self-assume is added via aws_iam_role_policy after role creation

@@ -1,1 +1,3 @@
 tofu/modules/harness-artifact-registry/main.tf:hashicorp-tf-password:34
+tofu/modules/irsa-delegate-role/main.tf:curl-auth-user:60
+tofu/modules/irsa-delegate-role/main.tf:curl-auth-user:68
