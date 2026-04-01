@@ -467,7 +467,6 @@ data "aws_route53_zone" "harness_demo" {
 # The shared ALB is created by AWS Load Balancer Controller when the first ingress
 # in the "harness-demo" group is deployed. Its DNS name is passed via shared_alb_dns_name.
 locals {
-  is_eks_deployment = !contains(var.deployment_targets, "asg") || contains(var.deployment_targets, "eks")
   # Create individual DNS record if manage_dns=true and shared_alb_dns_name is provided
   create_dns_record = var.manage_dns && var.shared_alb_dns_name != ""
 }
@@ -547,13 +546,13 @@ output "delegate_irsa_role_arn" {
 }
 
 output "alb_dns_name" {
-  description = "ALB DNS name for the ingress (managed centrally in bootstrap)"
-  value       = "Managed in bootstrap/dns.tf"
+  description = "Shared ALB DNS name used for this sandbox's Route53 records when manage_dns is enabled"
+  value       = var.shared_alb_dns_name != "" ? var.shared_alb_dns_name : null
 }
 
 output "dns_record" {
-  description = "Wildcard DNS record (managed centrally in bootstrap)"
-  value       = "*.${var.dns_domain} -> Managed in bootstrap/dns.tf"
+  description = "Primary per-sandbox DNS record created by this stack when manage_dns is enabled"
+  value       = local.create_dns_record ? "${var.owner}.${var.dns_domain} -> ${var.shared_alb_dns_name}" : null
 }
 
 output "opa_policy_sets" {

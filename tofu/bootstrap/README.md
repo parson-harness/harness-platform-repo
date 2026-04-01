@@ -37,3 +37,14 @@ terraform {
 - Server-side encryption is enabled
 - Public access is blocked
 - DynamoDB table uses pay-per-request billing (minimal cost)
+
+## Current Scope
+
+This directory now contains the long-lived bootstrap resources for the demo account:
+
+- `main.tf` - S3 backend bucket + DynamoDB lock table
+- `dns.tf` - Route53 zone, ACM validation records, shared DNS records, and template update helper wiring
+- `oidc-role.tf` - AWS IAM role for Harness IACM OIDC access
+- `SETUP.md` - account-specific setup notes and operational runbook
+
+If you are looking for the full DNS/certificate flow or the manual/account-specific setup history, start with `SETUP.md`.

@@ -162,6 +162,34 @@ spec:
             - "true"
             - "false"
         
+        create_standard_ci_gradle:
+          title: Create Standard CI Gradle Pipeline?
+          type: string
+          description: "Enterprise CI pipeline with Test Intelligence, Security Scanning, and Supply Chain"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+
+    - title: Application Source
+      properties:
+        source_github_repo:
+          title: Source GitHub Repo
+          type: string
+          description: "Source GitHub repository to import into Harness Code"
+          default: "parson-harness/harness-demo-app"
+
+    - title: Advanced Options
+      properties:
+        force_recreate:
+          title: Force Recreate?
+          type: string
+          description: "Delete existing resources before provisioning"
+          default: "false"
+          enum:
+            - "true"
+            - "false"
+    
   steps:
     - id: trigger
       name: Provisioning POV Environment
@@ -180,4 +208,7 @@ spec:
           eks_cluster_name: ${{ parameters.eks_cluster_name }}
           create_harness_environment: ${{ parameters.create_harness_environment }}
           create_prod_environment: ${{ parameters.create_prod_environment }}
+          create_standard_ci_gradle: ${{ parameters.create_standard_ci_gradle }}
+          source_github_repo: ${{ parameters.source_github_repo }}
+          force_recreate: ${{ parameters.force_recreate }}
         apikey: ${{ parameters.token }}
