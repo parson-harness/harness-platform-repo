@@ -94,10 +94,10 @@ output "stage_url" {
 
 output "prod_listener_rule_arn" {
   description = "ARN of the production listener default rule (for B/G deployments)"
-  value       = data.aws_lb_listener_rule.prod_default.arn
+  value       = local.prod_listener_rule_arn
 }
 
 output "stage_listener_rule_arn" {
   description = "ARN of the stage listener default rule (for B/G deployments)"
-  value       = data.aws_lb_listener_rule.stage_default.arn
+  value       = local.stage_listener_rule_arn
 }
