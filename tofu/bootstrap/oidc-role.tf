@@ -235,8 +235,3 @@ resource "aws_iam_role_policy" "harness_iacm_permissions" {
 }
 
 data "aws_caller_identity" "current" {}
-
-output "harness_oidc_role_arn" {
-  description = "ARN of the Harness OIDC role — paste into the Harness IACM AWS connector"
-  value       = aws_iam_role.harness_oidc.arn
-}

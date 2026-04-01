@@ -70,38 +70,3 @@ resource "aws_dynamodb_table" "tfstate_lock" {
     Owner = var.owner
   }
 }
-
-################################################################################
-# Outputs
-################################################################################
-
-output "state_bucket_name" {
-  description = "S3 bucket name for terraform state"
-  value       = aws_s3_bucket.tfstate.id
-}
-
-output "state_bucket_arn" {
-  description = "S3 bucket ARN for terraform state"
-  value       = aws_s3_bucket.tfstate.arn
-}
-
-output "dynamodb_table_name" {
-  description = "DynamoDB table name for state locking"
-  value       = aws_dynamodb_table.tfstate_lock.name
-}
-
-output "backend_config" {
-  description = "Backend configuration to add to your environment"
-  value       = <<-EOT
-    # Add this to your environment's main.tf:
-    terraform {
-      backend "s3" {
-        bucket         = "${aws_s3_bucket.tfstate.id}"
-        key            = "harness-demo/<environment>/terraform.tfstate"
-        region         = "${var.aws_region}"
-        encrypt        = true
-        dynamodb_table = "${aws_dynamodb_table.tfstate_lock.name}"
-      }
-    }
-  EOT
-}
