@@ -680,6 +680,39 @@ pipeline:
                               echo "Instance Role ${ROLE_NAME_APP}: not found (ok)"
                             fi
 
+                            PACKER_USER="harness-packer-ci-${OWNER}"
+                            if aws iam get-user --user-name "$PACKER_USER" 2>/dev/null >/dev/null; then
+                              echo "Packer IAM User ${PACKER_USER}: deleting"
+                              PACKER_KEYS=$(aws iam list-access-keys --user-name "$PACKER_USER" --query 'AccessKeyMetadata[].AccessKeyId' --output text 2>/dev/null || true)
+                              if [ -n "$PACKER_KEYS" ] && [ "$PACKER_KEYS" != "None" ]; then
+                                for KEY_ID in $PACKER_KEYS; do
+                                  aws iam delete-access-key --user-name "$PACKER_USER" --access-key-id "$KEY_ID" 2>/dev/null || true
+                                done
+                              fi
+                              PACKER_POLICIES=$(aws iam list-user-policies --user-name "$PACKER_USER" --query 'PolicyNames[]' --output text 2>/dev/null || true)
+                              if [ -n "$PACKER_POLICIES" ] && [ "$PACKER_POLICIES" != "None" ]; then
+                                for POLICY in $PACKER_POLICIES; do
+                                  aws iam delete-user-policy --user-name "$PACKER_USER" --policy-name "$POLICY" 2>/dev/null || true
+                                done
+                              fi
+                              PACKER_ATTACHED=$(aws iam list-attached-user-policies --user-name "$PACKER_USER" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null || true)
+                              if [ -n "$PACKER_ATTACHED" ] && [ "$PACKER_ATTACHED" != "None" ]; then
+                                for ARN in $PACKER_ATTACHED; do
+                                  aws iam detach-user-policy --user-name "$PACKER_USER" --policy-arn "$ARN" 2>/dev/null || true
+                                done
+                              fi
+                              PACKER_GROUPS=$(aws iam list-groups-for-user --user-name "$PACKER_USER" --query 'Groups[].GroupName' --output text 2>/dev/null || true)
+                              if [ -n "$PACKER_GROUPS" ] && [ "$PACKER_GROUPS" != "None" ]; then
+                                for GROUP in $PACKER_GROUPS; do
+                                  aws iam remove-user-from-group --user-name "$PACKER_USER" --group-name "$GROUP" 2>/dev/null || true
+                                done
+                              fi
+                              aws iam delete-login-profile --user-name "$PACKER_USER" 2>/dev/null || true
+                              aws iam delete-user --user-name "$PACKER_USER" 2>/dev/null || true
+                            else
+                              echo "Packer IAM User ${PACKER_USER}: not found (ok)"
+                            fi
+
                             VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${ASG_PREFIX}-vpc" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || true)
                             if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
                               for SG in $(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=${VPC_ID}" --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text 2>/dev/null || true); do
