@@ -245,7 +245,7 @@ pipeline:
                           },
                           "harness_api_key": {
                             "key": "harness_api_key",
-                            "value": "acct-automation-svc-acct",
+                            "value": "<+pipeline.variables.target_api_key>",
                             "value_type": "secret"
                           },
                           "harness_api_key_email": {
@@ -416,7 +416,7 @@ pipeline:
                           },
                           "harness_api_key": {
                             "key": "harness_api_key",
-                            "value": "acct-automation-svc-acct",
+                            "value": "<+pipeline.variables.target_api_key>",
                             "value_type": "secret"
                           },
                           "harness_org_id": {
@@ -701,6 +701,127 @@ pipeline:
                       }
                     assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201
                   timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: ShellScript
+                  name: Reconcile Workspace Variables
+                  identifier: reconcile_workspace_variables
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          WORKSPACE_ID="<+pipeline.variables.owner>_pov"
+                          ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
+                          ENDPOINT="<+pipeline.variables.harness_endpoint>"
+                          ORG_ID="<+pipeline.variables.harness_org_id>"
+                          PROJECT_ID="<+pipeline.variables.harness_project_id>"
+                          PROVISIONER_API_KEY="<+pipeline.variables.provisioner_api_key>"
+                          TARGET_API_KEY="<+pipeline.variables.target_api_key>"
+                          TARGET_API_KEY_EMAIL="<+pipeline.variables.target_api_key_email>"
+                          DEPLOYMENT_TARGET="<+pipeline.variables.deployment_target>"
+                          SOURCE_GITHUB_REPO="<+pipeline.variables.source_github_repo>"
+                          EKS_CLUSTER_NAME="<+pipeline.variables.eks_cluster_name>"
+                          CREATE_HARNESS_ORG="<+pipeline.variables.create_harness_org>"
+                          CREATE_HARNESS_PROJECT="<+pipeline.variables.create_harness_project>"
+                          ARTIFACT_REGISTRY_TYPE="<+pipeline.variables.artifact_registry_type>"
+                          CREATE_DOCKERHUB_UPSTREAM="<+pipeline.variables.create_dockerhub_upstream>"
+                          CREATE_STRATEGY_PIPELINE="<+pipeline.variables.create_strategy_pipeline>"
+                          CREATE_CI_PIPELINE="<+pipeline.variables.create_ci_pipeline>"
+                          CREATE_STANDARD_CI_GRADLE="<+pipeline.variables.create_standard_ci_gradle>"
+                          CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.variables.create_asg_strategy_pipeline>"
+                          CREATE_ASG_CI_PIPELINE="<+pipeline.variables.create_asg_ci_pipeline>"
+                          ACM_CERT_ARN="<+pipeline.variables.acm_cert_arn>"
+                          SHARED_ALB_DNS_NAME="<+pipeline.variables.shared_alb_dns_name>"
+
+                          build_payload() {
+                            python3 -c 'import json, sys; print(json.dumps({"value": sys.argv[1], "value_type": sys.argv[2]}))' "$1" "$2"
+                          }
+
+                          update_tf_var() {
+                            local key="$1"
+                            local value="$2"
+                            local value_type="$3"
+                            local payload
+                            local status_code
+                            local response_file
+
+                            payload=$(build_payload "$value" "$value_type")
+                            response_file=$(mktemp)
+
+                            status_code=$(curl -s -o "$response_file" -w "%{http_code}" \
+                              -X PUT "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces/${WORKSPACE_ID}/variables/tf/${key}" \
+                              -H "Content-Type: application/json" \
+                              -H "Harness-Account: ${ACCOUNT_ID}" \
+                              -H "x-api-key: ${PROVISIONER_API_KEY}" \
+                              -d "$payload")
+
+                            if [ "$status_code" != "200" ] && [ "$status_code" != "201" ]; then
+                              echo "Failed to upsert tf variable ${key} (HTTP ${status_code})"
+                              cat "$response_file"
+                              rm -f "$response_file"
+                              exit 1
+                            fi
+
+                            rm -f "$response_file"
+                          }
+
+                          update_tf_var "harness_account_id" "$ACCOUNT_ID" "string"
+                          update_tf_var "harness_endpoint" "$ENDPOINT" "string"
+                          update_tf_var "harness_api_key" "$TARGET_API_KEY" "secret"
+                          update_tf_var "harness_org_id" "$ORG_ID" "string"
+                          update_tf_var "harness_project_id" "$PROJECT_ID" "string"
+                          update_tf_var "create_harness_org" "$CREATE_HARNESS_ORG" "string"
+                          update_tf_var "create_harness_project" "$CREATE_HARNESS_PROJECT" "string"
+                          update_tf_var "github_repo_name" "$SOURCE_GITHUB_REPO" "string"
+                          update_tf_var "use_harness_code" "true" "string"
+
+                          if [ "$DEPLOYMENT_TARGET" = "asg" ]; then
+                            update_tf_var "aws_region" "us-east-1" "string"
+                            update_tf_var "instance_type" "t3.small" "string"
+                            update_tf_var "asg_min_size" "1" "string"
+                            update_tf_var "asg_desired_capacity" "1" "string"
+                            update_tf_var "asg_max_size" "4" "string"
+                            update_tf_var "asg_canary_instance_count" "1" "string"
+                            update_tf_var "create_asg_strategy_pipeline" "$CREATE_ASG_STRATEGY_PIPELINE" "string"
+                            update_tf_var "create_asg_ci_pipeline" "$CREATE_ASG_CI_PIPELINE" "string"
+                            update_tf_var "standard_ci_gradle_test_packages" "io.harness.demo" "string"
+                            update_tf_var "acm_cert_arn" "$ACM_CERT_ARN" "string"
+                            update_tf_var "create_dns_record" "true" "string"
+                            update_tf_var "route53_zone_name" "harness-demo.dev" "string"
+                            update_tf_var "create_delegate" "true" "string"
+                            update_tf_var "eks_cluster_name" "$EKS_CLUSTER_NAME" "string"
+                            update_tf_var "aws_auth_type" "irsa" "string"
+                            update_tf_var "enable_cross_account_access" "false" "string"
+                            update_tf_var "cross_account_role_arn" "" "string"
+                            update_tf_var "cross_account_external_id" "" "string"
+                          else
+                            update_tf_var "eks_cluster_name" "$EKS_CLUSTER_NAME" "string"
+                            update_tf_var "harness_api_key_email" "$TARGET_API_KEY_EMAIL" "string"
+                            update_tf_var "artifact_registry_type" "$ARTIFACT_REGISTRY_TYPE" "string"
+                            update_tf_var "create_dockerhub_upstream" "$CREATE_DOCKERHUB_UPSTREAM" "string"
+                            update_tf_var "create_strategy_pipeline" "$CREATE_STRATEGY_PIPELINE" "string"
+                            update_tf_var "create_ci_pipeline" "$CREATE_CI_PIPELINE" "string"
+                            update_tf_var "create_standard_ci_gradle" "$CREATE_STANDARD_CI_GRADLE" "string"
+                            update_tf_var "acm_cert_arn" "$ACM_CERT_ARN" "string"
+                            update_tf_var "create_delegate" "true" "string"
+                            update_tf_var "manage_dns" "true" "string"
+                            update_tf_var "shared_alb_dns_name" "$SHARED_ALB_DNS_NAME" "string"
+                          fi
+
+                          echo "Workspace variables reconciled for ${WORKSPACE_ID} (${DEPLOYMENT_TARGET})"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 5m
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -1036,7 +1157,7 @@ pipeline:
                           },
                           "harness_api_key": {
                             "key": "harness_api_key",
-                            "value": "acct-automation-svc-acct",
+                            "value": "<+pipeline.variables.target_api_key>",
                             "value_type": "secret"
                           },
                           "harness_api_key_email": {
@@ -1196,7 +1317,7 @@ pipeline:
                           },
                           "harness_api_key": {
                             "key": "harness_api_key",
-                            "value": "acct-automation-svc-acct",
+                            "value": "<+pipeline.variables.target_api_key>",
                             "value_type": "secret"
                           },
                           "harness_org_id": {
