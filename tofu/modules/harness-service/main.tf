@@ -156,7 +156,7 @@ ${local.tags_yaml}
                 filters:
                   - name: tag:Application
                     value: harness-demo-app-${var.asg_ami_owner_tag}
-                version: <+pipeline.variables.image_tag>
+                version: <+pipeline.variables.ami_name>
       startupScript:
         store:
           type: ${var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github"}

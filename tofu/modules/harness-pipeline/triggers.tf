@@ -88,9 +88,9 @@ resource "harness_platform_triggers" "asg_cd_webhook_trigger" {
             - name: deployment_strategy
               type: String
               value: rolling
-            - name: image_tag
+            - name: ami_name
               type: String
-              value: <+trigger.payload.image_tag>
+              value: <+trigger.payload.ami_name>
   TRIGGER_EOT
 }
 

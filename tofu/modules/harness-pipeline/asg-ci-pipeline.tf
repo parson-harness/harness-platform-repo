@@ -334,7 +334,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                           echo "New EC2 instances start the JAR (baked into AMI) via systemd."
                           echo ""
                           echo "To deploy this AMI, run the ASG strategy pipeline:"
-                          echo "  Use image_tag: <+execution.steps.packer_build_ami.output.outputVariables.AMI_NAME>"
+                          echo "  Use ami_name: <+execution.steps.packer_build_ami.output.outputVariables.AMI_NAME>"
                           echo "========================================="
                   - step:
                       type: Run
@@ -356,7 +356,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
 
                             response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
                               -H "Content-Type: application/json" \
-                              -d "{\"image_tag\": \"$AMI_NAME\"}")
+                              -d "{\"ami_name\": \"$AMI_NAME\"}")
 
                             http_code=$(echo "$response" | tail -n1)
                             body=$(echo "$response" | sed '$d')

@@ -41,9 +41,9 @@ resource "harness_platform_pipeline" "asg_strategy" {
           description: Deployment strategy to use
           required: true
           value: <+input>.allowedValues(blue-green,canary,rolling)
-        - name: image_tag
+        - name: ami_name
           type: String
-          description: AMI name to deploy (from CI Packer build, e.g. harness-demo-app-owner-42)
+          description: Full AMI name to deploy (from CI Packer build, e.g. harness-demo-app-owner-42, not app version 1.0.1)
           required: true
           value: <+input>
       stages:
@@ -84,7 +84,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
                               echo "Pipeline:  <+pipeline.name>"
                               echo "Service:   <+service.name>"
                               echo "AMI:       <+artifact.metadata.ami>"
-                              echo "AMI Name:  <+pipeline.variables.image_tag>"
+                              echo "AMI Name:  <+pipeline.variables.ami_name>"
                               echo "Strategy:  <+pipeline.variables.deployment_strategy>"
                               echo "Env:       <+env.name> (<+env.type>)"
                               echo ""
@@ -214,7 +214,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
                               echo "Pipeline:  <+pipeline.name>"
                               echo "Service:   <+service.name>"
                               echo "AMI:       <+artifact.metadata.ami>"
-                              echo "AMI Name:  <+pipeline.variables.image_tag>"
+                              echo "AMI Name:  <+pipeline.variables.ami_name>"
                               echo "Strategy:  <+pipeline.variables.deployment_strategy>"
                               echo "Env:       <+env.name>"
                               echo ""
@@ -347,7 +347,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
                               echo "Pipeline:  <+pipeline.name>"
                               echo "Service:   <+service.name>"
                               echo "AMI:       <+artifact.metadata.ami>"
-                              echo "AMI Name:  <+pipeline.variables.image_tag>"
+                              echo "AMI Name:  <+pipeline.variables.ami_name>"
                               echo "Strategy:  <+pipeline.variables.deployment_strategy>"
                               echo "Env:       <+env.name>"
                               echo ""
