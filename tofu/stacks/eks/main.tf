@@ -86,9 +86,32 @@ provider "helm" {
 ################################################################################
 
 locals {
-  name_prefix       = "harness-demo-${var.owner}"
-  delegate_selector = "delegate-${var.owner}"
-  k8s_namespace     = "harness-demo-${var.owner}"
+  owner_title                = title(var.owner)
+  name_prefix                = "harness-demo-${var.owner}"
+  delegate_selector          = "delegate-${var.owner}"
+  k8s_namespace              = "harness-demo-${var.owner}"
+  repo_name                  = "${var.owner}-demo-app"
+  service_id                 = "${var.owner}_demo_app"
+  service_name               = "${local.owner_title} Demo App"
+  dev_environment_id         = "${var.owner}_dev"
+  dev_environment_name       = "${local.owner_title} Dev"
+  k8s_infra_id               = "${var.owner}_k8s_dev"
+  k8s_infra_name             = "${local.owner_title} K8s Dev"
+  k8s_connector_id           = "${var.owner}_k8s_reference_architecture"
+  k8s_connector_name         = "${local.owner_title} K8s Reference Architecture"
+  aws_connector_id           = "${var.owner}_aws_reference_architecture"
+  aws_connector_name         = "${local.owner_title} AWS Reference Architecture"
+  github_connector_id        = "${var.owner}_github_reference_architecture"
+  github_connector_name      = "${local.owner_title} GitHub Reference Architecture"
+  har_registry_id            = "har-${var.owner}"
+  har_upstream_proxy_id      = "${var.owner}-dockerhub-proxy"
+  har_image_name             = "${var.owner}demoapp"
+  ecr_image_path             = "harness-demo-app-${var.owner}"
+  app_host                   = "${var.owner}.harness-demo.dev"
+  stage_host                 = "${var.owner}-stage.harness-demo.dev"
+  harness_code_repo_name     = var.use_harness_code ? local.repo_name : ""
+  has_code_source            = var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != ""
+  pipeline_git_connector_ref = var.github_token_ref != "" ? local.github_connector_id : var.github_connector_ref
 
   common_tags = {
     Project     = "harness-demo"
@@ -139,7 +162,7 @@ module "harness_code_repo" {
   org_id             = local.resolved_org_id
   project_id         = local.resolved_project_id
 
-  repo_identifier  = "${var.owner}-demo-app"
+  repo_identifier  = local.repo_name
   repo_description = "Demo app for ${var.owner} POV - imported from GitHub"
   default_branch   = "main"
 
@@ -182,22 +205,22 @@ module "harness_connectors" {
 
   # Kubernetes Connector
   create_k8s_connector = true
-  k8s_connector_id     = "${var.owner}_k8s_reference_architecture"
-  k8s_connector_name   = "${title(var.owner)} K8s Reference Architecture"
+  k8s_connector_id     = local.k8s_connector_id
+  k8s_connector_name   = local.k8s_connector_name
 
   # AWS Connector (for ECR if needed)
   create_aws_connector      = var.create_aws_connector
-  aws_connector_id          = "${var.owner}_aws_reference_architecture"
-  aws_connector_name        = "${title(var.owner)} AWS Reference Architecture"
-  aws_connector_description = "AWS connector for ${title(var.owner)} EKS stack"
+  aws_connector_id          = local.aws_connector_id
+  aws_connector_name        = local.aws_connector_name
+  aws_connector_description = "AWS connector for ${local.owner_title} EKS stack"
   connector_tags            = ["tofu-managed:true", "owner:${var.owner}", "stack:eks"]
   aws_auth_type             = var.aws_auth_type
   aws_region                = var.aws_region
 
   # GitHub Connector
   create_github_connector = var.github_token_ref != ""
-  github_connector_id     = "${var.owner}_github_reference_architecture"
-  github_connector_name   = "${title(var.owner)} GitHub Reference Architecture"
+  github_connector_id     = local.github_connector_id
+  github_connector_name   = local.github_connector_name
   github_url              = var.github_url
   github_username         = var.github_username
   github_token_ref        = var.github_token_ref
@@ -220,11 +243,11 @@ module "har" {
   org_id     = local.resolved_org_id
   project_id = local.resolved_project_id
 
-  registry_id          = "har-${var.owner}"
+  registry_id          = local.har_registry_id
   registry_description = "Docker registry for ${var.owner} demo app"
 
   create_dockerhub_upstream     = var.create_dockerhub_upstream
-  dockerhub_upstream_id         = "${var.owner}-dockerhub-proxy"
+  dockerhub_upstream_id         = local.har_upstream_proxy_id
   dockerhub_username            = var.dockerhub_username
   dockerhub_password_secret_ref = var.dockerhub_password_secret_ref
   dockerhub_secret_space_path   = var.harness_account_id
@@ -282,8 +305,8 @@ resource "kubernetes_secret" "har_pull_secret" {
 module "harness_service" {
   source = "../../modules/harness-service"
 
-  service_id          = "${var.owner}_demo_app"
-  service_name        = "${title(var.owner)} Demo App"
+  service_id          = local.service_id
+  service_name        = local.service_name
   service_description = "Demo application for ${var.owner} (EKS)"
   org_id              = local.resolved_org_id
   project_id          = local.resolved_project_id
@@ -293,20 +316,20 @@ module "harness_service" {
   # Manifest configuration
   manifest_type          = "K8sManifest"
   manifest_store_type    = var.use_harness_code ? "HarnessCode" : "Github"
-  git_connector_ref      = var.use_harness_code ? "" : "${var.owner}_github_reference_architecture"
+  git_connector_ref      = var.use_harness_code ? "" : local.github_connector_id
   git_repo_name          = var.use_harness_code ? "" : var.github_repo_name
   git_branch             = var.git_branch
   manifest_paths         = var.manifest_paths
-  harness_code_repo_name = var.use_harness_code ? "${var.owner}-demo-app" : ""
+  harness_code_repo_name = local.harness_code_repo_name
 
   # Artifact configuration - HAR
   artifact_registry_type = var.artifact_registry_type
   har_registry_ref       = var.artifact_registry_type == "har" && length(module.har) > 0 ? module.har[0].registry_id : ""
-  har_image_path         = var.artifact_registry_type == "har" ? "${var.owner}demoapp" : ""
+  har_image_path         = var.artifact_registry_type == "har" ? local.har_image_name : ""
 
   # ECR configuration (if using ECR)
-  artifact_connector_ref = var.artifact_registry_type == "ecr" ? "${var.owner}_aws_reference_architecture" : ""
-  ecr_image_path         = var.artifact_registry_type == "ecr" ? "harness-demo-app-${var.owner}" : ""
+  artifact_connector_ref = var.artifact_registry_type == "ecr" ? local.aws_connector_id : ""
+  ecr_image_path         = var.artifact_registry_type == "ecr" ? local.ecr_image_path : ""
   aws_region             = var.aws_region
 
   tags = ["tofu-managed", var.owner, "eks"]
@@ -315,12 +338,12 @@ module "harness_service" {
     {
       name  = "ingressHost"
       type  = "String"
-      value = "${var.owner}.harness-demo.dev"
+      value = local.app_host
     },
     {
       name  = "ingressStageHost"
       type  = "String"
-      value = "${var.owner}-stage.harness-demo.dev"
+      value = local.stage_host
     },
     {
       name  = "certArn"
@@ -339,8 +362,8 @@ module "harness_service" {
 module "harness_environment_dev" {
   source = "../../modules/harness-environment"
 
-  environment_id          = "${var.owner}_dev"
-  environment_name        = "${title(var.owner)} Dev"
+  environment_id          = local.dev_environment_id
+  environment_name        = local.dev_environment_name
   environment_description = "Development environment for ${var.owner}"
   org_id                  = local.resolved_org_id
   project_id              = local.resolved_project_id
@@ -348,9 +371,9 @@ module "harness_environment_dev" {
 
   create_k8s_infrastructure = true
   create_k8s_namespace      = false # Already created above
-  k8s_infra_id              = "${var.owner}_k8s_dev"
-  k8s_infra_name            = "${title(var.owner)} K8s Dev"
-  k8s_connector_ref         = "${var.owner}_k8s_reference_architecture"
+  k8s_infra_id              = local.k8s_infra_id
+  k8s_infra_name            = local.k8s_infra_name
+  k8s_connector_ref         = local.k8s_connector_id
   k8s_namespace             = local.k8s_namespace
 
   tags = ["tofu-managed", var.owner, "eks"]
@@ -367,31 +390,31 @@ module "harness_pipelines" {
 
   org_id             = local.resolved_org_id
   project_id         = local.resolved_project_id
-  service_ref        = "${var.owner}_demo_app"
-  environment_ref    = "${var.owner}_dev"
+  service_ref        = local.service_id
+  environment_ref    = local.dev_environment_id
   environment_name   = "Dev"
-  infrastructure_ref = "${var.owner}_k8s_dev"
+  infrastructure_ref = local.k8s_infra_id
 
   # Strategy Choice pipeline
   create_strategy_pipeline      = var.create_strategy_pipeline
   strategy_pipeline_id          = "${var.owner}_k8s_strategy_deploy"
-  strategy_pipeline_name        = "${title(var.owner)} K8s Deploy with Strategy Choice"
+  strategy_pipeline_name        = "${local.owner_title} K8s Deploy with Strategy Choice"
   strategy_pipeline_description = "Single pipeline with runtime strategy selection - Blue/Green, Canary, or Rolling"
 
   # CI Build pipeline
   # Only create CI pipeline if we have a valid codebase source (Harness Code OR GitHub connector)
-  create_ci_pipeline      = var.create_ci_pipeline && (var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != "")
+  create_ci_pipeline      = var.create_ci_pipeline && local.has_code_source
   ci_pipeline_id          = "${var.owner}_ci_build"
-  ci_pipeline_name        = "${title(var.owner)} CI Build"
+  ci_pipeline_name        = "${local.owner_title} CI Build"
   ci_pipeline_description = "Builds Docker image and pushes to Harness Artifact Registry"
-  git_connector_ref       = var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+  git_connector_ref       = local.pipeline_git_connector_ref
   git_repo_name           = var.github_repo_name
-  har_registry_ref        = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""
-  har_upstream_proxy_ref  = var.artifact_registry_type == "har" && var.create_dockerhub_upstream ? "${var.owner}-dockerhub-proxy" : ""
-  har_image_name          = "${var.owner}demoapp"
+  har_registry_ref        = var.artifact_registry_type == "har" ? local.har_registry_id : ""
+  har_upstream_proxy_ref  = var.artifact_registry_type == "har" && var.create_dockerhub_upstream ? local.har_upstream_proxy_id : ""
+  har_image_name          = local.har_image_name
 
   use_harness_code       = var.use_harness_code
-  harness_code_repo_name = var.use_harness_code ? "${var.owner}-demo-app" : ""
+  harness_code_repo_name = local.harness_code_repo_name
   harness_account_id     = var.harness_account_id
   harness_org_id         = local.resolved_org_id
   harness_project_id     = local.resolved_project_id
@@ -402,12 +425,12 @@ module "harness_pipelines" {
 
   # Standard CI Gradle pipeline (with security scanning and supply chain)
   # Include owner prefix for multi-sandbox support in same project
-  create_standard_ci_gradle        = coalesce(var.create_standard_ci_gradle, false) && (var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != "")
+  create_standard_ci_gradle        = coalesce(var.create_standard_ci_gradle, false) && local.has_code_source
   standard_ci_gradle_id            = "${var.owner}_standard_ci_gradle"
-  standard_ci_gradle_name          = "${title(var.owner)} Standard CI - Gradle"
+  standard_ci_gradle_name          = "${local.owner_title} Standard CI - Gradle"
   standard_ci_gradle_description   = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
   standard_ci_gradle_test_packages = var.standard_ci_gradle_test_packages
-  har_base_image_registry          = var.artifact_registry_type == "har" ? "pkg.harness.io/${lower(var.harness_account_id)}/har-${var.owner}" : ""
+  har_base_image_registry          = var.artifact_registry_type == "har" ? "pkg.harness.io/${lower(var.harness_account_id)}/${local.har_registry_id}" : ""
 
   # Disable other pipeline types
   create_canary_pipeline       = false
