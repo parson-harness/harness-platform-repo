@@ -47,6 +47,12 @@ data "aws_ami" "amazon_linux_2023" {
 
 locals {
   effective_ami_id = var.ami_id != "" ? var.ami_id : data.aws_ami.amazon_linux_2023[0].id
+  alb_name_source  = "${var.name_prefix}-asg-alb"
+  prod_tg_name_source = "${var.name_prefix}-asg-prod-tg"
+  stage_tg_name_source = "${var.name_prefix}-asg-stage-tg"
+  alb_name = length(local.alb_name_source) <= 32 ? local.alb_name_source : "${substr(local.alb_name_source, 0, 23)}-${substr(md5(local.alb_name_source), 0, 8)}"
+  prod_tg_name = length(local.prod_tg_name_source) <= 32 ? local.prod_tg_name_source : "${substr(local.prod_tg_name_source, 0, 23)}-${substr(md5(local.prod_tg_name_source), 0, 8)}"
+  stage_tg_name = length(local.stage_tg_name_source) <= 32 ? local.stage_tg_name_source : "${substr(local.stage_tg_name_source, 0, 23)}-${substr(md5(local.stage_tg_name_source), 0, 8)}"
 
   azs = length(var.availability_zones) > 0 ? var.availability_zones : [
     data.aws_availability_zones.available.names[0],
@@ -191,7 +197,7 @@ resource "aws_security_group" "instance" {
 ################################################################################
 
 resource "aws_lb" "main" {
-  name               = "${var.name_prefix}-asg-alb"
+  name               = local.alb_name
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
@@ -205,7 +211,7 @@ resource "aws_lb" "main" {
 }
 
 resource "aws_lb_target_group" "prod" {
-  name        = "${var.name_prefix}-asg-prod-tg"
+  name        = local.prod_tg_name
   port        = var.app_port
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
@@ -233,7 +239,7 @@ resource "aws_lb_target_group" "prod" {
 }
 
 resource "aws_lb_target_group" "stage" {
-  name        = "${var.name_prefix}-asg-stage-tg"
+  name        = local.stage_tg_name
   port        = var.app_port
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
