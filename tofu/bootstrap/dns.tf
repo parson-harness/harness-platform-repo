@@ -74,15 +74,21 @@ variable "alb_dns_name" {
   default     = ""
 }
 
+locals {
+  dns_domain      = "harness-demo.dev"
+  wildcard_domain = "*.${local.dns_domain}"
+  sentinel_domain = "sentinel.${local.dns_domain}"
+}
+
 ################################################################################
 # Route53 Hosted Zone
 ################################################################################
 
 resource "aws_route53_zone" "harness_demo" {
-  name = "harness-demo.dev"
+  name = local.dns_domain
 
   tags = {
-    Name    = "harness-demo.dev"
+    Name    = local.dns_domain
     Purpose = "Shared demo app domain for Harness SE sandboxes and POVs"
   }
 }
@@ -103,7 +109,7 @@ resource "aws_route53_zone" "harness_demo" {
 resource "aws_route53_record" "sentinel" {
   count   = var.alb_dns_name != "" ? 1 : 0
   zone_id = aws_route53_zone.harness_demo.zone_id
-  name    = "sentinel.harness-demo.dev"
+  name    = local.sentinel_domain
   type    = "CNAME"
   ttl     = 60
   records = [var.alb_dns_name]
@@ -118,7 +124,7 @@ resource "aws_route53_record" "sentinel" {
 resource "aws_route53_record" "wildcard" {
   count   = var.alb_dns_name != "" ? 1 : 0
   zone_id = aws_route53_zone.harness_demo.zone_id
-  name    = "*.harness-demo.dev"
+  name    = local.wildcard_domain
   type    = "CNAME"
   ttl     = 300
   records = [var.alb_dns_name]
@@ -131,13 +137,13 @@ resource "aws_route53_record" "wildcard" {
 ################################################################################
 
 data "aws_acm_certificate" "wildcard" {
-  domain   = "*.harness-demo.dev"
+  domain   = local.wildcard_domain
   statuses = ["PENDING_VALIDATION", "ISSUED"]
 }
 
 resource "aws_route53_record" "acm_validation" {
   zone_id = aws_route53_zone.harness_demo.zone_id
-  name    = "_d29c1e3c5b9cf27b1a10c48d5b5bab19.harness-demo.dev"
+  name    = "_d29c1e3c5b9cf27b1a10c48d5b5bab19.${local.dns_domain}"
   type    = "CNAME"
   ttl     = 300
   records = ["_946fe72819dcd6df0b2d21cd5144857b.jkddzztszm.acm-validations.aws."]
@@ -183,13 +189,13 @@ output "hosted_zone_id" {
 }
 
 output "name_servers" {
-  description = "Nameservers for harness-demo.dev. Point your registrar here if registered outside Route53."
+  description = "Nameservers for the shared demo domain. Point your registrar here if registered outside Route53."
   value       = aws_route53_zone.harness_demo.name_servers
 }
 
 output "wildcard_cname_status" {
   description = "Status of the wildcard CNAME record"
-  value       = var.alb_dns_name != "" ? "Active: *.harness-demo.dev → ${var.alb_dns_name}" : "Pending: run again with -var=\"alb_dns_name=<your-alb-hostname>\""
+  value       = var.alb_dns_name != "" ? "Active: ${local.wildcard_domain} → ${var.alb_dns_name}" : "Pending: run again with -var=\"alb_dns_name=<your-alb-hostname>\""
 }
 
 output "next_step_alb_dns_command" {
