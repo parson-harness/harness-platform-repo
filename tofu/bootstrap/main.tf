@@ -3,54 +3,6 @@
 # Run this ONCE per AWS account to create the state storage infrastructure
 ################################################################################
 
-terraform {
-  required_version = ">= 1.6.0"
-
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = var.aws_region
-
-  default_tags {
-    tags = {
-      Project   = "harness-demo"
-      ManagedBy = "tofu-bootstrap"
-      Owner     = var.owner
-    }
-  }
-}
-
-################################################################################
-# Variables
-################################################################################
-
-variable "aws_region" {
-  description = "AWS region for state bucket"
-  type        = string
-  default     = "us-east-1"
-}
-
-variable "owner" {
-  description = "Owner name (SE last name or POV name)"
-  type        = string
-}
-
-variable "bucket_prefix" {
-  description = "Prefix for the S3 bucket name"
-  type        = string
-  default     = "harness-demo-tfstate"
-}
-
 ################################################################################
 # S3 Bucket for State
 ################################################################################
