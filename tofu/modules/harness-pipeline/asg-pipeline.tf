@@ -30,7 +30,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
       identifier: ${var.asg_strategy_pipeline_id}
       projectIdentifier: ${var.project_id}
       orgIdentifier: ${var.org_id}
-      description: ${var.asg_strategy_pipeline_description}
+      description: "${var.asg_strategy_pipeline_description}"
       tags:
         deployment-type: asg
         strategy: multi-strategy

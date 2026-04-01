@@ -19,7 +19,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
       identifier: ${var.asg_ci_pipeline_id}
       projectIdentifier: ${var.project_id}
       orgIdentifier: ${var.org_id}
-      description: ${var.asg_ci_pipeline_description}
+      description: "${var.asg_ci_pipeline_description}"
       tags:
         pipeline-type: ci
         build: gradle-packer

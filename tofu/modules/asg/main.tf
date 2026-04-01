@@ -324,9 +324,36 @@ resource "aws_lb_listener" "stage" {
 # Listener Rules - Data sources to get default rule ARNs for B/G deployments
 ################################################################################
 
-locals {
-  prod_listener_rule_arn  = ""
-  stage_listener_rule_arn = ""
+resource "aws_lb_listener_rule" "prod" {
+  listener_arn = aws_lb_listener.prod.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.prod.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/*"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "stage" {
+  listener_arn = aws_lb_listener.stage.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.stage.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/*"]
+    }
+  }
 }
 
 ################################################################################
