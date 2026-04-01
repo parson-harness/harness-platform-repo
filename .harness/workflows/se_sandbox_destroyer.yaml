@@ -73,7 +73,25 @@ spec:
           enum:
             - eks
             - asg
-    
+
+        skip_terraform_destroy:
+          title: Skip Terraform Destroy?
+          type: string
+          description: "Use API-only/orphan cleanup instead of Terraform destroy"
+          default: "false"
+          enum:
+            - "true"
+            - "false"
+
+        auto_approve:
+          title: Auto Approve?
+          type: string
+          description: "Auto-approve the destroy pipeline"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+
   steps:
     - id: trigger
       name: Destroying SE Sandbox
@@ -87,4 +105,6 @@ spec:
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
           deployment_target: ${{ parameters.deployment_target }}
+          skip_terraform_destroy: ${{ parameters.skip_terraform_destroy }}
+          auto_approve: ${{ parameters.auto_approve }}
         apikey: ${{ parameters.token }}
