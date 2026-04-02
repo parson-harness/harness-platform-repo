@@ -27,7 +27,7 @@ locals {
   scope_tag_parts = var.policy_scope_tag != "" ? split(":", var.policy_scope_tag) : []
   scope_tag_key   = length(local.scope_tag_parts) >= 1 ? local.scope_tag_parts[0] : ""
   scope_tag_value = length(local.scope_tag_parts) >= 2 ? local.scope_tag_parts[1] : ""
-  
+
   # Rego snippet to check if pipeline has the required scope tag
   # If no scope tag is configured, this evaluates to true (apply to all)
   # 
@@ -40,12 +40,12 @@ locals {
       input.pipeline.tags["${local.scope_tag_key}"] == "${local.scope_tag_value}"
     }
   REGO
-  
+
   scope_check_rego_all = <<-REGO
     # No scope tag configured - apply to all pipelines
     in_scope { true }
   REGO
-  
+
   scope_check_rego = var.policy_scope_tag != "" ? local.scope_check_rego_with_tag : local.scope_check_rego_all
 }
 
@@ -526,6 +526,145 @@ resource "harness_platform_policy" "require_pipeline_tags" {
 }
 
 ################################################################################
+# Change Governance Policies
+################################################################################
+
+resource "harness_platform_policy" "change_readiness_guardrails" {
+  count      = var.create_change_governance_policies ? 1 : 0
+  identifier = "change_readiness_guardrails"
+  name       = "Change Readiness Guardrails"
+  org_id     = var.org_id
+  project_id = var.project_id
+
+  rego = <<-REGO
+    package change_governance
+
+    deny[msg] {
+      input.change.freeze_window_active == true
+      msg := "Change falls inside an active freeze window. Manual CAB approval is required."
+    }
+
+    deny[msg] {
+      input.validation.operations.rollback_ready != true
+      msg := "Rollback readiness must be verified before the change can auto-approve."
+    }
+
+    deny[msg] {
+      lower(input.change.environment) == "prod"
+      input.change.requires_data_migration == true
+      msg := "Production changes with data migration require manual CAB review."
+    }
+  REGO
+}
+
+resource "harness_platform_policy" "change_validation_quality" {
+  count      = var.create_change_governance_policies ? 1 : 0
+  identifier = "change_validation_quality"
+  name       = "Change Validation Quality"
+  org_id     = var.org_id
+  project_id = var.project_id
+
+  rego = <<-REGO
+    package change_governance
+
+    deny[msg] {
+      input.validation.tests.pass_rate < 95
+      msg := sprintf("Automated test pass rate %.1f%% is below the 95%% threshold.", [input.validation.tests.pass_rate])
+    }
+
+    deny[msg] {
+      input.validation.security.critical_vulns > 0
+      msg := sprintf("Critical vulnerabilities detected: %v.", [input.validation.security.critical_vulns])
+    }
+
+    deny[msg] {
+      input.validation.security.high_vulns > 2
+      msg := sprintf("High vulnerabilities (%v) exceed the allowed threshold of 2 for auto-approval.", [input.validation.security.high_vulns])
+    }
+
+    deny[msg] {
+      input.validation.operations.open_failures > 0
+      msg := sprintf("There are %v unresolved operational issues tied to this release.", [input.validation.operations.open_failures])
+    }
+  REGO
+}
+
+resource "harness_platform_policy" "change_risk_score" {
+  count      = var.create_change_governance_policies ? 1 : 0
+  identifier = "change_risk_score"
+  name       = "Change Risk Score"
+  org_id     = var.org_id
+  project_id = var.project_id
+
+  rego = <<-REGO
+    package change_governance
+
+    blast_radius_score := 1 {
+      lower(input.change.blast_radius) == "low"
+    }
+
+    blast_radius_score := 2 {
+      lower(input.change.blast_radius) == "medium"
+    }
+
+    blast_radius_score := 3 {
+      lower(input.change.blast_radius) == "high"
+    }
+
+    environment_score := 1 {
+      lower(input.change.environment) != "prod"
+    }
+
+    environment_score := 3 {
+      lower(input.change.environment) == "prod"
+    }
+
+    deployment_strategy_score := 1 {
+      lower(input.change.deployment_strategy) == "canary"
+    }
+
+    deployment_strategy_score := 1 {
+      lower(input.change.deployment_strategy) == "bluegreen"
+    }
+
+    deployment_strategy_score := 2 {
+      lower(input.change.deployment_strategy) == "rolling"
+    }
+
+    deployment_strategy_score := 2 {
+      lower(input.change.deployment_strategy) == "recreate"
+    }
+
+    data_migration_score := 0 {
+      input.change.requires_data_migration != true
+    }
+
+    data_migration_score := 2 {
+      input.change.requires_data_migration == true
+    }
+
+    vulnerability_score := 0 {
+      input.validation.security.high_vulns <= 0
+    }
+
+    vulnerability_score := 1 {
+      input.validation.security.high_vulns == 1
+    }
+
+    vulnerability_score := 2 {
+      input.validation.security.high_vulns >= 2
+    }
+
+    risk_score := blast_radius_score + environment_score + deployment_strategy_score + data_migration_score + vulnerability_score
+
+    deny[msg] {
+      risk_score >= 7
+      msg := sprintf("Calculated change risk score is %v, which requires manual approval.", [risk_score])
+    }
+  REGO
+}
+
+################################################################################
 # Policy Sets
 ################################################################################
 
@@ -673,5 +812,37 @@ resource "harness_platform_policyset" "quality_gates" {
     harness_platform_policy.require_test_reports,
     harness_platform_policy.require_pipeline_tags,
     harness_platform_policy.require_code_coverage
+  ]
+}
+
+resource "harness_platform_policyset" "change_governance_on_step" {
+  count      = var.create_change_governance_policies && var.create_change_governance_policy_set ? 1 : 0
+  identifier = "change_risk_guardrails"
+  name       = "Change Risk Guardrails"
+  org_id     = var.org_id
+  project_id = var.project_id
+  action     = "onstep"
+  type       = "custom"
+  enabled    = var.enforce_change_governance_policies
+
+  policies {
+    identifier = harness_platform_policy.change_readiness_guardrails[0].identifier
+    severity   = "error"
+  }
+
+  policies {
+    identifier = harness_platform_policy.change_validation_quality[0].identifier
+    severity   = "error"
+  }
+
+  policies {
+    identifier = harness_platform_policy.change_risk_score[0].identifier
+    severity   = "error"
+  }
+
+  depends_on = [
+    harness_platform_policy.change_readiness_guardrails,
+    harness_platform_policy.change_validation_quality,
+    harness_platform_policy.change_risk_score
   ]
 }

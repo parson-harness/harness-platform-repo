@@ -30,13 +30,23 @@ output "quality_policy_ids" {
   }
 }
 
+output "change_governance_policy_ids" {
+  description = "IDs of created change governance policies"
+  value = {
+    change_readiness_guardrails = var.create_change_governance_policies ? harness_platform_policy.change_readiness_guardrails[0].identifier : null
+    change_validation_quality   = var.create_change_governance_policies ? harness_platform_policy.change_validation_quality[0].identifier : null
+    change_risk_score           = var.create_change_governance_policies ? harness_platform_policy.change_risk_score[0].identifier : null
+  }
+}
+
 output "policy_set_ids" {
   description = "IDs of created policy sets"
   value = {
-    ci_standards            = var.create_ci_policy_set ? harness_platform_policyset.ci_standards[0].identifier : null
-    ci_standards_on_run     = var.create_ci_policy_set ? harness_platform_policyset.ci_standards_on_run[0].identifier : null
-    security_standards      = var.create_security_policy_set ? harness_platform_policyset.security_standards[0].identifier : null
+    ci_standards              = var.create_ci_policy_set ? harness_platform_policyset.ci_standards[0].identifier : null
+    ci_standards_on_run       = var.create_ci_policy_set ? harness_platform_policyset.ci_standards_on_run[0].identifier : null
+    security_standards        = var.create_security_policy_set ? harness_platform_policyset.security_standards[0].identifier : null
     security_standards_on_run = var.create_security_policy_set ? harness_platform_policyset.security_standards_on_run[0].identifier : null
-    quality_gates           = var.create_quality_policy_set ? harness_platform_policyset.quality_gates[0].identifier : null
+    quality_gates             = var.create_quality_policy_set ? harness_platform_policyset.quality_gates[0].identifier : null
+    change_risk_guardrails    = var.create_change_governance_policies && var.create_change_governance_policy_set ? harness_platform_policyset.change_governance_on_step[0].identifier : null
   }
 }

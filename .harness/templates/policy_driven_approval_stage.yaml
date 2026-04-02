@@ -1,0 +1,227 @@
+template:
+  name: Policy Driven Approval Stage
+  identifier: policy_driven_approval_stage
+  type: Stage
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: "Project-level CAB-style stage template for policy-driven change approval decisions"
+  tags:
+    stage-type: governance
+    template-purpose: demo
+  versionLabel: "1.0.0"
+  spec:
+    type: Custom
+    spec:
+      execution:
+        steps:
+          - step:
+              type: ShellScript
+              name: Assemble Change Context
+              identifier: assemble_change_context
+              spec:
+                shell: Bash
+                executionTarget: {}
+                source:
+                  type: Inline
+                  spec:
+                    script: |
+                      cat <<'EOF' > change_context.json
+                      {
+                        "pipeline": {
+                          "identifier": "<+pipeline.identifier>",
+                          "execution_id": "<+pipeline.executionId>",
+                          "sequence_id": "<+pipeline.sequenceId>",
+                          "triggered_by": "<+pipeline.triggeredBy.name>"
+                        },
+                        "change": {
+                          "request_id": "<+stage.variables.change_request_id>",
+                          "service": "<+stage.variables.service_name>",
+                          "environment": "<+stage.variables.target_environment>",
+                          "deployment_strategy": "<+stage.variables.deployment_strategy>",
+                          "blast_radius": "<+stage.variables.blast_radius>",
+                          "freeze_window_active": <+stage.variables.change_freeze_active>,
+                          "requires_data_migration": <+stage.variables.requires_data_migration>
+                        },
+                        "validation": {
+                          "tests": {
+                            "pass_rate": <+stage.variables.test_pass_rate>
+                          },
+                          "security": {
+                            "critical_vulns": <+stage.variables.critical_vulnerabilities>,
+                            "high_vulns": <+stage.variables.high_vulnerabilities>
+                          },
+                          "operations": {
+                            "open_failures": <+stage.variables.open_change_failures>,
+                            "rollback_ready": <+stage.variables.rollback_ready>
+                          }
+                        }
+                      }
+                      EOF
+
+                      change_context="$(tr -d '\n' < change_context.json)"
+                      export change_context
+                      echo "$change_context"
+                environmentVariables: []
+                outputVariables:
+                  - name: change_context
+                    type: String
+                    value: change_context
+              timeout: 10m
+          - stepGroup:
+              name: Governance
+              identifier: governance
+              steps:
+                - step:
+                    type: Policy
+                    name: Evaluate Change Risk
+                    identifier: evaluate_change_risk
+                    spec:
+                      policySets:
+                        - <+stage.variables.policy_set>
+                      type: Custom
+                      policySpec:
+                        payload: <+execution.steps.assemble_change_context.output.outputVariables.change_context>
+                    timeout: 10m
+                    failureStrategies:
+                      - onFailure:
+                          errors:
+                            - PolicyEvaluationFailure
+                          action:
+                            type: Ignore
+          - parallel:
+              - stepGroup:
+                  name: Manual Approval Required
+                  identifier: manual_approval_required
+                  steps:
+                    - step:
+                        type: HarnessApproval
+                        name: CAB Approval
+                        identifier: cab_approval
+                        spec:
+                          approvalMessage: Review the policy evaluation and approve if the change risk is acceptable
+                          includePipelineExecutionHistory: true
+                          isAutoRejectEnabled: false
+                          approvers:
+                            userGroups:
+                              - <+stage.variables.approver_group>
+                            minimumCount: 1
+                            disallowPipelineExecutor: false
+                          approverInputs: []
+                        timeout: 1d
+                        when:
+                          stageStatus: All
+                  when:
+                    stageStatus: All
+                    condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> == "error"
+              - stepGroup:
+                  name: Auto Approval Path
+                  identifier: auto_approval_path
+                  steps:
+                    - step:
+                        type: ShellScript
+                        name: Record Auto Approval
+                        identifier: record_auto_approval
+                        spec:
+                          shell: Bash
+                          executionTarget: {}
+                          source:
+                            type: Inline
+                            spec:
+                              script: |
+                                echo "Policy evaluation passed."
+                                echo "Change <+stage.variables.change_request_id> can proceed without manual CAB approval."
+                                echo "Service: <+stage.variables.service_name>"
+                                echo "Environment: <+stage.variables.target_environment>"
+                          environmentVariables: []
+                          outputVariables: []
+                        timeout: 10m
+                        when:
+                          stageStatus: All
+                  when:
+                    stageStatus: All
+                    condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> != "error"
+    tags: {}
+    failureStrategies:
+      - onFailure:
+          errors:
+            - AllErrors
+          action:
+            type: StageRollback
+    delegateSelectors:
+      - <+stage.variables.delegate_selector>
+    variables:
+      - name: policy_set
+        type: String
+        description: "Custom policy set identifier used for change governance"
+        required: true
+        value: <+input>.default(change_risk_guardrails)
+      - name: delegate_selector
+        type: String
+        description: "Delegate selector used by the custom policy and approval stage"
+        required: true
+        value: <+input>
+      - name: approver_group
+        type: String
+        description: "Harness user group that can approve high-risk changes"
+        required: true
+        value: <+input>.default(account.SalesEngineers)
+      - name: change_request_id
+        type: String
+        description: "Change record or ticket identifier"
+        required: true
+        value: <+input>
+      - name: service_name
+        type: String
+        description: "Service or application impacted by the release"
+        required: true
+        value: <+input>.default(harness-demo-app)
+      - name: target_environment
+        type: String
+        description: "Target environment for the change"
+        required: true
+        value: <+input>.default(staging)
+      - name: deployment_strategy
+        type: String
+        description: "Deployment strategy used for the release"
+        required: true
+        value: <+input>.default(canary)
+      - name: blast_radius
+        type: String
+        description: "Expected blast radius for the change"
+        required: true
+        value: <+input>.default(medium)
+      - name: test_pass_rate
+        type: String
+        description: "Automated test pass rate percentage"
+        required: true
+        value: <+input>.default(99)
+      - name: critical_vulnerabilities
+        type: String
+        description: "Number of critical vulnerabilities detected"
+        required: true
+        value: <+input>.default(0)
+      - name: high_vulnerabilities
+        type: String
+        description: "Number of high vulnerabilities detected"
+        required: true
+        value: <+input>.default(0)
+      - name: open_change_failures
+        type: String
+        description: "Number of unresolved release or operational issues"
+        required: true
+        value: <+input>.default(0)
+      - name: rollback_ready
+        type: String
+        description: "Whether rollback readiness has been verified"
+        required: true
+        value: <+input>.default(true)
+      - name: change_freeze_active
+        type: String
+        description: "Whether a freeze window is active"
+        required: true
+        value: <+input>.default(false)
+      - name: requires_data_migration
+        type: String
+        description: "Whether the change includes a database or data migration"
+        required: true
+        value: <+input>.default(false)

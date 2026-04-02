@@ -34,6 +34,12 @@ variable "create_quality_policies" {
   default     = true
 }
 
+variable "create_change_governance_policies" {
+  description = "Create custom change governance policies for CAB-style approvals"
+  type        = bool
+  default     = true
+}
+
 ################################################################################
 # Policy Set Creation Flags
 ################################################################################
@@ -56,6 +62,12 @@ variable "create_quality_policy_set" {
   default     = true
 }
 
+variable "create_change_governance_policy_set" {
+  description = "Create custom change governance policy set"
+  type        = bool
+  default     = true
+}
+
 ################################################################################
 # Policy Enforcement Flags
 ################################################################################
@@ -74,6 +86,12 @@ variable "enforce_security_policies" {
 
 variable "enforce_quality_policies" {
   description = "Enable enforcement of quality gate policies"
+  type        = bool
+  default     = true
+}
+
+variable "enforce_change_governance_policies" {
+  description = "Enable enforcement of custom change governance policies"
   type        = bool
   default     = true
 }
