@@ -20,9 +20,19 @@ pipeline:
       value: <+input>
     - name: deployment_target
       type: String
-      description: Deployment target stack to provision
+      description: Deployment target stack to provision. Use eks for shared-cluster sandboxes and asg for fully self-contained POV environments.
       required: false
       value: <+input>.default(eks).allowedValues(eks,asg)
+    - name: sandbox_profile
+      type: String
+      description: Recommended one-click sandbox mode. auto chooses self_contained_ci_cd for eks and self_contained_asg for asg.
+      required: false
+      value: <+input>.default(auto).allowedValues(auto,self_contained_ci_cd,self_contained_cd_only,self_contained_asg)
+    - name: use_profile_defaults
+      type: String
+      description: Recommended true. When true, sandbox_profile drives the delivery defaults. Set false only for advanced manual override mode.
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
     - name: harness_account_id
       type: String
       description: Target Harness Account ID (for cross-account provisioning)
@@ -95,37 +105,37 @@ pipeline:
       value: <+input>.default(true).allowedValues(true,false)
     - name: artifact_registry_type
       type: String
-      description: Artifact registry type (har or ecr)
+      description: Advanced override when use_profile_defaults is false. Artifact registry type for EKS delivery (recommended har).
       required: false
       value: <+input>.default(har).allowedValues(har,ecr)
     - name: create_dockerhub_upstream
       type: String
-      description: Create DockerHub upstream proxy for HAR (required for pulling base images)
+      description: Advanced override when use_profile_defaults is false. Create the HAR DockerHub upstream proxy used for base image pulls.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
     - name: create_strategy_pipeline
       type: String
-      description: Create the strategy choice deployment pipeline
+      description: Advanced override when use_profile_defaults is false. Create the EKS strategy deployment pipeline.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
     - name: create_ci_pipeline
       type: String
-      description: Create the Maven CI pipeline (basic, no security scanning - use Gradle CI instead for full features)
+      description: Advanced override when use_profile_defaults is false. Create the basic Maven CI pipeline.
       required: false
       value: <+input>.default(false).allowedValues(true,false)
     - name: create_standard_ci_gradle
       type: String
-      description: Create Standard CI Gradle pipeline (Test Intelligence, Security Scanning, Supply Chain) - RECOMMENDED
+      description: Advanced override when use_profile_defaults is false. Create the recommended Gradle CI pipeline with intelligence and security features.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
     - name: create_asg_strategy_pipeline
       type: String
-      description: Create the ASG strategy deployment pipeline
+      description: Advanced override when use_profile_defaults is false. Create the ASG strategy deployment pipeline.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
     - name: create_asg_ci_pipeline
       type: String
-      description: Create the ASG CI pipeline
+      description: Advanced override when use_profile_defaults is false. Create the ASG CI pipeline.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
     - name: acm_cert_arn
@@ -170,6 +180,140 @@ pipeline:
                         type: String
                     assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
                   timeout: 1m
+              - step:
+                  type: ShellScript
+                  name: Resolve Sandbox Profile
+                  identifier: resolve_sandbox_profile
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          DEPLOYMENT_TARGET="<+pipeline.variables.deployment_target>"
+                          SANDBOX_PROFILE="<+pipeline.variables.sandbox_profile>"
+                          USE_PROFILE_DEFAULTS="<+pipeline.variables.use_profile_defaults>"
+                          RAW_ARTIFACT_REGISTRY_TYPE="<+pipeline.variables.artifact_registry_type>"
+                          RAW_CREATE_DOCKERHUB_UPSTREAM="<+pipeline.variables.create_dockerhub_upstream>"
+                          RAW_CREATE_STRATEGY_PIPELINE="<+pipeline.variables.create_strategy_pipeline>"
+                          RAW_CREATE_CI_PIPELINE="<+pipeline.variables.create_ci_pipeline>"
+                          RAW_CREATE_STANDARD_CI_GRADLE="<+pipeline.variables.create_standard_ci_gradle>"
+                          RAW_CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.variables.create_asg_strategy_pipeline>"
+                          RAW_CREATE_ASG_CI_PIPELINE="<+pipeline.variables.create_asg_ci_pipeline>"
+
+                          RESOLVED_USE_HARNESS_CODE="true"
+
+                          if [ "$USE_PROFILE_DEFAULTS" = "true" ]; then
+                            if [ "$SANDBOX_PROFILE" = "auto" ]; then
+                              if [ "$DEPLOYMENT_TARGET" = "asg" ]; then
+                                RESOLVED_PROFILE="self_contained_asg"
+                              else
+                                RESOLVED_PROFILE="self_contained_ci_cd"
+                              fi
+                            else
+                              RESOLVED_PROFILE="$SANDBOX_PROFILE"
+                            fi
+
+                            case "$RESOLVED_PROFILE" in
+                              self_contained_ci_cd)
+                                RESOLVED_ARTIFACT_REGISTRY_TYPE="har"
+                                RESOLVED_CREATE_DOCKERHUB_UPSTREAM="true"
+                                RESOLVED_CREATE_STRATEGY_PIPELINE="true"
+                                RESOLVED_CREATE_CI_PIPELINE="false"
+                                RESOLVED_CREATE_STANDARD_CI_GRADLE="true"
+                                RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="false"
+                                RESOLVED_CREATE_ASG_CI_PIPELINE="false"
+                                ;;
+                              self_contained_cd_only)
+                                RESOLVED_ARTIFACT_REGISTRY_TYPE="har"
+                                RESOLVED_CREATE_DOCKERHUB_UPSTREAM="true"
+                                RESOLVED_CREATE_STRATEGY_PIPELINE="true"
+                                RESOLVED_CREATE_CI_PIPELINE="false"
+                                RESOLVED_CREATE_STANDARD_CI_GRADLE="false"
+                                RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="false"
+                                RESOLVED_CREATE_ASG_CI_PIPELINE="false"
+                                ;;
+                              self_contained_asg)
+                                RESOLVED_ARTIFACT_REGISTRY_TYPE="har"
+                                RESOLVED_CREATE_DOCKERHUB_UPSTREAM="true"
+                                RESOLVED_CREATE_STRATEGY_PIPELINE="false"
+                                RESOLVED_CREATE_CI_PIPELINE="false"
+                                RESOLVED_CREATE_STANDARD_CI_GRADLE="false"
+                                RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="true"
+                                RESOLVED_CREATE_ASG_CI_PIPELINE="true"
+                                ;;
+                              *)
+                                echo "Unsupported sandbox profile: ${RESOLVED_PROFILE}"
+                                exit 1
+                                ;;
+                            esac
+                          else
+                            RESOLVED_PROFILE="manual"
+
+                            RESOLVED_ARTIFACT_REGISTRY_TYPE="$RAW_ARTIFACT_REGISTRY_TYPE"
+                            RESOLVED_CREATE_DOCKERHUB_UPSTREAM="$RAW_CREATE_DOCKERHUB_UPSTREAM"
+                            RESOLVED_CREATE_STRATEGY_PIPELINE="$RAW_CREATE_STRATEGY_PIPELINE"
+                            RESOLVED_CREATE_CI_PIPELINE="$RAW_CREATE_CI_PIPELINE"
+                            RESOLVED_CREATE_STANDARD_CI_GRADLE="$RAW_CREATE_STANDARD_CI_GRADLE"
+                            RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="$RAW_CREATE_ASG_STRATEGY_PIPELINE"
+                            RESOLVED_CREATE_ASG_CI_PIPELINE="$RAW_CREATE_ASG_CI_PIPELINE"
+                          fi
+
+                          if [ "$DEPLOYMENT_TARGET" = "asg" ] && [ "$RESOLVED_PROFILE" != "self_contained_asg" ] && [ "$RESOLVED_PROFILE" != "manual" ]; then
+                            echo "Profile ${RESOLVED_PROFILE} is not compatible with deployment_target=${DEPLOYMENT_TARGET}"
+                            exit 1
+                          fi
+
+                          if [ "$DEPLOYMENT_TARGET" = "eks" ] && [ "$RESOLVED_PROFILE" = "self_contained_asg" ]; then
+                            echo "Profile ${RESOLVED_PROFILE} is not compatible with deployment_target=${DEPLOYMENT_TARGET}"
+                            exit 1
+                          fi
+
+                          export RESOLVED_PROFILE
+                          export RESOLVED_USE_HARNESS_CODE
+                          export RESOLVED_ARTIFACT_REGISTRY_TYPE
+                          export RESOLVED_CREATE_DOCKERHUB_UPSTREAM
+                          export RESOLVED_CREATE_STRATEGY_PIPELINE
+                          export RESOLVED_CREATE_CI_PIPELINE
+                          export RESOLVED_CREATE_STANDARD_CI_GRADLE
+                          export RESOLVED_CREATE_ASG_STRATEGY_PIPELINE
+                          export RESOLVED_CREATE_ASG_CI_PIPELINE
+
+                          echo "Resolved profile: ${RESOLVED_PROFILE}"
+                          echo "Deployment target: ${DEPLOYMENT_TARGET}"
+                    environmentVariables: []
+                    outputVariables:
+                      - name: resolved_profile
+                        type: String
+                        value: RESOLVED_PROFILE
+                      - name: resolved_use_harness_code
+                        type: String
+                        value: RESOLVED_USE_HARNESS_CODE
+                      - name: resolved_artifact_registry_type
+                        type: String
+                        value: RESOLVED_ARTIFACT_REGISTRY_TYPE
+                      - name: resolved_create_dockerhub_upstream
+                        type: String
+                        value: RESOLVED_CREATE_DOCKERHUB_UPSTREAM
+                      - name: resolved_create_strategy_pipeline
+                        type: String
+                        value: RESOLVED_CREATE_STRATEGY_PIPELINE
+                      - name: resolved_create_ci_pipeline
+                        type: String
+                        value: RESOLVED_CREATE_CI_PIPELINE
+                      - name: resolved_create_standard_ci_gradle
+                        type: String
+                        value: RESOLVED_CREATE_STANDARD_CI_GRADLE
+                      - name: resolved_create_asg_strategy_pipeline
+                        type: String
+                        value: RESOLVED_CREATE_ASG_STRATEGY_PIPELINE
+                      - name: resolved_create_asg_ci_pipeline
+                        type: String
+                        value: RESOLVED_CREATE_ASG_CI_PIPELINE
+                  timeout: 2m
               - step:
                   type: Http
                   name: Create IACM Workspace
@@ -275,27 +419,27 @@ pipeline:
                           },
                           "artifact_registry_type": {
                             "key": "artifact_registry_type",
-                            "value": "<+pipeline.variables.artifact_registry_type>",
+                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>",
                             "value_type": "string"
                           },
                           "create_dockerhub_upstream": {
                             "key": "create_dockerhub_upstream",
-                            "value": "<+pipeline.variables.create_dockerhub_upstream>",
+                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_dockerhub_upstream>",
                             "value_type": "string"
                           },
                           "create_strategy_pipeline": {
                             "key": "create_strategy_pipeline",
-                            "value": "<+pipeline.variables.create_strategy_pipeline>",
+                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>",
                             "value_type": "string"
                           },
                           "create_ci_pipeline": {
                             "key": "create_ci_pipeline",
-                            "value": "<+pipeline.variables.create_ci_pipeline>",
+                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_ci_pipeline>",
                             "value_type": "string"
                           },
                           "create_standard_ci_gradle": {
                             "key": "create_standard_ci_gradle",
-                            "value": "<+pipeline.variables.create_standard_ci_gradle>",
+                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>",
                             "value_type": "string"
                           },
                           "acm_cert_arn": {
@@ -305,7 +449,7 @@ pipeline:
                           },
                           "use_harness_code": {
                             "key": "use_harness_code",
-                            "value": "true",
+                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>",
                             "value_type": "string"
                           },
                           "github_repo_name": {
@@ -471,12 +615,12 @@ pipeline:
                           },
                           "create_asg_strategy_pipeline": {
                             "key": "create_asg_strategy_pipeline",
-                            "value": "<+pipeline.variables.create_asg_strategy_pipeline>",
+                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>",
                             "value_type": "string"
                           },
                           "create_asg_ci_pipeline": {
                             "key": "create_asg_ci_pipeline",
-                            "value": "<+pipeline.variables.create_asg_ci_pipeline>",
+                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>",
                             "value_type": "string"
                           },
                           "standard_ci_gradle_test_packages": {
@@ -551,7 +695,7 @@ pipeline:
                           },
                           "use_harness_code": {
                             "key": "use_harness_code",
-                            "value": "true",
+                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>",
                             "value_type": "string"
                           }
                         },
@@ -731,15 +875,17 @@ pipeline:
                           DEPLOYMENT_TARGET="<+pipeline.variables.deployment_target>"
                           SOURCE_GITHUB_REPO="<+pipeline.variables.source_github_repo>"
                           EKS_CLUSTER_NAME="<+pipeline.variables.eks_cluster_name>"
+                          RESOLVED_PROFILE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
+                          RESOLVED_USE_HARNESS_CODE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>"
                           CREATE_HARNESS_ORG="<+pipeline.variables.create_harness_org>"
                           CREATE_HARNESS_PROJECT="<+pipeline.variables.create_harness_project>"
-                          ARTIFACT_REGISTRY_TYPE="<+pipeline.variables.artifact_registry_type>"
-                          CREATE_DOCKERHUB_UPSTREAM="<+pipeline.variables.create_dockerhub_upstream>"
-                          CREATE_STRATEGY_PIPELINE="<+pipeline.variables.create_strategy_pipeline>"
-                          CREATE_CI_PIPELINE="<+pipeline.variables.create_ci_pipeline>"
-                          CREATE_STANDARD_CI_GRADLE="<+pipeline.variables.create_standard_ci_gradle>"
-                          CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.variables.create_asg_strategy_pipeline>"
-                          CREATE_ASG_CI_PIPELINE="<+pipeline.variables.create_asg_ci_pipeline>"
+                          ARTIFACT_REGISTRY_TYPE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>"
+                          CREATE_DOCKERHUB_UPSTREAM="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_dockerhub_upstream>"
+                          CREATE_STRATEGY_PIPELINE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>"
+                          CREATE_CI_PIPELINE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_ci_pipeline>"
+                          CREATE_STANDARD_CI_GRADLE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>"
+                          CREATE_ASG_STRATEGY_PIPELINE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>"
+                          CREATE_ASG_CI_PIPELINE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>"
                           ACM_CERT_ARN="<+pipeline.variables.acm_cert_arn>"
                           SHARED_ALB_DNS_NAME="<+pipeline.variables.shared_alb_dns_name>"
 
@@ -783,7 +929,7 @@ pipeline:
                           update_tf_var "create_harness_org" "$CREATE_HARNESS_ORG" "string"
                           update_tf_var "create_harness_project" "$CREATE_HARNESS_PROJECT" "string"
                           update_tf_var "github_repo_name" "$SOURCE_GITHUB_REPO" "string"
-                          update_tf_var "use_harness_code" "true" "string"
+                          update_tf_var "use_harness_code" "$RESOLVED_USE_HARNESS_CODE" "string"
 
                           if [ "$DEPLOYMENT_TARGET" = "asg" ]; then
                             update_tf_var "aws_region" "us-east-1" "string"
@@ -818,7 +964,7 @@ pipeline:
                             update_tf_var "shared_alb_dns_name" "$SHARED_ALB_DNS_NAME" "string"
                           fi
 
-                          echo "Workspace variables reconciled for ${WORKSPACE_ID} (${DEPLOYMENT_TARGET})"
+                          echo "Workspace variables reconciled for ${WORKSPACE_ID} (${DEPLOYMENT_TARGET}, profile=${RESOLVED_PROFILE})"
                     environmentVariables: []
                     outputVariables: []
                   timeout: 5m
@@ -1187,27 +1333,27 @@ pipeline:
                           },
                           "artifact_registry_type": {
                             "key": "artifact_registry_type",
-                            "value": "<+pipeline.variables.artifact_registry_type>",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>",
                             "value_type": "string"
                           },
                           "create_dockerhub_upstream": {
                             "key": "create_dockerhub_upstream",
-                            "value": "<+pipeline.variables.create_dockerhub_upstream>",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_dockerhub_upstream>",
                             "value_type": "string"
                           },
                           "create_strategy_pipeline": {
                             "key": "create_strategy_pipeline",
-                            "value": "<+pipeline.variables.create_strategy_pipeline>",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>",
                             "value_type": "string"
                           },
                           "create_ci_pipeline": {
                             "key": "create_ci_pipeline",
-                            "value": "<+pipeline.variables.create_ci_pipeline>",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_ci_pipeline>",
                             "value_type": "string"
                           },
                           "create_standard_ci_gradle": {
                             "key": "create_standard_ci_gradle",
-                            "value": "<+pipeline.variables.create_standard_ci_gradle>",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>",
                             "value_type": "string"
                           },
                           "acm_cert_arn": {
@@ -1217,7 +1363,7 @@ pipeline:
                           },
                           "use_harness_code": {
                             "key": "use_harness_code",
-                            "value": "true",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>",
                             "value_type": "string"
                           },
                           "github_repo_name": {
@@ -1372,12 +1518,12 @@ pipeline:
                           },
                           "create_asg_strategy_pipeline": {
                             "key": "create_asg_strategy_pipeline",
-                            "value": "<+pipeline.variables.create_asg_strategy_pipeline>",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>",
                             "value_type": "string"
                           },
                           "create_asg_ci_pipeline": {
                             "key": "create_asg_ci_pipeline",
-                            "value": "<+pipeline.variables.create_asg_ci_pipeline>",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>",
                             "value_type": "string"
                           },
                           "standard_ci_gradle_test_packages": {
@@ -1452,7 +1598,7 @@ pipeline:
                           },
                           "use_harness_code": {
                             "key": "use_harness_code",
-                            "value": "true",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>",
                             "value_type": "string"
                           }
                         },
@@ -1751,6 +1897,15 @@ pipeline:
                   spec:
                     shell: Bash
                     command: |
+                      RESOLVED_PROFILE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
+                      RESOLVED_ARTIFACT_REGISTRY_TYPE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>"
+                      RESOLVED_CREATE_DOCKERHUB_UPSTREAM="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_dockerhub_upstream>"
+                      RESOLVED_CREATE_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>"
+                      RESOLVED_CREATE_CI_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_ci_pipeline>"
+                      RESOLVED_CREATE_STANDARD_CI_GRADLE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>"
+                      RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>"
+                      RESOLVED_CREATE_ASG_CI_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>"
+
                       if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
                         echo "=== POV Provisioning Plan Summary (ASG Stack) ==="
                       else
@@ -1759,10 +1914,23 @@ pipeline:
                       echo "Owner: <+pipeline.variables.owner>"
                       echo "Workspace: <+pipeline.variables.owner>_pov"
                       echo "Deployment Target: <+pipeline.variables.deployment_target>"
+                      echo "Sandbox Profile: ${RESOLVED_PROFILE}"
+                      echo "Profile Defaults Enabled: <+pipeline.variables.use_profile_defaults>"
                       echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
                       echo "Account: <+pipeline.variables.harness_account_id>"
                       echo "Org: <+pipeline.variables.harness_org_id>"
                       echo "Project: <+pipeline.variables.harness_project_id>"
+                      echo "Harness Code Repo: true"
+                      echo "Artifact Registry Type: ${RESOLVED_ARTIFACT_REGISTRY_TYPE}"
+                      echo "DockerHub Upstream: ${RESOLVED_CREATE_DOCKERHUB_UPSTREAM}"
+                      if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
+                        echo "ASG Strategy Pipeline: ${RESOLVED_CREATE_ASG_STRATEGY_PIPELINE}"
+                        echo "ASG CI Pipeline: ${RESOLVED_CREATE_ASG_CI_PIPELINE}"
+                      else
+                        echo "K8s Strategy Pipeline: ${RESOLVED_CREATE_STRATEGY_PIPELINE}"
+                        echo "Gradle CI Pipeline: ${RESOLVED_CREATE_STANDARD_CI_GRADLE}"
+                        echo "Maven CI Pipeline: ${RESOLVED_CREATE_CI_PIPELINE}"
+                      fi
                       echo "================================================="
 
                       if [ -f /harness/plan.json ]; then
@@ -1797,6 +1965,14 @@ pipeline:
                   spec:
                     shell: Bash
                     command: |
+                      RESOLVED_PROFILE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
+                      RESOLVED_ARTIFACT_REGISTRY_TYPE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>"
+                      RESOLVED_CREATE_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>"
+                      RESOLVED_CREATE_CI_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_ci_pipeline>"
+                      RESOLVED_CREATE_STANDARD_CI_GRADLE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>"
+                      RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>"
+                      RESOLVED_CREATE_ASG_CI_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>"
+
                       if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
                         echo "=============================================="
                         echo "   POV Environment Ready! (ASG Stack)"
@@ -1804,6 +1980,7 @@ pipeline:
                         echo ""
                         echo "Owner: <+pipeline.variables.owner>"
                         echo "Workspace: <+pipeline.variables.owner>_pov"
+                        echo "Sandbox Profile: ${RESOLVED_PROFILE}"
                         echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
                         echo ""
                         echo "Access your POV at:"
@@ -1814,7 +1991,13 @@ pipeline:
                         echo "Resources created:"
                         echo "  - Service: <+pipeline.variables.owner>_demo_app_asg"
                         echo "  - Environment: <+pipeline.variables.owner>_dev"
-                        echo "  - Pipeline: <+pipeline.variables.owner>_asg_strategy_deploy"
+                        if [ "$RESOLVED_CREATE_ASG_STRATEGY_PIPELINE" = "true" ]; then
+                          echo "  - Pipeline: <+pipeline.variables.owner>_asg_strategy_deploy"
+                        fi
+                        if [ "$RESOLVED_CREATE_ASG_CI_PIPELINE" = "true" ]; then
+                          echo "  - Pipeline: <+pipeline.variables.owner>_asg_ci_build"
+                        fi
+                        echo "  - Delivery Mode: AMI-based blue/green-ready ASG deployment"
                         echo ""
                         echo "To destroy this POV, run the 'IDP POV Destroyer' pipeline"
                         echo "with owner: <+pipeline.variables.owner> and deployment_target: asg"
@@ -1826,6 +2009,7 @@ pipeline:
                         echo ""
                         echo "Owner: <+pipeline.variables.owner>"
                         echo "Workspace: <+pipeline.variables.owner>_pov"
+                        echo "Sandbox Profile: ${RESOLVED_PROFILE}"
                         echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
                         echo ""
                         echo "Access your POV at:"
@@ -1837,7 +2021,15 @@ pipeline:
                         echo "  - K8s Namespace: harness-demo-<+pipeline.variables.owner>"
                         echo "  - Service: <+pipeline.variables.owner>_demo_app"
                         echo "  - Environment: <+pipeline.variables.owner>_dev"
-                        echo "  - Pipeline: <+pipeline.variables.owner>_k8s_strategy_deploy"
+                        if [ "$RESOLVED_CREATE_STRATEGY_PIPELINE" = "true" ]; then
+                          echo "  - Pipeline: <+pipeline.variables.owner>_k8s_strategy_deploy"
+                        fi
+                        if [ "$RESOLVED_CREATE_STANDARD_CI_GRADLE" = "true" ]; then
+                          echo "  - Pipeline: <+pipeline.variables.owner>_standard_ci_gradle"
+                        elif [ "$RESOLVED_CREATE_CI_PIPELINE" = "true" ]; then
+                          echo "  - Pipeline: <+pipeline.variables.owner>_ci_build"
+                        fi
+                        echo "  - Artifact Registry: ${RESOLVED_ARTIFACT_REGISTRY_TYPE}"
                         echo ""
                         echo "To destroy this POV, run the 'IDP POV Destroyer' pipeline"
                         echo "with owner: <+pipeline.variables.owner> and deployment_target: eks"
@@ -1886,7 +2078,7 @@ pipeline:
                   timeout: 2m
                   when:
                     stageStatus: Success
-                    condition: <+pipeline.variables.deployment_target> == "eks" && <+pipeline.variables.create_standard_ci_gradle> == "true"
+                    condition: <+pipeline.variables.deployment_target> == "eks" && <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle> == "true"
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -1923,7 +2115,7 @@ pipeline:
                   timeout: 2m
                   when:
                     stageStatus: Success
-                    condition: <+pipeline.variables.deployment_target> == "eks" && <+pipeline.variables.create_ci_pipeline> == "true" && <+pipeline.variables.create_standard_ci_gradle> != "true"
+                    condition: <+pipeline.variables.deployment_target> == "eks" && <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_ci_pipeline> == "true" && <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle> != "true"
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -1960,7 +2152,7 @@ pipeline:
                   timeout: 2m
                   when:
                     stageStatus: Success
-                    condition: <+pipeline.variables.deployment_target> == "asg" && <+pipeline.variables.create_asg_ci_pipeline> == "true"
+                    condition: <+pipeline.variables.deployment_target> == "asg" && <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline> == "true"
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -2062,12 +2254,21 @@ pipeline:
                       type: Inline
                       spec:
                         script: |
+                          RESOLVED_PROFILE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
+                          RESOLVED_ARTIFACT_REGISTRY_TYPE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>"
+                          RESOLVED_CREATE_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>"
+                          RESOLVED_CREATE_CI_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_ci_pipeline>"
+                          RESOLVED_CREATE_STANDARD_CI_GRADLE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>"
+                          RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>"
+                          RESOLVED_CREATE_ASG_CI_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>"
+
                           if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
                             echo "=============================================="
                             echo "   POV Provisioning Complete! (ASG Stack)"
                             echo "=============================================="
                             echo ""
                             echo "Owner: <+pipeline.variables.owner>"
+                            echo "Sandbox Profile: ${RESOLVED_PROFILE}"
                             echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
                             echo ""
                             echo "Harness Code Repo: <+pipeline.variables.owner>-demo-app"
@@ -2076,14 +2277,22 @@ pipeline:
                             echo "All resources are managed by Terraform state."
                             echo "To destroy, run 'terraform destroy' or the POV Destroyer pipeline."
                             echo ""
-                            echo "The CI build will:"
-                            echo "  1. Clone from Harness Code repo"
-                            echo "  2. Build the application and bake a Packer AMI"
-                            echo "  3. Publish the AMI name for ASG deployment"
+                            if [ "$RESOLVED_CREATE_ASG_CI_PIPELINE" = "true" ]; then
+                              echo "The CI build will:"
+                              echo "  1. Clone from Harness Code repo"
+                              echo "  2. Build the application and bake a Packer AMI"
+                              echo "  3. Publish the AMI name for ASG deployment"
+                            else
+                              echo "No initial CI pipeline was enabled for this sandbox profile."
+                            fi
                             echo ""
                             echo "Pipelines created:"
-                            echo "  - <+pipeline.variables.owner>_asg_ci_build (CI)"
-                            echo "  - <+pipeline.variables.owner>_asg_strategy_deploy (CD)"
+                            if [ "$RESOLVED_CREATE_ASG_CI_PIPELINE" = "true" ]; then
+                              echo "  - <+pipeline.variables.owner>_asg_ci_build (CI)"
+                            fi
+                            if [ "$RESOLVED_CREATE_ASG_STRATEGY_PIPELINE" = "true" ]; then
+                              echo "  - <+pipeline.variables.owner>_asg_strategy_deploy (CD)"
+                            fi
                             echo ""
                             echo "App URL: https://<+pipeline.variables.owner>-asg.harness-demo.dev"
                             echo "=============================================="
@@ -2093,23 +2302,40 @@ pipeline:
                             echo "=============================================="
                             echo ""
                             echo "Owner: <+pipeline.variables.owner>"
+                            echo "Sandbox Profile: ${RESOLVED_PROFILE}"
                             echo "EKS Cluster: <+pipeline.variables.eks_cluster_name>"
                             echo ""
                             echo "Harness Code Repo: <+pipeline.variables.owner>-demo-app"
                             echo "  (Terraform-managed, imported from: <+pipeline.variables.source_github_repo>)"
+                            echo "Artifact Registry: ${RESOLVED_ARTIFACT_REGISTRY_TYPE}"
                             echo ""
                             echo "All resources are managed by Terraform state."
                             echo "To destroy, run 'terraform destroy' or the POV Destroyer pipeline."
                             echo ""
-                            echo "The CI build will:"
-                            echo "  1. Clone from Harness Code repo"
-                            echo "  2. Build the Docker image"
-                            echo "  3. Push to Harness Artifact Registry (har-<+pipeline.variables.owner>)"
-                            echo "  4. Trigger Rolling deployment automatically (HAR artifact trigger)"
+                            if [ "$RESOLVED_CREATE_STANDARD_CI_GRADLE" = "true" ]; then
+                              echo "The initial CI build will:"
+                              echo "  1. Clone from Harness Code repo"
+                              echo "  2. Run the recommended Gradle CI + intelligence flow"
+                              echo "  3. Build the Docker image"
+                              echo "  4. Push to ${RESOLVED_ARTIFACT_REGISTRY_TYPE}"
+                              if [ "$RESOLVED_CREATE_STRATEGY_PIPELINE" = "true" ]; then
+                                echo "  5. Trigger deployment automatically"
+                              fi
+                            elif [ "$RESOLVED_CREATE_CI_PIPELINE" = "true" ]; then
+                              echo "The initial CI build will use the Maven pipeline path."
+                            else
+                              echo "No initial CI pipeline was enabled for this sandbox profile."
+                            fi
                             echo ""
                             echo "Pipelines created:"
-                            echo "  - <+pipeline.variables.owner>_standard_ci_gradle (CI)"
-                            echo "  - <+pipeline.variables.owner>_k8s_strategy_deploy (CD)"
+                            if [ "$RESOLVED_CREATE_STANDARD_CI_GRADLE" = "true" ]; then
+                              echo "  - <+pipeline.variables.owner>_standard_ci_gradle (CI)"
+                            elif [ "$RESOLVED_CREATE_CI_PIPELINE" = "true" ]; then
+                              echo "  - <+pipeline.variables.owner>_ci_build (CI)"
+                            fi
+                            if [ "$RESOLVED_CREATE_STRATEGY_PIPELINE" = "true" ]; then
+                              echo "  - <+pipeline.variables.owner>_k8s_strategy_deploy (CD)"
+                            fi
                             echo ""
                             echo "App URL: https://<+pipeline.variables.owner>.harness-demo.dev"
                             echo "=============================================="

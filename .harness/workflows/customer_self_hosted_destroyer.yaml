@@ -9,9 +9,10 @@ orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
   description: |
-    ADVANCED: Destroy a POV environment in a customer Harness account.
+    ADVANCED: Destroy a standardized POV environment in a customer Harness account.
     
     ⚠️  This workflow targets the canonical `idp_pov_destroyer_v2` pipeline.
+    It is intended for cross-account cleanup of sandboxes created by the canonical provisioner lifecycle.
     
     What gets destroyed:
     - Harness pipelines, services, environments
@@ -20,6 +21,8 @@ metadata:
     
     Prerequisites:
     - Customer API key with admin permissions
+    
+    Set the advanced cleanup flags only when you need to bypass Terraform or require manual approval.
   tags:
     - customer-self-hosted
     - iacm
@@ -28,7 +31,7 @@ metadata:
 spec:
   presentation:
     customTitle: Customer Self-Hosted Destroyer (Advanced)
-    customSubTitle: "⚠️ Destroys AWS infrastructure in customer's account"
+    customSubTitle: "⚠️ Advanced cross-account cleanup for profile-driven customer sandboxes"
     customCreateButtonText: Destroy Infrastructure
   
   output:
@@ -103,7 +106,7 @@ spec:
         deployment_target:
           title: Deployment Target
           type: string
-          description: "Which target stack should be destroyed"
+          description: "Use eks for shared-cluster sandboxes and asg for fully self-contained POV environments"
           default: eks
           enum:
             - eks
@@ -112,7 +115,7 @@ spec:
         skip_terraform_destroy:
           title: Skip Terraform Destroy?
           type: string
-          description: "Use API-only/orphan cleanup instead of Terraform destroy"
+          description: "Advanced override. Recommended false. Set true only to bypass Terraform and run API/AWS/Kubernetes cleanup directly"
           default: "false"
           enum:
             - "true"
@@ -121,7 +124,7 @@ spec:
         auto_approve:
           title: Auto Approve?
           type: string
-          description: "Auto-approve the destroy pipeline"
+          description: "Recommended true for one-click cleanup. Set false only if you want a manual destroy approval gate"
           default: "true"
           enum:
             - "true"

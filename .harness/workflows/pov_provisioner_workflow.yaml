@@ -9,19 +9,18 @@ orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
   description: |
-    Provision a complete Harness POV in a customer account using shared infrastructure.
+    Provision a standardized Harness POV in a customer account using the profile-driven sandbox provisioner.
     
     What gets created:
-    - Harness CI pipeline (builds from Harness Code Repo, pushes to HAR)
-    - Harness CD pipelines (Canary, Blue-Green, Strategy Choice)
-    - Harness Service and Environments (Dev, Prod)
-    - K8s namespaces in shared EKS cluster
-    - Harness Artifact Registry for Docker images
+    - Shared-cluster EKS sandbox resources for `eks` targets
+    - Fully self-contained ASG sandbox resources for `asg` targets
+    - Harness pipelines, services, environments, and application delivery resources
+    - Harness Code and artifact delivery setup driven by the selected sandbox profile
     
     Prerequisites:
     - Customer Harness account with org/project created
     - Customer API key with admin permissions
-    - Access to shared EKS cluster (harness-eks-parson)
+    - Access to the shared EKS cluster for `eks` targets
   tags:
     - pov-in-a-box
     - iacm
@@ -30,7 +29,7 @@ metadata:
 spec:
   presentation:
     customTitle: POV in a Box
-    customSubTitle: Deploy a complete Harness demo into a customer account (uses shared EKS cluster)
+    customSubTitle: Deploy a profile-driven demo environment into a customer account with shared EKS or self-contained ASG defaults
     customCreateButtonText: Provision POV
   
   output:
@@ -128,48 +127,30 @@ spec:
         deployment_target:
           title: Deployment Target
           type: string
-          description: "Where to deploy the demo app"
+          description: "Use eks for shared-cluster sandboxes and asg for fully self-contained POV environments"
           default: eks
           enum:
             - eks
             - asg
 
+        sandbox_profile:
+          title: Sandbox Profile
+          type: string
+          description: "Recommended one-click mode. auto chooses self_contained_ci_cd for eks and self_contained_asg for asg"
+          default: auto
+          enum:
+            - auto
+            - self_contained_ci_cd
+            - self_contained_cd_only
+            - self_contained_asg
+
         eks_cluster_name:
           title: EKS Cluster
           type: string
-          description: "Shared EKS cluster for deployments"
+          description: "Shared EKS cluster used when deployment_target is eks"
           default: "harness-eks-parson"
           ui:readonly: true
           ui:help: "POV in a Box uses the shared Harness EKS cluster. No AWS setup required in customer account."
-    
-    - title: Harness Resources
-      properties:
-        create_harness_environment:
-          title: Create Harness Environment?
-          type: string
-          description: "Create Harness dev environment and infrastructure"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-        
-        create_prod_environment:
-          title: Create Prod Environment?
-          type: string
-          description: "Create Harness prod environment and infrastructure"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-        
-        create_standard_ci_gradle:
-          title: Create Standard CI Gradle Pipeline?
-          type: string
-          description: "Enterprise CI pipeline with Test Intelligence, Security Scanning, and Supply Chain"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
 
     - title: Application Source
       properties:
@@ -205,10 +186,9 @@ spec:
           target_api_key: ${{ parameters.target_api_key }}
           target_api_key_email: ${{ parameters.target_api_key_email }}
           deployment_target: ${{ parameters.deployment_target }}
+          sandbox_profile: ${{ parameters.sandbox_profile }}
+          use_profile_defaults: "true"
           eks_cluster_name: ${{ parameters.eks_cluster_name }}
-          create_harness_environment: ${{ parameters.create_harness_environment }}
-          create_prod_environment: ${{ parameters.create_prod_environment }}
-          create_standard_ci_gradle: ${{ parameters.create_standard_ci_gradle }}
           source_github_repo: ${{ parameters.source_github_repo }}
           force_recreate: ${{ parameters.force_recreate }}
         apikey: ${{ parameters.token }}

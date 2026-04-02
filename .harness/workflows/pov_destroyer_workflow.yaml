@@ -8,7 +8,11 @@ projectIdentifier: parson
 orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
-  description: "Destroy a POV environment in a customer or external Harness account"
+  description: |
+    Destroy a standardized POV environment in a customer or external Harness account.
+    
+    Use this workflow for normal one-click cleanup of a sandbox created by the canonical provisioner lifecycle.
+    Set the advanced cleanup flags only when you need to bypass Terraform or require manual approval.
   tags:
     - pov-in-a-box
     - iacm
@@ -16,7 +20,7 @@ metadata:
 spec:
   presentation:
     customTitle: POV in a Box - Destroyer
-    customSubTitle: Remove all resources from a POV in a customer or external account
+    customSubTitle: Remove all resources from a profile-driven POV environment in a customer or external account
     customCreateButtonText: Destroy POV
   
   output:
@@ -97,7 +101,7 @@ spec:
         deployment_target:
           title: Deployment Target
           type: string
-          description: "Which target stack should be destroyed"
+          description: "Use eks for shared-cluster sandboxes and asg for fully self-contained POV environments"
           default: eks
           enum:
             - eks
@@ -106,7 +110,7 @@ spec:
         skip_terraform_destroy:
           title: Skip Terraform Destroy?
           type: string
-          description: "Use API-only/orphan cleanup instead of Terraform destroy"
+          description: "Advanced override. Recommended false. Set true only to bypass Terraform and run API/AWS/Kubernetes cleanup directly"
           default: "false"
           enum:
             - "true"
@@ -115,7 +119,7 @@ spec:
         auto_approve:
           title: Auto Approve?
           type: string
-          description: "Auto-approve the destroy pipeline"
+          description: "Recommended true for one-click cleanup. Set false only if you want a manual destroy approval gate"
           default: "true"
           enum:
             - "true"

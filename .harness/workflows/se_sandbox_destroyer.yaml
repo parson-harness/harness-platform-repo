@@ -8,7 +8,11 @@ projectIdentifier: parson
 orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
-  description: "Destroy an SE sandbox environment in the current account"
+  description: |
+    Destroy a standardized SE sandbox environment in the current account.
+    
+    Use this workflow for normal one-click cleanup of a sandbox created by the canonical provisioner lifecycle.
+    Set the advanced cleanup flags only when you need to bypass Terraform or require manual approval.
   tags:
     - se-sandbox
     - iacm
@@ -16,7 +20,7 @@ metadata:
 spec:
   presentation:
     customTitle: Destroy SE Sandbox
-    customSubTitle: Remove all resources from your sandbox environment
+    customSubTitle: Remove all resources from your profile-driven sandbox environment
     customCreateButtonText: Destroy Sandbox
   
   output:
@@ -68,7 +72,7 @@ spec:
         deployment_target:
           title: Deployment Target
           type: string
-          description: "Which target stack should be destroyed"
+          description: "Use eks for shared-cluster sandboxes and asg for fully self-contained POV environments"
           default: eks
           enum:
             - eks
@@ -77,7 +81,7 @@ spec:
         skip_terraform_destroy:
           title: Skip Terraform Destroy?
           type: string
-          description: "Use API-only/orphan cleanup instead of Terraform destroy"
+          description: "Advanced override. Recommended false. Set true only to bypass Terraform and run API/AWS/Kubernetes cleanup directly"
           default: "false"
           enum:
             - "true"
@@ -86,7 +90,7 @@ spec:
         auto_approve:
           title: Auto Approve?
           type: string
-          description: "Auto-approve the destroy pipeline"
+          description: "Recommended true for one-click cleanup. Set false only if you want a manual destroy approval gate"
           default: "true"
           enum:
             - "true"

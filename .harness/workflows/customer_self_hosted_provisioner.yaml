@@ -9,21 +9,22 @@ orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
   description: |
-    ADVANCED: Provision a complete Harness demo in a customer's Harness account.
+    ADVANCED: Provision a standardized Harness demo in a customer's Harness account with profile-driven defaults.
     
     ⚠️  This workflow targets the current canonical POV provisioner pipeline.
     
     What gets created:
-    - Harness CI/CD pipelines
-    - Harness Service and Environments
-    - Harness Artifact Registry or ASG delivery resources depending on target
+    - Shared-cluster EKS sandbox resources for `eks` targets
+    - Fully self-contained ASG sandbox resources for `asg` targets
+    - Harness pipelines, services, environments, and application delivery resources
+    - Harness Code and artifact delivery setup driven by the selected sandbox profile
     
     Prerequisites (REQUIRED):
     1. Customer Harness account with IACM enabled
     2. Customer API key with admin permissions
-    3. Existing cluster access for EKS targets, or the required shared-cluster inputs for ASG targets
+    3. Existing cluster access for EKS targets, or the required AWS setup for ASG targets
     
-    Estimated provisioning time depends on the selected target and any existing workspace state.
+    Estimated provisioning time depends on the selected target, sandbox profile, and any existing workspace state.
   tags:
     - customer-self-hosted
     - iacm
@@ -32,7 +33,7 @@ metadata:
 spec:
   presentation:
     customTitle: Customer Self-Hosted (Advanced)
-    customSubTitle: "⚠️ Advanced cross-account provisioning into a customer Harness project"
+    customSubTitle: "⚠️ Advanced cross-account provisioning with profile-driven defaults and manual override support"
     customCreateButtonText: Provision Infrastructure
   
   output:
@@ -125,24 +126,44 @@ spec:
         deployment_target:
           title: Deployment Target
           type: string
-          description: "Where to deploy the demo app"
+          description: "Use eks for shared-cluster sandboxes and asg for fully self-contained POV environments"
           default: eks
           enum:
             - eks
             - asg
+
+        sandbox_profile:
+          title: Sandbox Profile
+          type: string
+          description: "Recommended one-click mode. auto chooses self_contained_ci_cd for eks and self_contained_asg for asg"
+          default: auto
+          enum:
+            - auto
+            - self_contained_ci_cd
+            - self_contained_cd_only
+            - self_contained_asg
         
         eks_cluster_name:
           title: EKS Cluster Name
           type: string
-          description: "Cluster name used by the canonical provisioner workflows"
+          description: "Cluster name used when deployment_target is eks"
           default: "harness-eks-parson"
     
-    - title: Harness Resources
+    - title: Advanced Delivery Options
       properties:
+        use_profile_defaults:
+          title: Use Profile Defaults?
+          type: string
+          description: "Recommended true. Set false only when you need to manually override delivery behavior"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+
         create_harness_environment:
           title: Create Dev Environment?
           type: string
-          description: "Create Harness dev environment and infrastructure"
+          description: "Advanced override when use_profile_defaults is false. Create Harness dev environment and infrastructure"
           default: "true"
           enum:
             - "true"
@@ -151,7 +172,16 @@ spec:
         create_prod_environment:
           title: Create Prod Environment?
           type: string
-          description: "Create Harness prod environment and infrastructure"
+          description: "Advanced override when use_profile_defaults is false. Create Harness prod environment and infrastructure"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+
+        create_standard_ci_gradle:
+          title: Create Standard CI Gradle Pipeline?
+          type: string
+          description: "Advanced override when use_profile_defaults is false. Create the recommended Gradle CI pipeline"
           default: "true"
           enum:
             - "true"
@@ -192,9 +222,12 @@ spec:
           target_api_key: ${{ parameters.target_api_key }}
           target_api_key_email: ${{ parameters.target_api_key_email }}
           deployment_target: ${{ parameters.deployment_target }}
+          sandbox_profile: ${{ parameters.sandbox_profile }}
           eks_cluster_name: ${{ parameters.eks_cluster_name }}
+          use_profile_defaults: ${{ parameters.use_profile_defaults }}
           create_harness_environment: ${{ parameters.create_harness_environment }}
           create_prod_environment: ${{ parameters.create_prod_environment }}
+          create_standard_ci_gradle: ${{ parameters.create_standard_ci_gradle }}
           source_github_repo: ${{ parameters.source_github_repo }}
           force_recreate: ${{ parameters.force_recreate }}
         apikey: ${{ parameters.token }}

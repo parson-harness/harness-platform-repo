@@ -9,14 +9,13 @@ orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
   description: |
-    Quick provisioning for SE sandbox environments in the Harness demo account.
+    Quick provisioning for standardized SE sandbox environments in the Harness demo account.
     
     What gets created:
-    - Harness CI pipeline (builds from Harness Code Repo, pushes to HAR)
-    - Harness CD pipelines (Canary, Blue-Green, Strategy Choice)
-    - Harness Service and Environments (Dev, Prod)
-    - K8s namespaces in shared EKS cluster
-    - Harness Artifact Registry for Docker images
+    - Shared-cluster EKS sandbox resources for `eks` targets
+    - Fully self-contained ASG sandbox resources for `asg` targets
+    - Harness pipelines, services, environments, and application delivery resources
+    - Harness Code and artifact delivery setup driven by the selected sandbox profile
     
     Prerequisites:
     - Access to sandbox org (you're already here!)
@@ -28,7 +27,7 @@ metadata:
 spec:
   presentation:
     customTitle: SE Sandbox
-    customSubTitle: Create your own demo environment in this Harness account (uses shared EKS cluster)
+    customSubTitle: Create a profile-driven demo environment in this Harness account with shared EKS or self-contained ASG defaults
     customCreateButtonText: Provision Sandbox
   
   output:
@@ -90,46 +89,28 @@ spec:
         deployment_target:
           title: Deployment Target
           type: string
-          description: "Where to deploy the demo app"
+          description: "Use eks for shared-cluster sandboxes and asg for fully self-contained POV environments"
           enum:
             - eks
             - asg
           default: eks
+
+        sandbox_profile:
+          title: Sandbox Profile
+          type: string
+          description: "Recommended one-click mode. auto chooses self_contained_ci_cd for eks and self_contained_asg for asg"
+          default: auto
+          enum:
+            - auto
+            - self_contained_ci_cd
+            - self_contained_cd_only
+            - self_contained_asg
         
         eks_cluster_name:
           title: EKS Cluster Name
           type: string
-          description: "Name of the shared EKS cluster"
+          description: "Name of the shared EKS cluster used when deployment_target is eks"
           default: "harness-eks-parson"
-    
-    - title: Harness Resources
-      properties:
-        create_harness_environment:
-          title: Create Harness Environment?
-          type: string
-          description: "Create Harness dev environment and infrastructure"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-        
-        create_prod_environment:
-          title: Create Prod Environment?
-          type: string
-          description: "Create Harness prod environment and infrastructure"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
-        
-        create_standard_ci_gradle:
-          title: Create Standard CI Gradle Pipeline?
-          type: string
-          description: "Enterprise CI pipeline with Test Intelligence, Security Scanning, and Supply Chain"
-          default: "true"
-          enum:
-            - "true"
-            - "false"
     
   steps:
     - id: trigger
@@ -144,8 +125,7 @@ spec:
           harness_org_id: ${{ parameters.harness_org_id }}
           harness_project_id: ${{ parameters.harness_project_id }}
           deployment_target: ${{ parameters.deployment_target }}
+          sandbox_profile: ${{ parameters.sandbox_profile }}
+          use_profile_defaults: "true"
           eks_cluster_name: ${{ parameters.eks_cluster_name }}
-          create_harness_environment: ${{ parameters.create_harness_environment }}
-          create_prod_environment: ${{ parameters.create_prod_environment }}
-          create_standard_ci_gradle: ${{ parameters.create_standard_ci_gradle }}
         apikey: ${{ parameters.token }}

@@ -25,7 +25,7 @@ pipeline:
       value: <+input>
     - name: deployment_target
       type: String
-      description: Deployment target stack to destroy
+      description: Deployment target stack to destroy. Use eks for shared-cluster sandboxes and asg for fully self-contained POV environments.
       required: false
       value: <+input>.default(eks).allowedValues(eks,asg)
     - name: harness_account_id
@@ -65,17 +65,17 @@ pipeline:
       value: <+input>.default(harness-eks-parson)
     - name: skip_terraform_destroy
       type: String
-      description: Skip Terraform destroy (use API-only cleanup for orphaned resources)
+      description: Advanced override. Recommended false. Set true only to bypass Terraform and run API/AWS/Kubernetes cleanup directly.
       required: false
       value: <+input>.default(false).allowedValues(true,false)
     - name: auto_approve
       type: String
-      description: Auto-approve the destroy (skip manual approval)
+      description: Recommended true for one-click cleanup. Set false only if you want a manual destroy approval gate.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
     - name: create_standard_ci_gradle
       type: String
-      description: Placeholder for workspace variable (not used in destroy)
+      description: Legacy compatibility placeholder for workspace variable mapping. Not used by the destroyer.
       required: false
       value: "false"
   stages:
@@ -131,17 +131,27 @@ pipeline:
                           echo ""
 
                           WORKSPACE_STATUS="<+execution.steps.check_workspace.output.outputVariables.workspace_exists>"
+                          SKIP_TERRAFORM="<+pipeline.variables.skip_terraform_destroy>"
 
                           if [ "$WORKSPACE_STATUS" = "200" ]; then
                             echo "✓ Workspace EXISTS - Terraform state is available"
-                            echo "  Strategy: Use Terraform destroy (state-aware)"
                             export HAS_WORKSPACE="true"
                           else
                             echo "○ Workspace NOT FOUND - No Terraform state"
-                            echo "  Strategy: API-only cleanup (orphan removal)"
                             export HAS_WORKSPACE="false"
                           fi
 
+                          echo ""
+                          if [ "$SKIP_TERRAFORM" = "true" ]; then
+                            echo "Requested Cleanup Mode: API/AWS/Kubernetes cleanup only"
+                            echo "  Terraform destroy will be bypassed even if workspace state exists"
+                          elif [ "$WORKSPACE_STATUS" = "200" ]; then
+                            echo "Requested Cleanup Mode: Standard state-aware destroy"
+                            echo "  Terraform destroy will run only if state health checks pass"
+                          else
+                            echo "Requested Cleanup Mode: Orphan cleanup"
+                            echo "  No workspace state exists, so API/AWS/Kubernetes cleanup will be used"
+                          fi
                           echo ""
                           echo "Skip Terraform: <+pipeline.variables.skip_terraform_destroy>"
                           echo "Auto Approve: <+pipeline.variables.auto_approve>"
@@ -226,7 +236,7 @@ pipeline:
     - stage:
         name: Check State Health
         identifier: check_state_health
-        description: Diagnostic check - logs which key resources still exist (informational only)
+        description: Determine whether Terraform destroy can safely run or whether cleanup should fall back to API/AWS/Kubernetes deletion.
         type: Custom
         when:
           pipelineStatus: Success
@@ -335,7 +345,7 @@ pipeline:
         type: IACM
         when:
           pipelineStatus: Success
-          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.skip_terraform_destroy> == "false"
+          condition: <+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists> == "200" && <+pipeline.variables.skip_terraform_destroy> == "false" && <+pipeline.stages.check_state_health.spec.execution.steps.evaluate_state_health.output.outputVariables.state_healthy> == "true"
         spec:
           platform:
             os: Linux
@@ -508,7 +518,7 @@ pipeline:
                   name: Approve Destroy
                   identifier: approve_destroy
                   spec:
-                    autoApprove: true
+                    autoApprove: <+pipeline.variables.auto_approve>
                   timeout: 1m
                   failureStrategies:
                     - onFailure:
@@ -1038,6 +1048,10 @@ pipeline:
                       type: Inline
                       spec:
                         script: |
+                          WORKSPACE_STATUS="<+pipeline.stages.preflight.spec.execution.steps.check_workspace.output.outputVariables.workspace_exists>"
+                          SKIP_TERRAFORM="<+pipeline.variables.skip_terraform_destroy>"
+                          STATE_HEALTHY="<+pipeline.stages.check_state_health.spec.execution.steps.evaluate_state_health.output.outputVariables.state_healthy>"
+
                           echo "=============================================="
                           echo "   POV Environment Destroyed Successfully"
                           echo "=============================================="
@@ -1047,7 +1061,13 @@ pipeline:
                           echo ""
                           echo "Cleanup Summary:"
                           echo "  ✓ Destroy unblock step completed"
-                          echo "  ✓ Terraform destroy completed"
+                          if [ "$SKIP_TERRAFORM" = "true" ]; then
+                            echo "  ○ Terraform destroy skipped by operator request"
+                          elif [ "$WORKSPACE_STATUS" = "200" ] && [ "$STATE_HEALTHY" = "true" ]; then
+                            echo "  ✓ Terraform destroy completed"
+                          else
+                            echo "  ○ Terraform destroy skipped because workspace state was stale"
+                          fi
                           echo "  ✓ Orphaned resources force-deleted"
                           echo "  ✓ AWS and Kubernetes cleanup completed"
                           echo "  ✓ IACM workspace deleted"
