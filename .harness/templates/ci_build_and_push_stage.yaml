@@ -1,0 +1,85 @@
+template:
+  name: CI Build and Push Stage
+  identifier: ci_build_and_push_stage
+  type: Stage
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: "Project-level CI stage template for building, testing, and publishing the demo application"
+  tags:
+    stage-type: ci
+    template-purpose: demo
+  versionLabel: "1.0.0"
+  spec:
+    type: CI
+    spec:
+      cloneCodebase: true
+      platform:
+        os: Linux
+        arch: Amd64
+      runtime:
+        type: Cloud
+        spec: {}
+      execution:
+        steps:
+          - step:
+              type: Run
+              name: Run Tests
+              identifier: run_tests
+              spec:
+                connectorRef: account.harnessImage
+                image: maven:3.9-eclipse-temurin-17
+                shell: Sh
+                command: |
+                  mvn test -B
+                reports:
+                  type: JUnit
+                  spec:
+                    paths:
+                      - "**/target/surefire-reports/*.xml"
+          - step:
+              type: Run
+              name: Build JAR
+              identifier: build_jar
+              spec:
+                connectorRef: account.harnessImage
+                image: maven:3.9-eclipse-temurin-17
+                shell: Sh
+                command: |
+                  mvn package -DskipTests -B
+                  cp target/*.jar app.jar
+          - step:
+              type: BuildAndPushECR
+              name: Build and Push to ECR
+              identifier: build_push_ecr
+              spec:
+                connectorRef: <+input>
+                region: <+input>
+                account: <+input>
+                imageName: harness-demo-app
+                tags:
+                  - <+pipeline.sequenceId>
+                  - <+codebase.commitSha>
+                  - latest
+                dockerfile: Dockerfile
+                context: .
+                optimize: true
+          - step:
+              type: Run
+              name: Security Scan
+              identifier: security_scan
+              spec:
+                connectorRef: account.harnessImage
+                image: aquasec/trivy:latest
+                shell: Sh
+                command: |
+                  trivy image --exit-code 0 --severity HIGH,CRITICAL \
+                    <+execution.steps.build_push_ecr.output.outputVariables.IMAGE>
+              when:
+                stageStatus: Success
+                condition: <+input>.allowedValues(true,false)
+    failureStrategies:
+      - onFailure:
+          errors:
+            - AllErrors
+          action:
+            type: StageRollback

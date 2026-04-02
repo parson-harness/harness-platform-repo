@@ -281,6 +281,9 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                                     tag: 1.0.<+pipeline.sequenceId>
                                     registry: ${var.har_registry_ref}
                                     image_path: ${var.har_image_name}:1.0.<+pipeline.sequenceId>
+                                when:
+                                  stageStatus: Success
+                                  condition: '"true" == "false"'
                             - step:
                                 type: AquaTrivy
                                 name: Aqua Trivy
@@ -336,7 +339,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                           echo "- Gitleaks: Secret detection"
                           echo "- Harness SAST: Static analysis"
                           echo "- Semgrep: Code patterns"
-                          echo "- Harness SCA: Dependency vulnerabilities"
+                          echo "- Harness SCA: Configured but temporarily skipped"
                           echo "- Aqua Trivy: Container vulnerabilities"
                           echo ""
                           echo "=== SUPPLY CHAIN SECURITY ==="

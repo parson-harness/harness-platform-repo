@@ -1,0 +1,42 @@
+template:
+  name: CI Integration Tests Stage
+  identifier: ci_integration_tests_stage
+  type: Stage
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  description: "Project-level CI stage template for running integration tests after a successful build"
+  tags:
+    stage-type: ci
+    template-purpose: demo
+  versionLabel: "1.0.0"
+  spec:
+    type: CI
+    spec:
+      cloneCodebase: true
+      platform:
+        os: Linux
+        arch: Amd64
+      runtime:
+        type: Cloud
+        spec: {}
+      execution:
+        steps:
+          - step:
+              type: Run
+              name: Run Integration Tests
+              identifier: run_integration_tests
+              spec:
+                connectorRef: account.harnessImage
+                image: maven:3.9-eclipse-temurin-17
+                shell: Sh
+                command: |
+                  mvn verify -DskipUnitTests -B
+    when:
+      pipelineStatus: Success
+      condition: <+input>.allowedValues(true,false)
+    failureStrategies:
+      - onFailure:
+          errors:
+            - AllErrors
+          action:
+            type: StageRollback
