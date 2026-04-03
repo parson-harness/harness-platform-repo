@@ -395,7 +395,7 @@ pipeline:
                           "harness_api_key": {
                             "key": "harness_api_key",
                             "value": "<+pipeline.variables.target_api_key>",
-                            "value_type": "secret"
+                            "value_type": "string"
                           },
                           "harness_api_key_email": {
                             "key": "harness_api_key_email",
@@ -571,7 +571,7 @@ pipeline:
                           "harness_api_key": {
                             "key": "harness_api_key",
                             "value": "<+pipeline.variables.target_api_key>",
-                            "value_type": "secret"
+                            "value_type": "string"
                           },
                           "harness_org_id": {
                             "key": "harness_org_id",
@@ -960,7 +960,7 @@ pipeline:
 
                           update_tf_var "harness_account_id" "$ACCOUNT_ID" "string"
                           update_tf_var "harness_endpoint" "$ENDPOINT" "string"
-                          update_tf_var "harness_api_key" "$TARGET_API_KEY" "secret"
+                          update_tf_var "harness_api_key" "$TARGET_API_KEY" "string"
                           update_tf_var "harness_org_id" "$ORG_ID" "string"
                           update_tf_var "harness_project_id" "$PROJECT_ID" "string"
                           update_tf_var "create_harness_org" "$CREATE_HARNESS_ORG" "string"
@@ -1342,7 +1342,7 @@ pipeline:
                           "harness_api_key": {
                             "key": "harness_api_key",
                             "value": "<+pipeline.variables.target_api_key>",
-                            "value_type": "secret"
+                            "value_type": "string"
                           },
                           "harness_api_key_email": {
                             "key": "harness_api_key_email",
@@ -1507,7 +1507,7 @@ pipeline:
                           "harness_api_key": {
                             "key": "harness_api_key",
                             "value": "<+pipeline.variables.target_api_key>",
-                            "value_type": "secret"
+                            "value_type": "string"
                           },
                           "harness_org_id": {
                             "key": "harness_org_id",
