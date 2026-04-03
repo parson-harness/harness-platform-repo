@@ -46,6 +46,12 @@ resource "harness_platform_triggers" "cd_webhook_trigger" {
             - name: image_tag
               type: String
               value: <+trigger.payload.image_tag>
+            - name: test_pass_rate
+              type: String
+              value: <+trigger.payload.test_pass_rate>
+            - name: change_blast_radius
+              type: String
+              value: low
   TRIGGER_EOT
 }
 
@@ -91,6 +97,12 @@ resource "harness_platform_triggers" "asg_cd_webhook_trigger" {
             - name: ami_name
               type: String
               value: <+trigger.payload.ami_name>
+            - name: test_pass_rate
+              type: String
+              value: <+trigger.payload.test_pass_rate>
+            - name: change_blast_radius
+              type: String
+              value: medium
   TRIGGER_EOT
 }
 

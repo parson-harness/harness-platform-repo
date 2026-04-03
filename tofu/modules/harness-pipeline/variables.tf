@@ -216,6 +216,30 @@ variable "har_upstream_proxy_ref" {
   default     = ""
 }
 
+variable "pipeline_tags" {
+  description = "Tags to apply to pipelines"
+  type        = list(string)
+  default     = []
+}
+
+variable "enable_change_governance" {
+  description = "Enable policy-driven governance gates in generated CD pipelines"
+  type        = bool
+  default     = true
+}
+
+variable "change_governance_policy_set" {
+  description = "Custom policy set identifier used for change governance policy steps"
+  type        = string
+  default     = "change_risk_guardrails"
+}
+
+variable "change_governance_approver_group" {
+  description = "Harness user group used for manual approval when governance policies flag a change as high risk"
+  type        = string
+  default     = "_project_all_users"
+}
+
 ################################################################################
 # Trigger Variables
 ################################################################################

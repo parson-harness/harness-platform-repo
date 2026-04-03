@@ -279,6 +279,30 @@ resource "harness_platform_pipeline" "ci_build" {
                             echo "║           AUTO-DEPLOYING TO DEV (Canary Strategy)            ║"
                             echo "╚══════════════════════════════════════════════════════════════╝"
                             echo "Triggering deployment with image tag: $IMAGE_TAG"
+
+                            TEST_PASS_RATE=100
+                            if ls target/surefire-reports/*.xml >/dev/null 2>&1; then
+                              TOTAL_TESTS=0
+                              TOTAL_FAILURES=0
+                              TOTAL_ERRORS=0
+
+                              for REPORT in target/surefire-reports/*.xml; do
+                                TESTS=$(grep -o 'tests="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+                                FAILURES=$(grep -o 'failures="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+                                ERRORS=$(grep -o 'errors="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+
+                                TOTAL_TESTS=$((TOTAL_TESTS + $${TESTS:-0}))
+                                TOTAL_FAILURES=$((TOTAL_FAILURES + $${FAILURES:-0}))
+                                TOTAL_ERRORS=$((TOTAL_ERRORS + $${ERRORS:-0}))
+                              done
+
+                              if [ "$TOTAL_TESTS" -gt 0 ]; then
+                                PASSED_TESTS=$((TOTAL_TESTS - TOTAL_FAILURES - TOTAL_ERRORS))
+                                TEST_PASS_RATE=$((PASSED_TESTS * 100 / TOTAL_TESTS))
+                              fi
+                            fi
+
+                            echo "Computed test pass rate: $TEST_PASS_RATE%"
                             
                             # Get the webhook URL for the strategy pipeline trigger
                             WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.strategy_pipeline_id}&triggerIdentifier=auto_deploy_webhook"
@@ -286,7 +310,7 @@ resource "harness_platform_pipeline" "ci_build" {
                             # Trigger the CD pipeline (custom webhooks don't require API key auth)
                             response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
                               -H "Content-Type: application/json" \
-                              -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\"}")
+                              -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\", \"test_pass_rate\": \"$TEST_PASS_RATE\"}")
                             
                             http_code=$(echo "$response" | tail -n1)
                             body=$(echo "$response" | sed '$d')

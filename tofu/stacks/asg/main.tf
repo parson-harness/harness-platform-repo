@@ -370,7 +370,7 @@ module "harness_service_asg" {
   deployment_type = "Asg"
 
   # ASG artifact = Packer-built AMI
-  artifact_registry_type = "ecr"  # Uses AWS connector for AMI resolution
+  artifact_registry_type = "ecr" # Uses AWS connector for AMI resolution
   artifact_connector_ref = "${var.owner}_aws_reference_architecture"
   aws_region             = var.aws_region
   asg_ami_owner_tag      = var.owner
@@ -378,7 +378,7 @@ module "harness_service_asg" {
   # Startup script in repo
   asg_startup_script_path = "asg/user-data.sh"
   manifest_store_type     = var.use_harness_code ? "HarnessCode" : "Github"
-  git_connector_ref       = var.use_harness_code ? "" : (
+  git_connector_ref = var.use_harness_code ? "" : (
     var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   )
   git_repo_name          = var.use_harness_code ? "" : var.github_repo_name
@@ -430,9 +430,9 @@ module "harness_service_asg" {
 module "harness_environment_dev" {
   source = "../../modules/harness-environment"
 
-  environment_id          = "${var.owner}_dev"
-  environment_name        = "${title(var.owner)} Dev"
-  environment_description = "Development environment for ${var.owner}"
+  environment_id          = "${var.owner}_asg_dev"
+  environment_name        = "${title(var.owner)} ASG Dev"
+  environment_description = "Development environment for ${var.owner} ASG"
   org_id                  = local.resolved_org_id
   project_id              = local.resolved_project_id
   environment_type        = "PreProduction"
@@ -465,13 +465,13 @@ module "harness_environment_dev" {
 module "harness_pipelines_asg" {
   source = "../../modules/harness-pipeline"
 
-  org_id             = local.resolved_org_id
-  project_id         = local.resolved_project_id
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
 
   # Required by module but unused for ASG-only pipelines
   service_ref        = ""
-  environment_ref    = "${var.owner}_dev"
-  environment_name   = "Dev"
+  environment_ref    = "${var.owner}_asg_dev"
+  environment_name   = "ASG Dev"
   infrastructure_ref = ""
 
   # ASG strategy pipeline
@@ -498,18 +498,18 @@ module "harness_pipelines_asg" {
   create_ci_pipeline         = false
 
   # ASG CI pipeline: Gradle + CI Intelligence + security scans → Packer AMI build
-  create_asg_ci_pipeline      = var.create_asg_ci_pipeline && (var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != "")
-  asg_ci_pipeline_id          = "${var.owner}_asg_ci_build"
-  asg_ci_pipeline_name        = "${title(var.owner)} ASG CI Build"
-  asg_ci_pipeline_description = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning, and Packer AMI bake"
-  git_connector_ref           = var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
-  git_repo_name               = var.github_repo_name
-  use_harness_code            = var.use_harness_code
-  harness_code_repo_name      = var.use_harness_code ? "${var.owner}-demo-app" : ""
-  harness_account_id          = var.harness_account_id
-  harness_org_id              = local.resolved_org_id
-  harness_project_id          = local.resolved_project_id
-  harness_api_key             = var.harness_api_key
+  create_asg_ci_pipeline           = var.create_asg_ci_pipeline && (var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != "")
+  asg_ci_pipeline_id               = "${var.owner}_asg_ci_build"
+  asg_ci_pipeline_name             = "${title(var.owner)} ASG CI Build"
+  asg_ci_pipeline_description      = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning, and Packer AMI bake"
+  git_connector_ref                = var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+  git_repo_name                    = var.github_repo_name
+  use_harness_code                 = var.use_harness_code
+  harness_code_repo_name           = var.use_harness_code ? "${var.owner}-demo-app" : ""
+  harness_account_id               = var.harness_account_id
+  harness_org_id                   = local.resolved_org_id
+  harness_project_id               = local.resolved_project_id
+  harness_api_key                  = var.harness_api_key
   standard_ci_gradle_test_packages = var.standard_ci_gradle_test_packages
 
   asg_packer_owner          = var.owner

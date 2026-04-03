@@ -37,6 +37,7 @@ template:
                           "request_id": "<+stage.variables.change_request_id>",
                           "service": "<+stage.variables.service_name>",
                           "environment": "<+stage.variables.target_environment>",
+                          "environment_type": "<+stage.variables.environment_type>",
                           "deployment_strategy": "<+stage.variables.deployment_strategy>",
                           "blast_radius": "<+stage.variables.blast_radius>",
                           "freeze_window_active": <+stage.variables.change_freeze_active>,
@@ -164,7 +165,7 @@ template:
         type: String
         description: "Harness user group that can approve high-risk changes"
         required: true
-        value: <+input>.default(account.SalesEngineers)
+        value: <+input>.default(_project_all_users)
       - name: change_request_id
         type: String
         description: "Change record or ticket identifier"
@@ -180,6 +181,11 @@ template:
         description: "Target environment for the change"
         required: true
         value: <+input>.default(staging)
+      - name: environment_type
+        type: String
+        description: "Harness environment type for the target environment"
+        required: true
+        value: <+input>.default(PreProduction).allowedValues(PreProduction,Production)
       - name: deployment_strategy
         type: String
         description: "Deployment strategy used for the release"

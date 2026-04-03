@@ -550,7 +550,7 @@ resource "harness_platform_policy" "change_readiness_guardrails" {
     }
 
     deny[msg] {
-      lower(input.change.environment) == "prod"
+      lower(input.change.environment_type) == "production"
       input.change.requires_data_migration == true
       msg := "Production changes with data migration require manual CAB review."
     }
@@ -612,15 +612,19 @@ resource "harness_platform_policy" "change_risk_score" {
     }
 
     environment_score := 1 {
-      lower(input.change.environment) != "prod"
+      lower(input.change.environment_type) != "production"
     }
 
     environment_score := 3 {
-      lower(input.change.environment) == "prod"
+      lower(input.change.environment_type) == "production"
     }
 
     deployment_strategy_score := 1 {
       lower(input.change.deployment_strategy) == "canary"
+    }
+
+    deployment_strategy_score := 1 {
+      lower(input.change.deployment_strategy) == "blue-green"
     }
 
     deployment_strategy_score := 1 {

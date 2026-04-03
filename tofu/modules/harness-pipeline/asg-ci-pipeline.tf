@@ -352,11 +352,35 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                             AMI_NAME="$OUTPUT_AMI_NAME"
                             echo "Triggering ASG deployment with AMI name: $AMI_NAME"
 
+                            TEST_PASS_RATE=100
+                            if ls build/test-results/test/*.xml >/dev/null 2>&1; then
+                              TOTAL_TESTS=0
+                              TOTAL_FAILURES=0
+                              TOTAL_ERRORS=0
+
+                              for REPORT in build/test-results/test/*.xml; do
+                                TESTS=$(grep -o 'tests="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+                                FAILURES=$(grep -o 'failures="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+                                ERRORS=$(grep -o 'errors="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+
+                                TOTAL_TESTS=$((TOTAL_TESTS + $${TESTS:-0}))
+                                TOTAL_FAILURES=$((TOTAL_FAILURES + $${FAILURES:-0}))
+                                TOTAL_ERRORS=$((TOTAL_ERRORS + $${ERRORS:-0}))
+                              done
+
+                              if [ "$TOTAL_TESTS" -gt 0 ]; then
+                                PASSED_TESTS=$((TOTAL_TESTS - TOTAL_FAILURES - TOTAL_ERRORS))
+                                TEST_PASS_RATE=$((PASSED_TESTS * 100 / TOTAL_TESTS))
+                              fi
+                            fi
+
+                            echo "Computed test pass rate: $TEST_PASS_RATE%"
+
                             WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.asg_strategy_pipeline_id}&triggerIdentifier=asg_auto_deploy_webhook"
 
                             response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
                               -H "Content-Type: application/json" \
-                              -d "{\"ami_name\": \"$AMI_NAME\"}")
+                              -d "{\"ami_name\": \"$AMI_NAME\", \"test_pass_rate\": \"$TEST_PASS_RATE\"}")
 
                             http_code=$(echo "$response" | tail -n1)
                             body=$(echo "$response" | sed '$d')

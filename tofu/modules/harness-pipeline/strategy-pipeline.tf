@@ -7,6 +7,107 @@ locals {
   # Emits a delegateSelectors YAML block when delegate_selector is set.
   # Placed at the stage level to pin ALL steps (K8sDelete, deploy, shell) to the right delegate.
   strategy_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
+  strategy_change_governance_yaml = var.enable_change_governance ? chomp(<<-EOT
+                  - stepGroup:
+                      name: Change Governance
+                      identifier: change_governance
+                      steps:
+                        - step:
+                            type: ShellScript
+                            name: Assemble Change Context
+                            identifier: assemble_change_context
+                            timeout: 10m
+                            spec:
+                              shell: Bash
+                              executionTarget: {}
+                              source:
+                                type: Inline
+                                spec:
+                                  script: |
+                                    cat <<'EOF' > change_context.json
+                                    {
+                                      "pipeline": {
+                                        "identifier": "<+pipeline.identifier>",
+                                        "execution_id": "<+pipeline.executionId>",
+                                        "sequence_id": "<+pipeline.sequenceId>"
+                                      },
+                                      "change": {
+                                        "request_id": "<+pipeline.identifier>-<+pipeline.sequenceId>",
+                                        "service": "<+service.identifier>",
+                                        "environment": "<+env.identifier>",
+                                        "environment_type": "<+env.type>",
+                                        "deployment_strategy": "<+pipeline.variables.deployment_strategy>",
+                                        "blast_radius": "<+pipeline.variables.change_blast_radius>",
+                                        "freeze_window_active": <+pipeline.variables.change_freeze_active>,
+                                        "requires_data_migration": <+pipeline.variables.requires_data_migration>
+                                      },
+                                      "validation": {
+                                        "tests": {
+                                          "pass_rate": <+pipeline.variables.test_pass_rate>
+                                        },
+                                        "security": {
+                                          "critical_vulns": <+pipeline.variables.critical_vulnerabilities>,
+                                          "high_vulns": <+pipeline.variables.high_vulnerabilities>
+                                        },
+                                        "operations": {
+                                          "open_failures": <+pipeline.variables.open_change_failures>,
+                                          "rollback_ready": <+pipeline.variables.rollback_ready>
+                                        }
+                                      }
+                                    }
+                                    EOF
+
+                                    change_context="$(tr -d '\n' < change_context.json)"
+                                    export change_context
+                                    echo "$change_context"
+                              environmentVariables: []
+                              outputVariables:
+                                - name: change_context
+                                  type: String
+                                  value: change_context
+                        - step:
+                            type: Policy
+                            name: Evaluate Change Risk
+                            identifier: evaluate_change_risk
+                            timeout: 10m
+                            spec:
+                              policySets:
+                                - ${var.change_governance_policy_set}
+                              type: Custom
+                              policySpec:
+                                payload: <+execution.steps.change_governance.steps.assemble_change_context.output.outputVariables.change_context>
+                            failureStrategies:
+                              - onFailure:
+                                  errors:
+                                    - PolicyEvaluationFailure
+                                  action:
+                                    type: Ignore
+                        - step:
+                            type: HarnessApproval
+                            name: Governance Approval
+                            identifier: governance_approval
+                            timeout: 1d
+                            spec:
+                              approvalMessage: |
+                                Change governance policies flagged this deployment for manual approval.
+
+                                Service: <+service.identifier>
+                                Environment: <+env.identifier>
+                                Strategy: <+pipeline.variables.deployment_strategy>
+
+                                Review the deployment context and approve if the risk is acceptable.
+                              includePipelineExecutionHistory: true
+                              approvers:
+                                userGroups:
+                                  - ${var.change_governance_approver_group}
+                                minimumCount: 1
+                                disallowPipelineExecutor: false
+                              approverInputs: []
+                            when:
+                              stageStatus: All
+                              condition: <+execution.steps.change_governance.steps.evaluate_change_risk.output.status> == "error"
+    EOT
+  ) : ""
 }
 
 resource "harness_platform_pipeline" "k8s_strategy" {
@@ -40,6 +141,46 @@ resource "harness_platform_pipeline" "k8s_strategy" {
           description: Docker image tag to deploy
           required: true
           value: <+input>
+        - name: change_blast_radius
+          type: String
+          description: Expected blast radius for the deployment
+          required: false
+          value: <+input>.default(medium).allowedValues(low,medium,high)
+        - name: test_pass_rate
+          type: String
+          description: Aggregated automated test pass rate percentage from CI
+          required: false
+          value: <+input>.default(100)
+        - name: critical_vulnerabilities
+          type: String
+          description: Critical vulnerability count provided to change governance
+          required: false
+          value: <+input>.default(0)
+        - name: high_vulnerabilities
+          type: String
+          description: High vulnerability count provided to change governance
+          required: false
+          value: <+input>.default(0)
+        - name: open_change_failures
+          type: String
+          description: Number of unresolved release issues for the proposed change
+          required: false
+          value: <+input>.default(0)
+        - name: rollback_ready
+          type: String
+          description: Whether rollback readiness has been verified
+          required: false
+          value: <+input>.default(true).allowedValues(true,false)
+        - name: change_freeze_active
+          type: String
+          description: Whether a change freeze window is currently active
+          required: false
+          value: <+input>.default(false).allowedValues(true,false)
+        - name: requires_data_migration
+          type: String
+          description: Whether the deployment includes a database or data migration
+          required: false
+          value: <+input>.default(false).allowedValues(true,false)
       stages:
         - stage:
             name: Blue-Green Deployment
@@ -60,6 +201,7 @@ ${local.strategy_delegate_yaml}            spec:
                   - identifier: ${var.infrastructure_ref}
               execution:
                 steps:
+${local.strategy_change_governance_yaml}
                   - step:
                       type: ShellScript
                       name: Reset Strategy State
@@ -143,7 +285,7 @@ ${local.strategy_delegate_yaml}            spec:
                         includePipelineExecutionHistory: true
                         approvers:
                           userGroups:
-                            - _project_all_users
+                            - ${var.change_governance_approver_group}
                           minimumCount: 1
                           disallowPipelineExecutor: false
                   - step:
@@ -209,6 +351,7 @@ ${local.strategy_delegate_yaml}            spec:
                   - identifier: ${var.infrastructure_ref}
               execution:
                 steps:
+${local.strategy_change_governance_yaml}
                   - step:
                       type: ShellScript
                       name: Reset Strategy State
@@ -320,7 +463,7 @@ ${local.strategy_delegate_yaml}            spec:
                         includePipelineExecutionHistory: true
                         approvers:
                           userGroups:
-                            - _project_all_users
+                            - ${var.change_governance_approver_group}
                           minimumCount: 1
                           disallowPipelineExecutor: false
                   - step:
@@ -391,6 +534,7 @@ ${local.strategy_delegate_yaml}            spec:
                   - identifier: ${var.infrastructure_ref}
               execution:
                 steps:
+${local.strategy_change_governance_yaml}
                   - step:
                       type: ShellScript
                       name: Reset Strategy State
