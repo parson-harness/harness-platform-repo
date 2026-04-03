@@ -1202,7 +1202,7 @@ pipeline:
         type: Custom
         when:
           pipelineStatus: Success
-          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200" && (<+pipeline.variables.force_recreate> == "true" || <+pipeline.stages.create_workspace.spec.execution.steps.check_state_health.output.outputVariables.state_stale>.default("false") == "true")
+          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200" && (<+pipeline.variables.force_recreate> == "true" || <+pipeline.stages.create_workspace.spec.execution.steps.check_state_health.output.outputVariables.state_stale> == "true")
         spec:
           execution:
             steps:
@@ -1245,7 +1245,7 @@ pipeline:
         type: Custom
         when:
           pipelineStatus: Success
-          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200" && (<+pipeline.variables.force_recreate> == "true" || <+pipeline.stages.create_workspace.spec.execution.steps.check_state_health.output.outputVariables.state_stale>.default("false") == "true")
+          condition: <+pipeline.stages.create_workspace.spec.execution.steps.check_workspace_exists.output.outputVariables.workspace_exists> == "200" && (<+pipeline.variables.force_recreate> == "true" || <+pipeline.stages.create_workspace.spec.execution.steps.check_state_health.output.outputVariables.state_stale> == "true")
         spec:
           execution:
             steps:
