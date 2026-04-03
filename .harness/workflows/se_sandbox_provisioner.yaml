@@ -128,4 +128,5 @@ spec:
           sandbox_profile: ${{ parameters.sandbox_profile }}
           use_profile_defaults: "true"
           eks_cluster_name: ${{ parameters.eks_cluster_name }}
+          create_opa_policies: "false"
         apikey: ${{ parameters.token }}
