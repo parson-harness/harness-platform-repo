@@ -173,8 +173,9 @@ module "harness_pipelines" {
   harness_project_id     = local.resolved_project_id
   harness_api_key        = var.harness_api_key
 
-  delegate_selector = local.delegate_selector
-  pipeline_tags     = ["tofu-managed", var.owner, "eks"]
+  delegate_selector        = local.delegate_selector
+  enable_change_governance = false
+  pipeline_tags            = ["tofu-managed", var.owner, "eks"]
 
   # Standard CI Gradle pipeline (with security scanning and supply chain)
   # Include owner prefix for multi-sandbox support in same project
