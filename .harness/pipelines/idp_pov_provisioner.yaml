@@ -889,8 +889,18 @@ pipeline:
                           ACM_CERT_ARN="<+pipeline.variables.acm_cert_arn>"
                           SHARED_ALB_DNS_NAME="<+pipeline.variables.shared_alb_dns_name>"
 
+                          json_escape() {
+                            local value="$1"
+                            value=${value//\\/\\\\}
+                            value=${value//"/\\"}
+                            value=${value//$'\n'/\\n}
+                            value=${value//$'\r'/\\r}
+                            value=${value//$'\t'/\\t}
+                            printf '%s' "$value"
+                          }
+
                           build_payload() {
-                            python3 -c 'import json, sys; print(json.dumps({"value": sys.argv[1], "value_type": sys.argv[2]}))' "$1" "$2"
+                            printf '{"value":"%s","value_type":"%s"}' "$(json_escape "$1")" "$(json_escape "$2")"
                           }
 
                           update_tf_var() {

@@ -508,9 +508,3 @@ variable "delegate_selector" {
   type        = string
   default     = ""
 }
-
-variable "pipeline_tags" {
-  description = "Tags to apply to pipelines"
-  type        = list(string)
-  default     = []
-}
