@@ -17,7 +17,7 @@
 
 locals {
   asg_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
-  asg_change_governance_yaml = var.enable_change_governance ? chomp(<<-EOT
+  asg_change_governance_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
                   - stepGroup:
                       name: Change Governance
                       identifier: change_governance

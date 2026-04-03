@@ -14,7 +14,7 @@ terraform {
 
 locals {
   pipeline_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
-  pipeline_change_governance_dev_yaml = var.enable_change_governance ? chomp(<<-EOT
+  pipeline_change_governance_dev_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
                   - stepGroup:
                       name: Change Governance
                       identifier: change_governance
@@ -115,7 +115,7 @@ locals {
                               condition: <+execution.steps.change_governance.steps.evaluate_change_risk.output.status> == "error"
     EOT
   ) : ""
-  pipeline_change_governance_prod_yaml = var.enable_change_governance ? chomp(<<-EOT
+  pipeline_change_governance_prod_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
                   - stepGroup:
                       name: Change Governance
                       identifier: change_governance

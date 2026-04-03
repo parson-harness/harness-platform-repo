@@ -7,7 +7,7 @@ locals {
   # Emits a delegateSelectors YAML block when delegate_selector is set.
   # Placed at the stage level to pin ALL steps (K8sDelete, deploy, shell) to the right delegate.
   strategy_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
-  strategy_change_governance_yaml = var.enable_change_governance ? chomp(<<-EOT
+  strategy_change_governance_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
                   - stepGroup:
                       name: Change Governance
                       identifier: change_governance
@@ -106,6 +106,7 @@ locals {
                             when:
                               stageStatus: All
                               condition: <+execution.steps.change_governance.steps.evaluate_change_risk.output.status> == "error"
+
     EOT
   ) : ""
 }
