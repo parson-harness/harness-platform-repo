@@ -170,6 +170,14 @@ spec:
           enum:
             - "true"
             - "false"
+        create_opa_policies:
+          title: Create OPA Policies?
+          type: string
+          description: "Create Harness Governance policies for the EKS stack. Default false while smoke-testing the re-architecture against accounts that may not yet have policy permissions."
+          default: "false"
+          enum:
+            - "true"
+            - "false"
     
   steps:
     - id: trigger
@@ -191,4 +199,5 @@ spec:
           eks_cluster_name: ${{ parameters.eks_cluster_name }}
           source_github_repo: ${{ parameters.source_github_repo }}
           force_recreate: ${{ parameters.force_recreate }}
+          create_opa_policies: ${{ parameters.create_opa_policies }}
         apikey: ${{ parameters.token }}

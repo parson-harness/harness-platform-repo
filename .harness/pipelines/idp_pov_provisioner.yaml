@@ -128,6 +128,11 @@ pipeline:
       description: Advanced override when use_profile_defaults is false. Create the recommended Gradle CI pipeline with intelligence and security features.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
+    - name: create_opa_policies
+      type: String
+      description: Create Harness OPA policies for the EKS stack. Default false for re-architecture smoke testing when target account permissions are still being validated.
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
     - name: create_asg_strategy_pipeline
       type: String
       description: Advanced override when use_profile_defaults is false. Create the ASG strategy deployment pipeline.
@@ -440,6 +445,11 @@ pipeline:
                           "create_standard_ci_gradle": {
                             "key": "create_standard_ci_gradle",
                             "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>",
+                            "value_type": "string"
+                          },
+                          "create_opa_policies": {
+                            "key": "create_opa_policies",
+                            "value": "<+pipeline.variables.create_opa_policies>",
                             "value_type": "string"
                           },
                           "acm_cert_arn": {
@@ -886,6 +896,7 @@ pipeline:
                           CREATE_STANDARD_CI_GRADLE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>"
                           CREATE_ASG_STRATEGY_PIPELINE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>"
                           CREATE_ASG_CI_PIPELINE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>"
+                          CREATE_OPA_POLICIES="<+pipeline.variables.create_opa_policies>"
                           ACM_CERT_ARN="<+pipeline.variables.acm_cert_arn>"
                           SHARED_ALB_DNS_NAME="<+pipeline.variables.shared_alb_dns_name>"
 
@@ -968,6 +979,7 @@ pipeline:
                             update_tf_var "create_strategy_pipeline" "$CREATE_STRATEGY_PIPELINE" "string"
                             update_tf_var "create_ci_pipeline" "$CREATE_CI_PIPELINE" "string"
                             update_tf_var "create_standard_ci_gradle" "$CREATE_STANDARD_CI_GRADLE" "string"
+                            update_tf_var "create_opa_policies" "$CREATE_OPA_POLICIES" "string"
                             update_tf_var "acm_cert_arn" "$ACM_CERT_ARN" "string"
                             update_tf_var "create_delegate" "true" "string"
                             update_tf_var "manage_dns" "true" "string"
@@ -1364,6 +1376,11 @@ pipeline:
                           "create_standard_ci_gradle": {
                             "key": "create_standard_ci_gradle",
                             "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>",
+                            "value_type": "string"
+                          },
+                          "create_opa_policies": {
+                            "key": "create_opa_policies",
+                            "value": "<+pipeline.variables.create_opa_policies>",
                             "value_type": "string"
                           },
                           "acm_cert_arn": {
