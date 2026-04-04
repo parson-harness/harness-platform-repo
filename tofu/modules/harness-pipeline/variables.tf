@@ -27,6 +27,12 @@ variable "environment_name" {
   type        = string
 }
 
+variable "environment_type" {
+  description = "Environment type for change governance context"
+  type        = string
+  default     = "PreProduction"
+}
+
 variable "infrastructure_ref" {
   description = "Reference to the infrastructure definition"
   type        = string

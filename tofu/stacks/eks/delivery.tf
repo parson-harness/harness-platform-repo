@@ -146,6 +146,7 @@ module "harness_pipelines" {
   service_ref        = local.service_id
   environment_ref    = local.dev_environment_id
   environment_name   = "Dev"
+  environment_type   = "PreProduction"
   infrastructure_ref = local.k8s_infra_id
 
   # Strategy Choice pipeline
