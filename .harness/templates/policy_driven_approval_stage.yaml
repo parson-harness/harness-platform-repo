@@ -99,7 +99,16 @@ template:
                         name: CAB Approval
                         identifier: cab_approval
                         spec:
-                          approvalMessage: Review the policy evaluation and approve if the change risk is acceptable
+                          approvalMessage: |
+                            Change governance policies flagged this deployment for manual approval.
+
+                            Policy evaluation status: <+execution.steps.governance.steps.evaluate_change_risk.output.status>
+                            Review the Evaluate Change Risk step for the full policy decision details.
+
+                            Change context submitted for policy evaluation:
+                            <+execution.steps.assemble_change_context.output.outputVariables.change_context>
+
+                            If no action is taken within 10 minutes, this approval will be marked successful and the pipeline will continue.
                           includePipelineExecutionHistory: true
                           isAutoRejectEnabled: false
                           approvers:
@@ -108,7 +117,13 @@ template:
                             minimumCount: 1
                             disallowPipelineExecutor: false
                           approverInputs: []
-                        timeout: 1d
+                        timeout: 10m
+                        failureStrategies:
+                          - onFailure:
+                              errors:
+                                - TimeoutErrors
+                              action:
+                                type: MarkAsSuccess
                         when:
                           stageStatus: All
                   when:

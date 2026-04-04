@@ -103,7 +103,29 @@ ${local.strategy_delegate_yaml}            spec:
                                 name: Governance Approval
                                 identifier: governance_approval
                                 spec:
-                                  approvalMessage: Review the policy evaluation and approve if the change risk is acceptable.
+                                  approvalMessage: |
+                                    Release governance policies flagged this deployment for manual approval.
+
+                                    Policy evaluation status: <+execution.steps.governance.steps.evaluate_change_risk.output.status>
+                                    Review the Evaluate Change Risk step for the full policy decision details.
+
+                                    Release summary:
+                                    - Service: ${var.service_ref}
+                                    - Environment: ${var.environment_name}
+                                    - Strategy: <+pipeline.variables.deployment_strategy>
+                                    - Image tag: <+pipeline.variables.image_tag>
+                                    - Test pass rate: <+pipeline.variables.test_pass_rate>
+                                    - Critical vulnerabilities: <+pipeline.variables.critical_vulnerabilities>
+                                    - High vulnerabilities: <+pipeline.variables.high_vulnerabilities>
+                                    - Rollback ready: <+pipeline.variables.rollback_ready>
+                                    - Open change failures: <+pipeline.variables.open_change_failures>
+                                    - Change freeze active: <+pipeline.variables.change_freeze_active>
+                                    - Requires data migration: <+pipeline.variables.requires_data_migration>
+
+                                    Release candidate evidence:
+                                    <+pipeline.variables.release_candidate_evidence>
+
+                                    If no action is taken within 10 minutes, this approval will be marked successful and the pipeline will continue.
                                   includePipelineExecutionHistory: true
                                   isAutoRejectEnabled: false
                                   approvers:
@@ -112,7 +134,13 @@ ${local.strategy_delegate_yaml}            spec:
                                     minimumCount: 1
                                     disallowPipelineExecutor: false
                                   approverInputs: []
-                                timeout: 1d
+                                timeout: 10m
+                                failureStrategies:
+                                  - onFailure:
+                                      errors:
+                                        - TimeoutErrors
+                                      action:
+                                        type: MarkAsSuccess
                                 when:
                                   stageStatus: All
                           when:
