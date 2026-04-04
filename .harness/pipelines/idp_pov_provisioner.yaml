@@ -130,9 +130,9 @@ pipeline:
       value: <+input>.default(true).allowedValues(true,false)
     - name: create_opa_policies
       type: String
-      description: Create Harness OPA policies for the EKS stack. Default false for re-architecture smoke testing when target account permissions are still being validated.
+      description: Create Harness OPA policies for the EKS stack. Default true so sandbox provisions include the broader governance policy sets unless you explicitly disable them.
       required: false
-      value: <+input>.default(false).allowedValues(true,false)
+      value: <+input>.default(true).allowedValues(true,false)
     - name: create_asg_strategy_pipeline
       type: String
       description: Advanced override when use_profile_defaults is false. Create the ASG strategy deployment pipeline.

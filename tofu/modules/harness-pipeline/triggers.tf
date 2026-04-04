@@ -70,6 +70,9 @@ resource "harness_platform_triggers" "cd_webhook_trigger" {
             - name: requires_data_migration
               type: String
               value: <+trigger.payload.requires_data_migration>
+            - name: release_candidate_evidence
+              type: String
+              value: <+trigger.payload.release_candidate_evidence>
   TRIGGER_EOT
 }
 

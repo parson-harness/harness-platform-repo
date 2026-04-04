@@ -58,7 +58,8 @@ ${local.strategy_delegate_yaml}            spec:
                                     "open_failures": <+pipeline.variables.open_change_failures>,
                                     "rollback_ready": <+pipeline.variables.rollback_ready>
                                   }
-                                }
+                                },
+                                "release_candidate": <+pipeline.variables.release_candidate_evidence>
                               }
                               EOF
 
@@ -227,6 +228,11 @@ resource "harness_platform_pipeline" "k8s_strategy" {
           description: Whether the deployment includes a database or data migration; provided by CI/webhook or entered manually for demo/manual runs
           required: false
           value: <+input>.default(false).allowedValues(true,false)
+        - name: release_candidate_evidence
+          type: String
+          description: JSON release-candidate evidence bundle; auto-populated from CI on webhook runs or entered manually for demo/manual runs
+          required: false
+          value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})
       stages:
 ${local.strategy_governance_stage_yaml}
         - stage:

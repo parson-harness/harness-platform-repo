@@ -333,6 +333,13 @@ resource "harness_platform_pipeline" "ci_build" {
                             echo "Using open change failures: $OPEN_CHANGE_FAILURES"
                             echo "Using change freeze active: $CHANGE_FREEZE_ACTIVE"
                             echo "Using requires data migration: $REQUIRES_DATA_MIGRATION"
+                            RELEASE_CANDIDATE_EVIDENCE=$(printf '{"artifact":{"image":"%s","tag":"%s","commit":"%s"},"build":{"pipeline_identifier":"%s","execution_id":"%s","sequence_id":"%s"},"attestations":{"sbom":"not_generated","slsa_provenance":"not_generated"}}' \
+                              "${var.har_image_name}" \
+                              "$IMAGE_TAG" \
+                              "<+codebase.commitSha>" \
+                              "<+pipeline.identifier>" \
+                              "<+pipeline.executionId>" \
+                              "<+pipeline.sequenceId>")
                             
                             # Get the webhook URL for the strategy pipeline trigger
                             WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.strategy_pipeline_id}&triggerIdentifier=auto_deploy_webhook"
@@ -340,7 +347,7 @@ resource "harness_platform_pipeline" "ci_build" {
                             # Trigger the CD pipeline (custom webhooks don't require API key auth)
                             response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
                               -H "Content-Type: application/json" \
-                              -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\", \"test_pass_rate\": \"$TEST_PASS_RATE\", \"critical_vulnerabilities\": \"0\", \"high_vulnerabilities\": \"0\", \"change_blast_radius\": \"$CHANGE_BLAST_RADIUS\", \"rollback_ready\": \"$ROLLBACK_READY\", \"open_change_failures\": \"$OPEN_CHANGE_FAILURES\", \"change_freeze_active\": \"$CHANGE_FREEZE_ACTIVE\", \"requires_data_migration\": \"$REQUIRES_DATA_MIGRATION\"}")
+                              -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\", \"test_pass_rate\": \"$TEST_PASS_RATE\", \"critical_vulnerabilities\": \"0\", \"high_vulnerabilities\": \"0\", \"change_blast_radius\": \"$CHANGE_BLAST_RADIUS\", \"rollback_ready\": \"$ROLLBACK_READY\", \"open_change_failures\": \"$OPEN_CHANGE_FAILURES\", \"change_freeze_active\": \"$CHANGE_FREEZE_ACTIVE\", \"requires_data_migration\": \"$REQUIRES_DATA_MIGRATION\", \"release_candidate_evidence\": $RELEASE_CANDIDATE_EVIDENCE}")
                             
                             http_code=$(echo "$response" | tail -n1)
                             body=$(echo "$response" | sed '$d')

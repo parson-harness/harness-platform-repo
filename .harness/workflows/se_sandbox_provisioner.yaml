@@ -117,8 +117,8 @@ spec:
         create_opa_policies:
           title: Create OPA Policies?
           type: string
-          description: "Create Harness Governance policies for the EKS stack. Default false while smoke-testing the re-architecture against accounts that may not yet have policy permissions."
-          default: "false"
+          description: "Create Harness Governance policies for the EKS stack. Default true so new sandboxes include the broader governance policy sets unless you explicitly disable them."
+          default: "true"
           enum:
             - "true"
             - "false"

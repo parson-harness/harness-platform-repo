@@ -521,12 +521,13 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                             echo "Using open change failures: $OPEN_CHANGE_FAILURES"
                             echo "Using change freeze active: $CHANGE_FREEZE_ACTIVE"
                             echo "Using requires data migration: $REQUIRES_DATA_MIGRATION"
+                            echo "Using release candidate evidence bundle from CI"
 
                             WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.strategy_pipeline_id}&triggerIdentifier=auto_deploy_webhook"
 
                             response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
                               -H "Content-Type: application/json" \
-                              -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\", \"test_pass_rate\": \"$TEST_PASS_RATE\", \"critical_vulnerabilities\": \"$CRITICAL_VULNERABILITIES\", \"high_vulnerabilities\": \"$HIGH_VULNERABILITIES\", \"change_blast_radius\": \"$CHANGE_BLAST_RADIUS\", \"rollback_ready\": \"$ROLLBACK_READY\", \"open_change_failures\": \"$OPEN_CHANGE_FAILURES\", \"change_freeze_active\": \"$CHANGE_FREEZE_ACTIVE\", \"requires_data_migration\": \"$REQUIRES_DATA_MIGRATION\"}")
+                              -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\", \"test_pass_rate\": \"$TEST_PASS_RATE\", \"critical_vulnerabilities\": \"$CRITICAL_VULNERABILITIES\", \"high_vulnerabilities\": \"$HIGH_VULNERABILITIES\", \"change_blast_radius\": \"$CHANGE_BLAST_RADIUS\", \"rollback_ready\": \"$ROLLBACK_READY\", \"open_change_failures\": \"$OPEN_CHANGE_FAILURES\", \"change_freeze_active\": \"$CHANGE_FREEZE_ACTIVE\", \"requires_data_migration\": \"$REQUIRES_DATA_MIGRATION\", \"release_candidate_evidence\": $RELEASE_CANDIDATE_EVIDENCE}")
 
                             http_code=$(echo "$response" | tail -n1)
                             body=$(echo "$response" | sed '$d')
@@ -553,6 +554,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                           OPEN_CHANGE_FAILURES: <+pipeline.variables.open_change_failures>
                           CHANGE_FREEZE_ACTIVE: <+pipeline.variables.change_freeze_active>
                           REQUIRES_DATA_MIGRATION: <+pipeline.variables.requires_data_migration>
+                          RELEASE_CANDIDATE_EVIDENCE: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>
                           AUTO_DEPLOY: <+pipeline.variables.auto_deploy>
                           HARNESS_ENDPOINT: <+pipeline.variables.harness_endpoint>
                           ACCOUNT_ID: <+account.identifier>
