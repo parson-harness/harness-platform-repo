@@ -9,7 +9,7 @@ locals {
   strategy_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
   strategy_governance_stage_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
         - stage:
-            name: Change Governance
+            name: Release Governance
             identifier: change_governance
             description: Policy-driven approval gate for deployment risk evaluation
             type: Custom
