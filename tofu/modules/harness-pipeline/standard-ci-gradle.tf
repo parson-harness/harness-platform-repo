@@ -169,26 +169,39 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                         shell: Sh
                         command: |
                           echo "=== GENERATING CODE COVERAGE REPORT ==="
-                          gradle jacocoTestReport
+                          gradle jacocoTestReport -x test --build-cache
+
+                          COVERAGE_FILE="build/reports/jacoco/test/jacocoTestReport.xml"
+                          if [ ! -f "$COVERAGE_FILE" ]; then
+                            echo "Coverage report not found at $COVERAGE_FILE"
+                            exit 1
+                          fi
+
+                          if [ "$COVERAGE_PROVIDER" = "github" ]; then
+                            COVERAGE_OWNER="$${COVERAGE_REPO_NAME%%/*}"
+                            COVERAGE_IDENTIFIER="$${COVERAGE_REPO_NAME##*/}"
+                          else
+                            COVERAGE_OWNER="$HARNESS_COVERAGE_OWNER"
+                            COVERAGE_IDENTIFIER="$COVERAGE_REPO_NAME"
+                          fi
+
                           echo ""
                           echo "=== COVERAGE SUMMARY ==="
-                          if [ -f build/reports/jacoco/test/jacocoTestReport.xml ]; then
-                            INSTRUCTION_COVERED=$(grep -o 'type="INSTRUCTION" missed="[0-9]*" covered="[0-9]*"' build/reports/jacoco/test/jacocoTestReport.xml | head -1 | grep -o 'covered="[0-9]*"' | grep -o '[0-9]*')
-                            INSTRUCTION_MISSED=$(grep -o 'type="INSTRUCTION" missed="[0-9]*" covered="[0-9]*"' build/reports/jacoco/test/jacocoTestReport.xml | head -1 | grep -o 'missed="[0-9]*"' | grep -o '[0-9]*')
-                            if [ -n "$INSTRUCTION_COVERED" ] && [ -n "$INSTRUCTION_MISSED" ]; then
-                              TOTAL=$((INSTRUCTION_COVERED + INSTRUCTION_MISSED))
-                              if [ $TOTAL -gt 0 ]; then
-                                COVERAGE=$((INSTRUCTION_COVERED * 100 / TOTAL))
-                                echo "Instruction Coverage: $${COVERAGE}%"
-                              fi
-                            fi
-                          fi
+                          hcli cov analyze --file "$COVERAGE_FILE"
+
+                          echo ""
+                          echo "=== UPLOADING COVERAGE TO HARNESS ==="
+                          hcli cov upload \
+                            --file="$COVERAGE_FILE" \
+                            --provider="$COVERAGE_PROVIDER" \
+                            --owner="$COVERAGE_OWNER" \
+                            --identifier="$COVERAGE_IDENTIFIER"
+
                           echo "Full report: build/reports/jacoco/test/html/index.html"
-                        reports:
-                          type: JUnit
-                          spec:
-                            paths:
-                              - build/reports/jacoco/test/jacocoTestReport.xml
+                        envVariables:
+                          COVERAGE_PROVIDER: ${var.use_harness_code ? "Harness" : "github"}
+                          COVERAGE_REPO_NAME: ${var.use_harness_code ? var.harness_code_repo_name : var.git_repo_name}
+                          HARNESS_COVERAGE_OWNER: ${var.harness_org_id}
                   - stepGroup:
                       name: SAST Scans
                       identifier: sast_scans
