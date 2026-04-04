@@ -124,8 +124,6 @@ ${local.strategy_delegate_yaml}            spec:
 
                                     Release candidate evidence:
                                     <+pipeline.variables.release_candidate_evidence>
-
-                                    If no action is taken within 10 minutes, this approval will be marked successful and the pipeline will continue.
                                   includePipelineExecutionHistory: true
                                   isAutoRejectEnabled: false
                                   approvers:
@@ -135,12 +133,6 @@ ${local.strategy_delegate_yaml}            spec:
                                     disallowPipelineExecutor: false
                                   approverInputs: []
                                 timeout: 10m
-                                failureStrategies:
-                                  - onFailure:
-                                      errors:
-                                        - TimeoutErrors
-                                      action:
-                                        type: MarkAsSuccess
                                 when:
                                   stageStatus: All
                           when:

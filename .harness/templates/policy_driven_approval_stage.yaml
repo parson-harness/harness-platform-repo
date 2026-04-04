@@ -107,8 +107,6 @@ template:
 
                             Change context submitted for policy evaluation:
                             <+execution.steps.assemble_change_context.output.outputVariables.change_context>
-
-                            If no action is taken within 10 minutes, this approval will be marked successful and the pipeline will continue.
                           includePipelineExecutionHistory: true
                           isAutoRejectEnabled: false
                           approvers:
@@ -118,12 +116,6 @@ template:
                             disallowPipelineExecutor: false
                           approverInputs: []
                         timeout: 10m
-                        failureStrategies:
-                          - onFailure:
-                              errors:
-                                - TimeoutErrors
-                              action:
-                                type: MarkAsSuccess
                         when:
                           stageStatus: All
                   when:
