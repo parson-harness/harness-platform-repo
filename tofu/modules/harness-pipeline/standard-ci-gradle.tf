@@ -239,15 +239,24 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                         optimize: true
                         registryRef: ${var.har_registry_ref}
                         labels:
+                          org.opencontainers.image.title: ${var.har_image_name}
+                          org.opencontainers.image.version: 1.0.<+pipeline.sequenceId>
                           org.opencontainers.image.revision: <+codebase.commitSha>
                           org.opencontainers.image.source: <+codebase.repoUrl>
                           org.opencontainers.image.created: <+pipeline.startTs>
                           io.harness.pipeline.id: <+pipeline.identifier>
+                          io.harness.pipeline.execution_id: <+pipeline.executionId>
                           io.harness.build.number: <+pipeline.sequenceId>
+                          io.harness.supply_chain.sbom: spdx-json
+                          io.harness.supply_chain.provenance: slsa
                         buildArgs:
                           JAR_PATH: build/libs/*.jar
                           BUILD_COMMIT_SHA: <+codebase.commitSha>
+                          BUILD_REPO_URL: <+codebase.repoUrl>
                           IMAGE_TAG: 1.0.<+pipeline.sequenceId>
+                          PIPELINE_EXECUTION_ID: <+pipeline.executionId>
+                          PIPELINE_ID: <+pipeline.identifier>
+                          BUILD_TIMESTAMP: <+pipeline.startTs>
                           BASE_IMAGE_REGISTRY: ${var.har_base_image_registry}
                       failureStrategies:
                         - onFailure:
@@ -401,6 +410,52 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                             value: HIGH_VULNERABILITIES
                   - step:
                       type: Run
+                      name: Assemble Release Candidate Evidence
+                      identifier: assemble_release_candidate_evidence
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: alpine:latest
+                        shell: Sh
+                        command: |
+                          IMAGE_REFERENCE="${var.har_image_name}:1.0.<+pipeline.sequenceId>"
+                          RELEASE_EVIDENCE_JSON=$(printf '{"artifact":{"image":"%s","tag":"%s","commit":"%s","repository":"%s"},"build":{"pipeline_identifier":"%s","execution_id":"%s","sequence_id":"%s"},"attestations":{"sbom":"spdx-json","slsa_provenance":"generated"},"governance_inputs":{"test_pass_rate":%s,"critical_vulnerabilities":%s,"high_vulnerabilities":%s,"change_blast_radius":"%s","rollback_ready":"%s","open_change_failures":"%s","change_freeze_active":"%s","requires_data_migration":"%s"}}' \
+                            "$IMAGE_REFERENCE" \
+                            "1.0.<+pipeline.sequenceId>" \
+                            "<+codebase.commitSha>" \
+                            "<+codebase.repoUrl>" \
+                            "<+pipeline.identifier>" \
+                            "<+pipeline.executionId>" \
+                            "<+pipeline.sequenceId>" \
+                            "$TEST_PASS_RATE" \
+                            "$CRITICAL_VULNERABILITIES" \
+                            "$HIGH_VULNERABILITIES" \
+                            "$CHANGE_BLAST_RADIUS" \
+                            "$ROLLBACK_READY" \
+                            "$OPEN_CHANGE_FAILURES" \
+                            "$CHANGE_FREEZE_ACTIVE" \
+                            "$REQUIRES_DATA_MIGRATION")
+
+                          export IMAGE_REFERENCE
+                          export RELEASE_EVIDENCE_JSON
+
+                          echo "Release candidate artifact: $IMAGE_REFERENCE"
+                          echo "$RELEASE_EVIDENCE_JSON"
+                        envVariables:
+                          TEST_PASS_RATE: <+execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>
+                          CRITICAL_VULNERABILITIES: <+execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>
+                          HIGH_VULNERABILITIES: <+execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>
+                          CHANGE_BLAST_RADIUS: <+pipeline.variables.change_blast_radius>
+                          ROLLBACK_READY: <+pipeline.variables.rollback_ready>
+                          OPEN_CHANGE_FAILURES: <+pipeline.variables.open_change_failures>
+                          CHANGE_FREEZE_ACTIVE: <+pipeline.variables.change_freeze_active>
+                          REQUIRES_DATA_MIGRATION: <+pipeline.variables.requires_data_migration>
+                        outputVariables:
+                          - name: IMAGE_REFERENCE
+                            value: IMAGE_REFERENCE
+                          - name: RELEASE_EVIDENCE_JSON
+                            value: RELEASE_EVIDENCE_JSON
+                  - step:
+                      type: Run
                       name: Build Summary
                       identifier: build_summary
                       spec:
@@ -432,6 +487,9 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                           echo "=== SUPPLY CHAIN SECURITY ==="
                           echo "- SBOM Generation: SPDX-JSON format"
                           echo "- SLSA Provenance: Build attestation"
+                          echo "- OCI Image Metadata: Commit, source, version, and Harness execution labels embedded in image"
+                          echo "- Release Candidate Evidence: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>"
+                          echo "- Evidence Bundle: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>"
                           echo ""
                           echo "=== GOVERNANCE INPUTS ==="
                           echo "- Test Pass Rate: <+execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>%"
