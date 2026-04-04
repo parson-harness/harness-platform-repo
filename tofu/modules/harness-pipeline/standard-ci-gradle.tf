@@ -38,6 +38,17 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
         harness-intelligence: enabled
         managed-by: provisioner
         security-scanning: enabled
+      variables:
+        - name: auto_deploy
+          type: String
+          description: Automatically trigger CD pipeline after successful build
+          required: false
+          value: <+input>.default(true).allowedValues(true,false)
+        - name: harness_endpoint
+          type: String
+          description: Harness API endpoint
+          required: false
+          value: <+input>.default(https://app.harness.io/gratis)
       properties:
         ci:
           codebase:
@@ -314,6 +325,57 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                                         type: Ignore
                   - step:
                       type: Run
+                      name: Prepare Governance Inputs
+                      identifier: prepare_governance_inputs
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: alpine:latest
+                        shell: Sh
+                        command: |
+                          TEST_PASS_RATE=100
+                          if ls build/test-results/test/*.xml >/dev/null 2>&1; then
+                            TOTAL_TESTS=0
+                            TOTAL_FAILURES=0
+                            TOTAL_ERRORS=0
+
+                            for REPORT in build/test-results/test/*.xml; do
+                              TESTS=$(grep -o 'tests="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+                              FAILURES=$(grep -o 'failures="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+                              ERRORS=$(grep -o 'errors="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+
+                              TOTAL_TESTS=$((TOTAL_TESTS + $${TESTS:-0}))
+                              TOTAL_FAILURES=$((TOTAL_FAILURES + $${FAILURES:-0}))
+                              TOTAL_ERRORS=$((TOTAL_ERRORS + $${ERRORS:-0}))
+                            done
+
+                            if [ "$TOTAL_TESTS" -gt 0 ]; then
+                              PASSED_TESTS=$((TOTAL_TESTS - TOTAL_FAILURES - TOTAL_ERRORS))
+                              TEST_PASS_RATE=$((PASSED_TESTS * 100 / TOTAL_TESTS))
+                            fi
+                          fi
+
+                          CRITICAL_VULNERABILITIES="$${TRIVY_CRITICAL:-0}"
+                          HIGH_VULNERABILITIES="$${TRIVY_HIGH:-0}"
+
+                          export TEST_PASS_RATE
+                          export CRITICAL_VULNERABILITIES
+                          export HIGH_VULNERABILITIES
+
+                          echo "Computed test pass rate: $TEST_PASS_RATE%"
+                          echo "Computed critical vulnerabilities: $CRITICAL_VULNERABILITIES"
+                          echo "Computed high vulnerabilities: $HIGH_VULNERABILITIES"
+                        envVariables:
+                          TRIVY_CRITICAL: <+pipeline.stages.build_test_scan_push.spec.execution.steps.container_scans.steps.aqua_trivy.output.outputVariables.CRITICAL>
+                          TRIVY_HIGH: <+pipeline.stages.build_test_scan_push.spec.execution.steps.container_scans.steps.aqua_trivy.output.outputVariables.HIGH>
+                        outputVariables:
+                          - name: TEST_PASS_RATE
+                            value: TEST_PASS_RATE
+                          - name: CRITICAL_VULNERABILITIES
+                            value: CRITICAL_VULNERABILITIES
+                          - name: HIGH_VULNERABILITIES
+                            value: HIGH_VULNERABILITIES
+                  - step:
+                      type: Run
                       name: Build Summary
                       identifier: build_summary
                       spec:
@@ -345,6 +407,67 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                           echo "=== SUPPLY CHAIN SECURITY ==="
                           echo "- SBOM Generation: SPDX-JSON format"
                           echo "- SLSA Provenance: Build attestation"
+                          echo ""
+                          echo "=== GOVERNANCE INPUTS ==="
+                          echo "- Test Pass Rate: <+execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>%"
+                          echo "- Critical Vulnerabilities: <+execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>"
+                          echo "- High Vulnerabilities: <+execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>"
+                          echo "- Auto-deploy: <+pipeline.variables.auto_deploy>"
+                  - step:
+                      type: Run
+                      name: Trigger CD Pipeline
+                      identifier: trigger_cd
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: curlimages/curl:8.7.1
+                        shell: Sh
+                        command: |
+                          if [ "$AUTO_DEPLOY" = "true" ]; then
+                            echo "=== AUTO-DEPLOYING TO DEV (Canary Strategy) ==="
+                            echo "Triggering deployment with image tag: $IMAGE_TAG"
+                            echo "Using test pass rate: $TEST_PASS_RATE%"
+                            echo "Using critical vulnerabilities: $CRITICAL_VULNERABILITIES"
+                            echo "Using high vulnerabilities: $HIGH_VULNERABILITIES"
+
+                            WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.strategy_pipeline_id}&triggerIdentifier=auto_deploy_webhook"
+
+                            response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
+                              -H "Content-Type: application/json" \
+                              -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\", \"test_pass_rate\": \"$TEST_PASS_RATE\", \"critical_vulnerabilities\": \"$CRITICAL_VULNERABILITIES\", \"high_vulnerabilities\": \"$HIGH_VULNERABILITIES\"}")
+
+                            http_code=$(echo "$response" | tail -n1)
+                            body=$(echo "$response" | sed '$d')
+
+                            echo "Response code: $http_code"
+                            echo "Response: $body"
+
+                            if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
+                              echo "CD pipeline triggered successfully!"
+                            else
+                              echo "CD pipeline trigger returned: $http_code"
+                              echo "Deployment can still be triggered manually."
+                            fi
+                          else
+                            echo "Auto-deploy is disabled. To deploy, run the strategy pipeline manually."
+                          fi
+                        envVariables:
+                          IMAGE_TAG: 1.0.<+pipeline.sequenceId>
+                          TEST_PASS_RATE: <+execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>
+                          CRITICAL_VULNERABILITIES: <+execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>
+                          HIGH_VULNERABILITIES: <+execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>
+                          AUTO_DEPLOY: <+pipeline.variables.auto_deploy>
+                          HARNESS_ENDPOINT: <+pipeline.variables.harness_endpoint>
+                          ACCOUNT_ID: <+account.identifier>
+                          ORG_ID: <+org.identifier>
+                          PROJECT_ID: <+project.identifier>
+                      when:
+                        stageStatus: Success
+                      failureStrategies:
+                        - onFailure:
+                            errors:
+                              - AllErrors
+                            action:
+                              type: MarkAsSuccess
             failureStrategies:
               - onFailure:
                   errors:

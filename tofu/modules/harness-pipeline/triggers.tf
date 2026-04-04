@@ -5,7 +5,7 @@
 ################################################################################
 
 resource "harness_platform_triggers" "cd_webhook_trigger" {
-  count       = var.create_ci_completion_trigger && var.create_ci_pipeline && var.create_strategy_pipeline ? 1 : 0
+  count       = var.create_ci_completion_trigger && (var.create_ci_pipeline || var.create_standard_ci_gradle) && var.create_strategy_pipeline ? 1 : 0
   identifier  = "auto_deploy_webhook"
   name        = "Auto-Deploy Webhook"
   org_id      = var.org_id
@@ -49,6 +49,12 @@ resource "harness_platform_triggers" "cd_webhook_trigger" {
             - name: test_pass_rate
               type: String
               value: <+trigger.payload.test_pass_rate>
+            - name: critical_vulnerabilities
+              type: String
+              value: <+trigger.payload.critical_vulnerabilities>
+            - name: high_vulnerabilities
+              type: String
+              value: <+trigger.payload.high_vulnerabilities>
             - name: change_blast_radius
               type: String
               value: low
