@@ -91,7 +91,7 @@ locals {
                                   errors:
                                     - PolicyEvaluationFailure
                                   action:
-                                    type: Ignore
+                                    type: MarkAsSuccess
                         - step:
                             type: HarnessApproval
                             name: Governance Approval
@@ -158,37 +158,37 @@ resource "harness_platform_pipeline" "asg_strategy" {
           value: <+input>.default(medium).allowedValues(low,medium,high)
         - name: test_pass_rate
           type: String
-          description: Aggregated automated test pass rate percentage from CI
+          description: Aggregated automated test pass rate percentage; auto-populated from CI on webhook runs or entered manually for demo/manual runs
           required: false
           value: <+input>.default(100)
         - name: critical_vulnerabilities
           type: String
-          description: Critical vulnerability count provided to change governance
+          description: Critical vulnerability count; auto-populated from CI on webhook runs or entered manually for demo/manual runs
           required: false
           value: <+input>.default(0)
         - name: high_vulnerabilities
           type: String
-          description: High vulnerability count provided to change governance
+          description: High vulnerability count; auto-populated from CI on webhook runs or entered manually for demo/manual runs
           required: false
           value: <+input>.default(0)
         - name: open_change_failures
           type: String
-          description: Number of unresolved release issues for the proposed change
+          description: Demo-time count of unresolved change failures for the proposed change; typically sourced from ITSM in production
           required: false
           value: <+input>.default(0)
         - name: rollback_ready
           type: String
-          description: Whether rollback readiness has been verified
+          description: Whether rollback readiness has been verified; currently runtime-controlled for demo/manual runs and a good candidate for future automation
           required: false
           value: <+input>.default(true).allowedValues(true,false)
         - name: change_freeze_active
           type: String
-          description: Whether a change freeze window is currently active
+          description: Whether a change freeze window is currently active; provided by CI/webhook or entered manually for demo/manual runs
           required: false
           value: <+input>.default(false).allowedValues(true,false)
         - name: requires_data_migration
           type: String
-          description: Whether the deployment includes a database or data migration
+          description: Whether the deployment includes a database or data migration; provided by CI/webhook or entered manually for demo/manual runs
           required: false
           value: <+input>.default(false).allowedValues(true,false)
       stages:

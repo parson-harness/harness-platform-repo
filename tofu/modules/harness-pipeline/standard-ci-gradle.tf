@@ -61,7 +61,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
           value: <+input>.default(true).allowedValues(true,false)
         - name: open_change_failures
           type: String
-          description: Number of unresolved release issues to pass into release governance
+          description: Demo-time count of unresolved change failures for release governance; typically sourced from ITSM in production
           required: false
           value: <+input>.default(0)
         - name: change_freeze_active

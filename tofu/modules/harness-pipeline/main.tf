@@ -88,7 +88,7 @@ locals {
                                   errors:
                                     - PolicyEvaluationFailure
                                   action:
-                                    type: Ignore
+                                    type: MarkAsSuccess
                         - step:
                             type: HarnessApproval
                             name: Governance Approval
@@ -189,7 +189,7 @@ locals {
                                   errors:
                                     - PolicyEvaluationFailure
                                   action:
-                                    type: Ignore
+                                    type: MarkAsSuccess
                         - step:
                             type: HarnessApproval
                             name: Governance Approval

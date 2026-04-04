@@ -88,7 +88,7 @@ template:
                           errors:
                             - PolicyEvaluationFailure
                           action:
-                            type: Ignore
+                            type: MarkAsSuccess
           - parallel:
               - stepGroup:
                   name: Manual Approval Required
@@ -213,7 +213,7 @@ template:
         value: <+input>.default(0)
       - name: open_change_failures
         type: String
-        description: "Number of unresolved release or operational issues"
+        description: "Demo-time count of unresolved change failures; typically sourced from ITSM in production"
         required: true
         value: <+input>.default(0)
       - name: rollback_ready
