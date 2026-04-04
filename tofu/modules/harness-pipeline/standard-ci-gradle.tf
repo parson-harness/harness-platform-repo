@@ -503,6 +503,57 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                           echo "- Auto-deploy: <+pipeline.variables.auto_deploy>"
                   - step:
                       type: Run
+                      name: Prepare Artifact Links
+                      identifier: prepare_artifact_links
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: alpine:latest
+                        shell: Sh
+                        command: |
+                          ARTIFACT_PATH="$HAR_IMAGE_NAME"
+                          case "$ARTIFACT_PATH" in
+                            */*) ARTIFACT_PATH="$ARTIFACT_PATH/+" ;;
+                          esac
+
+                          HAR_ARTIFACT_URL="$HARNESS_ENDPOINT/har/api/v1/v1/registry/$HAR_REGISTRY_REF/artifact/$ARTIFACT_PATH/redirect?accountIdentifier=$ACCOUNT_ID&version=$IMAGE_TAG"
+                          BUILD_EXECUTION_URL="<+pipeline.executionUrl>"
+                          RELEASE_EVIDENCE_STEP_URL="<+steps.assemble_release_candidate_evidence.executionUrl>"
+
+                          export HAR_ARTIFACT_URL
+                          export BUILD_EXECUTION_URL
+                          export RELEASE_EVIDENCE_STEP_URL
+
+                          echo "HAR artifact URL: $HAR_ARTIFACT_URL"
+                          echo "Build execution URL: $BUILD_EXECUTION_URL"
+                          echo "Release evidence step URL: $RELEASE_EVIDENCE_STEP_URL"
+                        envVariables:
+                          HAR_IMAGE_NAME: ${var.har_image_name}
+                          HAR_REGISTRY_REF: ${var.har_registry_ref}
+                          IMAGE_TAG: 1.0.<+pipeline.sequenceId>
+                          HARNESS_ENDPOINT: <+pipeline.variables.harness_endpoint>
+                          ACCOUNT_ID: <+account.identifier>
+                        outputVariables:
+                          - name: HAR_ARTIFACT_URL
+                            value: HAR_ARTIFACT_URL
+                          - name: BUILD_EXECUTION_URL
+                            value: BUILD_EXECUTION_URL
+                          - name: RELEASE_EVIDENCE_STEP_URL
+                            value: RELEASE_EVIDENCE_STEP_URL
+                  - step:
+                      type: Plugin
+                      name: Publish Artifact Links
+                      identifier: publish_artifact_links
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: plugins/artifact-metadata-publisher
+                        settings:
+                          artifact_file: artifact-links.txt
+                          file_urls:
+                            - HAR Artifact:::<+execution.steps.prepare_artifact_links.output.outputVariables.HAR_ARTIFACT_URL>
+                            - Build Execution:::<+execution.steps.prepare_artifact_links.output.outputVariables.BUILD_EXECUTION_URL>
+                            - Release Evidence Step:::<+execution.steps.prepare_artifact_links.output.outputVariables.RELEASE_EVIDENCE_STEP_URL>
+                  - step:
+                      type: Run
                       name: Trigger CD Pipeline
                       identifier: trigger_cd
                       spec:
