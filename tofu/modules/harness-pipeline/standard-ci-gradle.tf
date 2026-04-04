@@ -49,6 +49,31 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
           description: Harness API endpoint
           required: false
           value: <+input>.default(https://app.harness.io/gratis)
+        - name: change_blast_radius
+          type: String
+          description: Expected blast radius for the release governance evaluation
+          required: false
+          value: <+input>.default(low).allowedValues(low,medium,high)
+        - name: rollback_ready
+          type: String
+          description: Whether rollback readiness has been verified for release governance
+          required: false
+          value: <+input>.default(true).allowedValues(true,false)
+        - name: open_change_failures
+          type: String
+          description: Number of unresolved release issues to pass into release governance
+          required: false
+          value: <+input>.default(0)
+        - name: change_freeze_active
+          type: String
+          description: Whether a release freeze is active for this deployment
+          required: false
+          value: <+input>.default(false).allowedValues(true,false)
+        - name: requires_data_migration
+          type: String
+          description: Whether the release includes a database or data migration
+          required: false
+          value: <+input>.default(false).allowedValues(true,false)
       properties:
         ci:
           codebase:
@@ -412,6 +437,11 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                           echo "- Test Pass Rate: <+execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>%"
                           echo "- Critical Vulnerabilities: <+execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>"
                           echo "- High Vulnerabilities: <+execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>"
+                          echo "- Blast Radius: <+pipeline.variables.change_blast_radius>"
+                          echo "- Rollback Ready: <+pipeline.variables.rollback_ready>"
+                          echo "- Open Change Failures: <+pipeline.variables.open_change_failures>"
+                          echo "- Change Freeze Active: <+pipeline.variables.change_freeze_active>"
+                          echo "- Requires Data Migration: <+pipeline.variables.requires_data_migration>"
                           echo "- Auto-deploy: <+pipeline.variables.auto_deploy>"
                   - step:
                       type: Run
@@ -428,12 +458,17 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                             echo "Using test pass rate: $TEST_PASS_RATE%"
                             echo "Using critical vulnerabilities: $CRITICAL_VULNERABILITIES"
                             echo "Using high vulnerabilities: $HIGH_VULNERABILITIES"
+                            echo "Using blast radius: $CHANGE_BLAST_RADIUS"
+                            echo "Using rollback ready: $ROLLBACK_READY"
+                            echo "Using open change failures: $OPEN_CHANGE_FAILURES"
+                            echo "Using change freeze active: $CHANGE_FREEZE_ACTIVE"
+                            echo "Using requires data migration: $REQUIRES_DATA_MIGRATION"
 
                             WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=${var.strategy_pipeline_id}&triggerIdentifier=auto_deploy_webhook"
 
                             response=$(curl -s -w "\n%%{http_code}" -X POST "$WEBHOOK_URL" \
                               -H "Content-Type: application/json" \
-                              -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\", \"test_pass_rate\": \"$TEST_PASS_RATE\", \"critical_vulnerabilities\": \"$CRITICAL_VULNERABILITIES\", \"high_vulnerabilities\": \"$HIGH_VULNERABILITIES\"}")
+                              -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\", \"test_pass_rate\": \"$TEST_PASS_RATE\", \"critical_vulnerabilities\": \"$CRITICAL_VULNERABILITIES\", \"high_vulnerabilities\": \"$HIGH_VULNERABILITIES\", \"change_blast_radius\": \"$CHANGE_BLAST_RADIUS\", \"rollback_ready\": \"$ROLLBACK_READY\", \"open_change_failures\": \"$OPEN_CHANGE_FAILURES\", \"change_freeze_active\": \"$CHANGE_FREEZE_ACTIVE\", \"requires_data_migration\": \"$REQUIRES_DATA_MIGRATION\"}")
 
                             http_code=$(echo "$response" | tail -n1)
                             body=$(echo "$response" | sed '$d')
@@ -455,6 +490,11 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                           TEST_PASS_RATE: <+execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>
                           CRITICAL_VULNERABILITIES: <+execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>
                           HIGH_VULNERABILITIES: <+execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>
+                          CHANGE_BLAST_RADIUS: <+pipeline.variables.change_blast_radius>
+                          ROLLBACK_READY: <+pipeline.variables.rollback_ready>
+                          OPEN_CHANGE_FAILURES: <+pipeline.variables.open_change_failures>
+                          CHANGE_FREEZE_ACTIVE: <+pipeline.variables.change_freeze_active>
+                          REQUIRES_DATA_MIGRATION: <+pipeline.variables.requires_data_migration>
                           AUTO_DEPLOY: <+pipeline.variables.auto_deploy>
                           HARNESS_ENDPOINT: <+pipeline.variables.harness_endpoint>
                           ACCOUNT_ID: <+account.identifier>
