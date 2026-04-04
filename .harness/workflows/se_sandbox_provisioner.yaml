@@ -111,7 +111,18 @@ spec:
           type: string
           description: "Name of the shared EKS cluster used when deployment_target is eks"
           default: "harness-eks-parson"
-    
+
+    - title: Advanced Options
+      properties:
+        create_opa_policies:
+          title: Create OPA Policies?
+          type: string
+          description: "Create Harness Governance policies for the EKS stack. Default false while smoke-testing the re-architecture against accounts that may not yet have policy permissions."
+          default: "false"
+          enum:
+            - "true"
+            - "false"
+
   steps:
     - id: trigger
       name: Provisioning SE Sandbox
@@ -128,5 +139,5 @@ spec:
           sandbox_profile: ${{ parameters.sandbox_profile }}
           use_profile_defaults: "true"
           eks_cluster_name: ${{ parameters.eks_cluster_name }}
-          create_opa_policies: "false"
+          create_opa_policies: ${{ parameters.create_opa_policies }}
         apikey: ${{ parameters.token }}
