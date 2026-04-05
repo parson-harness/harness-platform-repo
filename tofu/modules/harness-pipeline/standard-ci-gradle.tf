@@ -165,13 +165,21 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                         shell: Sh
                         command: |
                           echo "=== GENERATING CODE COVERAGE REPORT ==="
-                          gradle cleanTest test jacocoTestReport --build-cache
+                          gradle clean test jacocoTestReport --no-build-cache --rerun-tasks
 
                           COVERAGE_FILE="build/reports/jacoco/test/jacocoTestReport.xml"
-                          if [ ! -f "$COVERAGE_FILE" ]; then
+                          if [ ! -s "$COVERAGE_FILE" ]; then
                             echo "Coverage report not found at $COVERAGE_FILE"
                             exit 1
                           fi
+
+                          echo ""
+                          echo "=== COVERAGE FILE DETAILS ==="
+                          pwd
+                          ls -lah build/reports/jacoco/test || true
+                          find build/reports -maxdepth 4 -type f | sort || true
+                          wc -c "$COVERAGE_FILE"
+                          sed -n '1,40p' "$COVERAGE_FILE"
 
                           if [ "$COVERAGE_PROVIDER" = "github" ]; then
                             COVERAGE_OWNER="$${COVERAGE_REPO_NAME%%/*}"
@@ -182,12 +190,8 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                           fi
 
                           echo ""
-                          echo "=== COVERAGE SUMMARY ==="
-                          hcli cov analyze --file "$COVERAGE_FILE"
-
-                          echo ""
                           echo "=== UPLOADING COVERAGE TO HARNESS ==="
-                          hcli cov upload \
+                          hcli --verbose cov upload \
                             --file="$COVERAGE_FILE" \
                             --provider="$COVERAGE_PROVIDER" \
                             --owner="$COVERAGE_OWNER" \
