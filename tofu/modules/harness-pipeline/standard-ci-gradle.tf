@@ -162,7 +162,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                         shell: Sh
                         command: |
                           echo "=== GENERATING CODE COVERAGE REPORT ==="
-                          gradle jacocoTestReport -x test --build-cache
+                          gradle cleanTest test jacocoTestReport --build-cache
 
                           COVERAGE_FILE="build/reports/jacoco/test/jacocoTestReport.xml"
                           if [ ! -f "$COVERAGE_FILE" ]; then
