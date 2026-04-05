@@ -37,8 +37,14 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    if (System.getProperty('HARNESS_JAVA_AGENT')) {
+        jvmArgs += [System.getProperty('HARNESS_JAVA_AGENT')]
+    }
     // Enable parallel test execution for faster builds
     maxParallelForks = Runtime.runtime.availableProcessors().intdiv(2) ?: 1
+    filter {
+        setFailOnNoMatchingTests(false)
+    }
     
     // JUnit XML reports for Harness Test Intelligence
     reports {

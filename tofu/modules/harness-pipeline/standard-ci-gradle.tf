@@ -128,24 +128,17 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                       steps:
                         - parallel:
                             - step:
-                                type: RunTests
+                                type: Test
                                 name: Test Intelligence
                                 identifier: test_intelligence
                                 spec:
+                                  command: gradle test --build-cache
+                                  shell: Sh
                                   connectorRef: account.harnessImage
                                   image: gradle:8.5-jdk17
-                                  language: Java
-                                  buildTool: Gradle
-                                  args: test --build-cache
-                                  packages: ${var.standard_ci_gradle_test_packages}
-                                  runOnlySelectedTests: true
-                                  enableTestSplitting: true
-                                  testSplitStrategy: ClassTiming
+                                  intelligenceMode: true
                                   reports:
-                                    type: JUnit
-                                    spec:
-                                      paths:
-                                        - build/test-results/test/*.xml
+                                    - build/test-results/test/*.xml
                             - step:
                                 type: Run
                                 name: Build Intelligence
