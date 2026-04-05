@@ -137,8 +137,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                                   connectorRef: account.harnessImage
                                   image: gradle:8.5-jdk17
                                   intelligenceMode: true
-                                  reports:
-                                    - build/test-results/test/*.xml
+                                  reports: build/test-results/test/*.xml
                             - step:
                                 type: Run
                                 name: Build Intelligence
