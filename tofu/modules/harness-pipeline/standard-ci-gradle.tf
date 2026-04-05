@@ -147,7 +147,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                                 name: Build Intelligence
                                 identifier: build_intelligence
                                 spec:
-                                  connectorRef: account.harnessImage
+                                  registryRef: ${var.har_registry_ref}
                                   image: gradle:8.5-jdk17
                                   shell: Sh
                                   command: |
@@ -160,7 +160,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                       name: Code Coverage
                       identifier: code_coverage
                       spec:
-                        connectorRef: account.harnessImage
+                        registryRef: ${var.har_registry_ref}
                         image: gradle:8.5-jdk17
                         shell: Sh
                         command: |
@@ -173,12 +173,20 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                             exit 1
                           fi
 
+                          ABS_COVERAGE_FILE="$$(pwd)/$COVERAGE_FILE"
+                          mkdir -p coverage
+                          cp "$COVERAGE_FILE" coverage/jacocoTestReport.xml
+                          UPLOAD_COVERAGE_FILE="$$(pwd)/coverage/jacocoTestReport.xml"
+
                           echo ""
                           echo "=== COVERAGE FILE DETAILS ==="
                           pwd
                           ls -lah build/reports/jacoco/test || true
+                          ls -lah coverage || true
                           find build/reports -maxdepth 4 -type f | sort || true
                           wc -c "$COVERAGE_FILE"
+                          echo "Source coverage file: $ABS_COVERAGE_FILE"
+                          echo "Upload coverage file: $UPLOAD_COVERAGE_FILE"
                           sed -n '1,40p' "$COVERAGE_FILE"
 
                           if [ "$COVERAGE_PROVIDER" = "github" ]; then
@@ -190,18 +198,31 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                           fi
 
                           echo ""
+                          echo "=== BUNDLED HCLI DETAILS ==="
+                          hcli --version || hcli --help | sed -n '1,20p' || true
+
+                          HCLI_BIN="/tmp/hcli-v0.7"
+                          curl -fsSL -o "$HCLI_BIN" "https://storage.googleapis.com/harness-ti/hcli/v0.7/hcli-linux-amd64"
+                          chmod +x "$HCLI_BIN"
+
+                          echo ""
+                          echo "=== DOWNLOADED HCLI DETAILS ==="
+                          "$HCLI_BIN" --version || "$HCLI_BIN" --help | sed -n '1,20p'
+
+                          echo ""
                           echo "=== UPLOADING COVERAGE TO HARNESS ==="
-                          hcli --verbose cov upload \
-                            --file="$COVERAGE_FILE" \
-                            --provider="$COVERAGE_PROVIDER" \
-                            --owner="$COVERAGE_OWNER" \
-                            --identifier="$COVERAGE_IDENTIFIER"
+                          "$HCLI_BIN" --verbose cov upload \
+                            --file "$UPLOAD_COVERAGE_FILE" \
+                            --provider "$COVERAGE_PROVIDER" \
+                            --owner "$COVERAGE_OWNER" \
+                            --identifier "$COVERAGE_IDENTIFIER"
 
                           echo "Full report: build/reports/jacoco/test/html/index.html"
                         envVariables:
                           COVERAGE_PROVIDER: ${var.use_harness_code ? "Harness" : "github"}
                           COVERAGE_REPO_NAME: ${var.use_harness_code ? var.harness_code_repo_name : var.git_repo_name}
                           HARNESS_COVERAGE_OWNER: ${var.harness_org_id}
+                          CI_ENABLE_HCLI_FOR_TESTS: "true"
                   - stepGroup:
                       name: SAST Scans
                       identifier: sast_scans
