@@ -173,10 +173,10 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                             exit 1
                           fi
 
-                          ABS_COVERAGE_FILE="$$(pwd)/$COVERAGE_FILE"
+                          ABS_COVERAGE_FILE="$(pwd)/$COVERAGE_FILE"
                           mkdir -p coverage
                           cp "$COVERAGE_FILE" coverage/jacocoTestReport.xml
-                          UPLOAD_COVERAGE_FILE="$$(pwd)/coverage/jacocoTestReport.xml"
+                          UPLOAD_COVERAGE_FILE="$(pwd)/coverage/jacocoTestReport.xml"
 
                           echo ""
                           echo "=== COVERAGE FILE DETAILS ==="
