@@ -176,13 +176,16 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                           ABS_COVERAGE_FILE="$(pwd)/$COVERAGE_FILE"
                           mkdir -p coverage
                           cp "$COVERAGE_FILE" coverage/jacocoTestReport.xml
-                          UPLOAD_COVERAGE_FILE="$(pwd)/coverage/jacocoTestReport.xml"
+                          mkdir -p jacoco
+                          cp "$COVERAGE_FILE" jacoco/coverage.xml
+                          UPLOAD_COVERAGE_FILE="$(pwd)/jacoco/coverage.xml"
 
                           echo ""
                           echo "=== COVERAGE FILE DETAILS ==="
                           pwd
                           ls -lah build/reports/jacoco/test || true
                           ls -lah coverage || true
+                          ls -lah jacoco || true
                           find build/reports -maxdepth 4 -type f | sort || true
                           wc -c "$COVERAGE_FILE"
                           echo "Source coverage file: $ABS_COVERAGE_FILE"
@@ -199,15 +202,8 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
 
                           echo ""
                           echo "=== BUNDLED HCLI DETAILS ==="
-                          hcli --version || hcli --help | sed -n '1,20p' || true
-
-                          HCLI_BIN="/tmp/hcli-v0.7"
-                          curl -fsSL -o "$HCLI_BIN" "https://storage.googleapis.com/harness-ti/hcli/v0.7/hcli-linux-amd64"
-                          chmod +x "$HCLI_BIN"
-
-                          echo ""
-                          echo "=== DOWNLOADED HCLI DETAILS ==="
-                          "$HCLI_BIN" --version || "$HCLI_BIN" --help | sed -n '1,20p'
+                          HCLI_BIN="hcli"
+                          "$HCLI_BIN" --version || "$HCLI_BIN" --help | sed -n '1,20p' || true
 
                           echo ""
                           echo "=== UPLOADING COVERAGE TO HARNESS ==="
@@ -215,7 +211,8 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
                             --file "$UPLOAD_COVERAGE_FILE" \
                             --provider "$COVERAGE_PROVIDER" \
                             --owner "$COVERAGE_OWNER" \
-                            --identifier "$COVERAGE_IDENTIFIER"
+                            --identifier "$COVERAGE_IDENTIFIER" \
+                            -- sh -c "test -s '$UPLOAD_COVERAGE_FILE'"
 
                           echo "Full report: build/reports/jacoco/test/html/index.html"
                         envVariables:
