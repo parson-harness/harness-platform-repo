@@ -67,7 +67,7 @@ resource "terraform_data" "adopt_existing_project_governance" {
         status_code=$(awk 'toupper($1) ~ /^HTTP\// { code = $2 } END { print code }' "$headers_file")
 
         if [ "$status_code" != "200" ] && [ "$status_code" != "204" ] && [ "$status_code" != "404" ]; then
-          echo "Failed to delete ${identifier} (HTTP ${status_code})"
+          echo "Failed to delete $${identifier} (HTTP $${status_code})"
           cat "$response_file"
           rm -f "$headers_file"
           rm -f "$response_file"
@@ -79,11 +79,11 @@ resource "terraform_data" "adopt_existing_project_governance" {
       }
 
       for policy_set in ci_pipeline_standards ci_pipeline_standards_on_run security_standards security_standards_on_run build_quality_gates change_risk_guardrails; do
-        api_delete "$policy_set" "${var.harness_endpoint}/pm/api/v1/policysets/${policy_set}?accountIdentifier=${var.harness_account_id}&orgIdentifier=${local.resolved_org_id}&projectIdentifier=${local.resolved_project_id}"
+        api_delete "$policy_set" "${var.harness_endpoint}/pm/api/v1/policysets/$${policy_set}?accountIdentifier=${var.harness_account_id}&orgIdentifier=${local.resolved_org_id}&projectIdentifier=${local.resolved_project_id}"
       done
 
       for policy in require_tests_in_ci require_cache_intelligence require_harness_cloud require_docker_layer_caching no_hardcoded_secrets recommend_artifact_scanning require_test_reports require_harness_scanners require_pipeline_tags change_readiness_guardrails change_validation_quality change_risk_score; do
-        api_delete "$policy" "${var.harness_endpoint}/pm/api/v1/policies/${policy}?accountIdentifier=${var.harness_account_id}&orgIdentifier=${local.resolved_org_id}&projectIdentifier=${local.resolved_project_id}"
+        api_delete "$policy" "${var.harness_endpoint}/pm/api/v1/policies/$${policy}?accountIdentifier=${var.harness_account_id}&orgIdentifier=${local.resolved_org_id}&projectIdentifier=${local.resolved_project_id}"
       done
     EOT
   }
