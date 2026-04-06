@@ -59,10 +59,10 @@ pipeline:
       required: true
       value: acct-automation-svc-acct
     - name: target_api_key
-      type: String
+      type: Secret
       description: API Key for target Harness account (where resources are provisioned). Defaults to provisioner SAT for same-account use.
       required: false
-      value: <+input>.default(<+pipeline.variables.provisioner_api_key>)
+      value: acct-automation-svc-acct
     - name: target_api_key_email
       type: String
       description: Email associated with the target account API key. Defaults to service account email.
@@ -487,8 +487,6 @@ pipeline:
                           ENDPOINT="<+pipeline.variables.harness_endpoint>"
                           ORG_ID="<+pipeline.variables.harness_org_id>"
                           PROJECT_ID="<+pipeline.variables.harness_project_id>"
-                          PROVISIONER_API_KEY="<+pipeline.variables.provisioner_api_key>"
-                          TARGET_API_KEY="<+pipeline.variables.target_api_key>"
 
                           json_escape() {
                             local value="$1"
@@ -558,7 +556,13 @@ pipeline:
                           update_tf_var "policy_scope_tag" "managed-by:provisioner" "string"
 
                           echo "Governance workspace variables reconciled for ${WORKSPACE_ID}"
-                    environmentVariables: []
+                    environmentVariables:
+                      - name: PROVISIONER_API_KEY
+                        type: Secret
+                        value: <+pipeline.variables.provisioner_api_key>
+                      - name: TARGET_API_KEY
+                        type: Secret
+                        value: <+pipeline.variables.target_api_key>
                     outputVariables: []
                   timeout: 5m
                   when:
@@ -1134,8 +1138,6 @@ pipeline:
                           ENDPOINT="<+pipeline.variables.harness_endpoint>"
                           ORG_ID="<+pipeline.variables.harness_org_id>"
                           PROJECT_ID="<+pipeline.variables.harness_project_id>"
-                          PROVISIONER_API_KEY="<+pipeline.variables.provisioner_api_key>"
-                          TARGET_API_KEY="<+pipeline.variables.target_api_key>"
                           TARGET_API_KEY_EMAIL="<+pipeline.variables.target_api_key_email>"
                           DEPLOYMENT_TARGET="<+pipeline.variables.deployment_target>"
                           SOURCE_GITHUB_REPO="<+pipeline.variables.source_github_repo>"
@@ -1289,7 +1291,13 @@ pipeline:
                           fi
 
                           echo "Workspace variables reconciled for ${WORKSPACE_ID} (${DEPLOYMENT_TARGET}, profile=${RESOLVED_PROFILE})"
-                    environmentVariables: []
+                    environmentVariables:
+                      - name: PROVISIONER_API_KEY
+                        type: Secret
+                        value: <+pipeline.variables.provisioner_api_key>
+                      - name: TARGET_API_KEY
+                        type: Secret
+                        value: <+pipeline.variables.target_api_key>
                     outputVariables: []
                   timeout: 5m
                   failureStrategies:
@@ -1358,7 +1366,6 @@ pipeline:
                           ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
                           ORG_ID="<+pipeline.variables.harness_org_id>"
                           PROJECT_ID="<+pipeline.variables.harness_project_id>"
-                          API_KEY="<+pipeline.variables.target_api_key>"
 
                           # Check if workspace has any state (GET workspace state info)
                           WS_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -1408,7 +1415,10 @@ pipeline:
                               fi
                             fi
                           fi
-                    environmentVariables: []
+                    environmentVariables:
+                      - name: API_KEY
+                        type: Secret
+                        value: <+pipeline.variables.target_api_key>
                     outputVariables:
                       - name: state_stale
                         type: String
