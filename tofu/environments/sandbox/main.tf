@@ -258,7 +258,7 @@ locals {
   # Artifact registry outputs based on type
   artifact_registry_url = var.artifact_registry_type == "har" ? (
     length(module.har) > 0 ? module.har[0].registry_url : ""
-  ) : (
+    ) : (
     length(module.ecr) > 0 ? module.ecr[0].repository_url : ""
   )
 }
@@ -339,9 +339,9 @@ resource "aws_iam_user" "packer_ci" {
 }
 
 resource "aws_iam_user_policy" "packer_ci" {
-  count  = local.enable_asg ? 1 : 0
-  name   = "harness-packer-ci-policy"
-  user   = aws_iam_user.packer_ci[0].name
+  count = local.enable_asg ? 1 : 0
+  name  = "harness-packer-ci-policy"
+  user  = aws_iam_user.packer_ci[0].name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -432,9 +432,9 @@ module "asg" {
   asg_desired_capacity = var.asg_desired_capacity
   asg_max_size         = var.asg_max_size
 
-  create_dns_record  = var.asg_create_dns_record
-  route53_zone_name  = var.route53_zone_name
-  acm_cert_arn       = var.acm_cert_arn
+  create_dns_record = var.asg_create_dns_record
+  route53_zone_name = var.route53_zone_name
+  acm_cert_arn      = var.acm_cert_arn
 
   tags = local.common_tags
 }
@@ -603,7 +603,7 @@ module "harness_service_asg" {
   # Startup script in repo (Harness renders expressions at deploy time)
   asg_startup_script_path = "asg/user-data.sh"
   manifest_store_type     = var.import_to_harness_code ? "HarnessCode" : "Github"
-  git_connector_ref       = var.import_to_harness_code ? "" : (
+  git_connector_ref = var.import_to_harness_code ? "" : (
     var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   )
   git_repo_name          = var.import_to_harness_code ? "" : element(split("/", var.source_github_repo), length(split("/", var.source_github_repo)) - 1)
@@ -664,15 +664,15 @@ module "harness_service" {
   # Manifest configuration (K8s/Helm)
   manifest_type       = local.enable_eks ? "K8sManifest" : "values"
   manifest_store_type = var.import_to_harness_code ? "HarnessCode" : "Github"
-  
+
   # Git connector (only used when not using Harness Code)
   git_connector_ref = var.import_to_harness_code ? "" : (
     var.create_connectors ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   )
-  git_repo_name     = var.import_to_harness_code ? "" : element(split("/", var.source_github_repo), length(split("/", var.source_github_repo)) - 1)
-  git_branch        = var.service_git_branch
-  manifest_paths    = var.service_manifest_paths
-  
+  git_repo_name  = var.import_to_harness_code ? "" : element(split("/", var.source_github_repo), length(split("/", var.source_github_repo)) - 1)
+  git_branch     = var.service_git_branch
+  manifest_paths = var.service_manifest_paths
+
   # Harness Code repo (used when import_to_harness_code = true)
   harness_code_repo_name = var.import_to_harness_code ? "${var.owner}-demo-app" : ""
 
@@ -715,7 +715,7 @@ module "harness_service" {
       type  = "String"
       value = var.acm_cert_arn
     }
-  ] : [
+    ] : [
     {
       name  = "ingressHost"
       type  = "String"
@@ -753,7 +753,7 @@ module "harness_environment_dev" {
 
   # Kubernetes infrastructure (created if eks in deployment_targets)
   create_k8s_infrastructure = local.enable_eks
-  create_k8s_namespace      = false  # Namespace created in main.tf
+  create_k8s_namespace      = false # Namespace created in main.tf
   k8s_infra_id              = "${var.owner}_k8s_dev"
   k8s_infra_name            = "${title(var.owner)} K8s Dev"
   k8s_connector_ref         = var.create_connectors ? "${var.owner}_k8s_reference_architecture" : var.k8s_connector_ref
@@ -800,7 +800,7 @@ module "harness_environment_prod" {
 
   # Kubernetes infrastructure (created if eks in deployment_targets)
   create_k8s_infrastructure = local.enable_eks
-  create_k8s_namespace      = false  # Namespace created in main.tf
+  create_k8s_namespace      = false # Namespace created in main.tf
   k8s_infra_id              = "${var.owner}_k8s_prod"
   k8s_infra_name            = "${title(var.owner)} K8s Prod"
   k8s_connector_ref         = var.create_connectors ? "${var.owner}_k8s_reference_architecture" : var.k8s_connector_ref
@@ -911,8 +911,8 @@ module "harness_pipelines_asg" {
   source = "../../modules/harness-pipeline"
   count  = local.enable_asg && var.create_harness_service && var.create_harness_environment ? 1 : 0
 
-  org_id             = local.resolved_org_id
-  project_id         = local.resolved_project_id
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
 
   # Required by module but unused for ASG-only pipelines
   service_ref        = ""
@@ -950,17 +950,17 @@ module "harness_pipelines_asg" {
   asg_ci_pipeline_id          = "${var.owner}_asg_ci_build"
   asg_ci_pipeline_name        = "${title(var.owner)} ASG CI Build"
   asg_ci_pipeline_description = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning, and Packer AMI bake"
-  git_connector_ref       = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
-  git_repo_name           = var.github_repo_name
-  har_registry_ref        = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""
-  har_upstream_proxy_ref  = var.artifact_registry_type == "har" && var.create_dockerhub_upstream ? "${var.owner}-dockerhub-proxy" : ""
-  har_image_name          = "${var.owner}demoapp"
-  use_harness_code        = var.import_to_harness_code
-  harness_code_repo_name  = var.import_to_harness_code ? "${var.owner}-demo-app" : ""
-  harness_account_id      = var.harness_account_id
-  harness_org_id          = local.resolved_org_id
-  harness_project_id      = local.resolved_project_id
-  harness_api_key         = var.harness_api_key
+  git_connector_ref           = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+  git_repo_name               = var.github_repo_name
+  har_registry_ref            = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""
+  har_upstream_proxy_ref      = var.artifact_registry_type == "har" && var.create_dockerhub_upstream ? "${var.owner}-dockerhub-proxy" : ""
+  har_image_name              = "${var.owner}demoapp"
+  use_harness_code            = var.import_to_harness_code
+  harness_code_repo_name      = var.import_to_harness_code ? "${var.owner}-demo-app" : ""
+  harness_account_id          = var.harness_account_id
+  harness_org_id              = local.resolved_org_id
+  harness_project_id          = local.resolved_project_id
+  harness_api_key             = var.harness_api_key
 
   asg_packer_owner          = var.owner
   asg_packer_region         = "us-east-1"
@@ -968,7 +968,7 @@ module "harness_pipelines_asg" {
   asg_aws_secret_key_secret = "aws_secret_access_key"
 
   delegate_selector = "delegate-${var.owner}"
-  pipeline_tags     = ["tofu-managed", var.owner, "asg"]
+  pipeline_tags     = ["tofu-managed:true", "owner:${var.owner}", "deployment-target:asg"]
 
   depends_on = [module.harness_service_asg, module.harness_environment_dev]
 }
@@ -1032,15 +1032,15 @@ module "harness_pipelines_dev" {
   harness_api_key        = var.harness_api_key
 
   # ASG Packer AMI build (added to CI pipeline when asg is a deployment target)
-  asg_packer_build_enabled    = local.enable_asg
-  asg_packer_owner            = var.owner
-  asg_packer_region           = var.aws_region
-  asg_aws_access_key_secret   = var.asg_packer_aws_access_key_secret
-  asg_aws_secret_key_secret   = var.asg_packer_aws_secret_key_secret
+  asg_packer_build_enabled  = local.enable_asg
+  asg_packer_owner          = var.owner
+  asg_packer_region         = var.aws_region
+  asg_aws_access_key_secret = var.asg_packer_aws_access_key_secret
+  asg_aws_secret_key_secret = var.asg_packer_aws_secret_key_secret
 
   delegate_selector = "delegate-${var.owner}"
 
-  pipeline_tags = ["tofu-managed", var.owner]
+  pipeline_tags = ["tofu-managed:true", "owner:${var.owner}"]
 
   depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev, module.har, module.harness_code_repo, module.asg, module.harness_service_asg]
 }
@@ -1072,7 +1072,7 @@ module "harness_monitored_service_dev" {
   app_name  = "harness-demo-app"
 
   # Thresholds
-  memory_threshold_bytes = 536870912  # 512MB
+  memory_threshold_bytes = 536870912 # 512MB
 
   tags = ["tofu-managed", var.owner, "cv"]
 

@@ -15,6 +15,19 @@
 # - standard_ci_packer - ASG variant (exists in asg-ci-pipeline.tf)
 ################################################################################
 
+locals {
+  standard_ci_gradle_tag_objects = [
+    for tag in var.pipeline_tags : can(regex("^([^:]+):(.*)$", tag)) ? {
+      key   = regex("^([^:]+):(.*)$", tag)[0]
+      value = regex("^([^:]+):(.*)$", tag)[1]
+      } : {
+      key   = tag
+      value = "true"
+    }
+  ]
+  standard_ci_gradle_yaml_tags = join("\n", [for tag in local.standard_ci_gradle_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
+}
+
 resource "harness_platform_pipeline" "standard_ci_gradle" {
   count       = var.create_standard_ci_gradle ? 1 : 0
   identifier  = var.standard_ci_gradle_id
@@ -22,7 +35,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.standard_ci_gradle_description
-  tags        = ["pipeline-type:ci", "build:gradle", "standard-template:true", "harness-intelligence:enabled", "security-scanning:enabled", "managed-by:provisioner"]
+  tags        = concat(["pipeline-type:ci", "build:gradle", "standard-template:true", "harness-intelligence:enabled", "security-scanning:enabled"], var.pipeline_tags)
 
   yaml = <<-GRADLE_CI_EOT
     pipeline:
@@ -36,8 +49,8 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
         build: gradle
         standard-template: "true"
         harness-intelligence: enabled
-        managed-by: provisioner
         security-scanning: enabled
+${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_tags}\n" : ""}
       variables:
         - name: auto_deploy
           type: String

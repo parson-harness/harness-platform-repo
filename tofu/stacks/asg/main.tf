@@ -519,7 +519,7 @@ module "harness_pipelines_asg" {
 
   enable_change_governance = var.enable_change_governance
   delegate_selector        = local.delegate_selector
-  pipeline_tags            = ["tofu-managed", var.owner, "asg"]
+  pipeline_tags            = ["tofu-managed:true", "owner:${var.owner}", "deployment-target:asg", "managed-by:provisioner"]
 
   # HAR not used for ASG
   har_registry_ref       = ""

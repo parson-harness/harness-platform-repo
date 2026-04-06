@@ -175,7 +175,7 @@ module "harness_pipelines" {
   harness_api_key        = var.harness_api_key
 
   delegate_selector        = local.delegate_selector
-  pipeline_tags            = ["tofu-managed", var.owner, "eks"]
+  pipeline_tags            = ["tofu-managed:true", "owner:${var.owner}", "deployment-target:eks", "managed-by:provisioner"]
   enable_change_governance = var.enable_change_governance
 
   # Standard CI Gradle pipeline (with security scanning and supply chain)

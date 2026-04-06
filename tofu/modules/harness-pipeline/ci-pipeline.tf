@@ -41,6 +41,17 @@ EOT
   ci_codebase_spec = var.use_harness_code ? local.ci_codebase_harness_code : (
     local.has_valid_codebase ? local.ci_codebase_github : local.ci_codebase_harness_code
   )
+
+  ci_pipeline_tag_objects = [
+    for tag in var.pipeline_tags : can(regex("^([^:]+):(.*)$", tag)) ? {
+      key   = regex("^([^:]+):(.*)$", tag)[0]
+      value = regex("^([^:]+):(.*)$", tag)[1]
+      } : {
+      key   = tag
+      value = "true"
+    }
+  ]
+  ci_pipeline_yaml_tags = join("\n", [for tag in local.ci_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
 }
 
 resource "harness_platform_pipeline" "ci_build" {
@@ -50,7 +61,7 @@ resource "harness_platform_pipeline" "ci_build" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.ci_pipeline_description
-  tags        = ["pipeline-type:ci", "build:docker", "harness-intelligence:enabled", "managed-by:provisioner"]
+  tags        = concat(["pipeline-type:ci", "build:docker", "harness-intelligence:enabled"], var.pipeline_tags)
 
   yaml = <<-CI_EOT
     pipeline:
@@ -63,7 +74,7 @@ resource "harness_platform_pipeline" "ci_build" {
         pipeline-type: ci
         build: docker
         harness-intelligence: enabled
-        managed-by: provisioner
+${local.ci_pipeline_yaml_tags != "" ? "${local.ci_pipeline_yaml_tags}\n" : ""}
       variables:
         - name: auto_deploy
           type: String

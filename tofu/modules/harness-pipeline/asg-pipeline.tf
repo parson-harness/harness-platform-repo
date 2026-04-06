@@ -17,6 +17,16 @@
 
 locals {
   asg_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
+  asg_pipeline_tag_objects = [
+    for tag in var.pipeline_tags : can(regex("^([^:]+):(.*)$", tag)) ? {
+      key   = regex("^([^:]+):(.*)$", tag)[0]
+      value = regex("^([^:]+):(.*)$", tag)[1]
+      } : {
+      key   = tag
+      value = "true"
+    }
+  ]
+  asg_pipeline_yaml_tags = join("\n", [for tag in local.asg_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
   asg_change_governance_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
                   - stepGroup:
                       name: Change Governance
@@ -141,7 +151,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.asg_strategy_pipeline_description
-  tags        = ["deployment-type:asg", "strategy:multi-strategy", "managed-by:provisioner"]
+  tags        = concat(["deployment-type:asg", "strategy:multi-strategy"], var.pipeline_tags)
 
   yaml = <<-ASG_EOT
     pipeline:
@@ -153,7 +163,7 @@ resource "harness_platform_pipeline" "asg_strategy" {
       tags:
         deployment-type: asg
         strategy: multi-strategy
-        managed-by: provisioner
+${local.asg_pipeline_yaml_tags != "" ? "${local.asg_pipeline_yaml_tags}\n" : ""}
       variables:
         - name: deployment_strategy
           type: String

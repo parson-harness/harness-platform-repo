@@ -14,6 +14,16 @@ terraform {
 
 locals {
   pipeline_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
+  k8s_pipeline_tag_objects = [
+    for tag in var.pipeline_tags : can(regex("^([^:]+):(.*)$", tag)) ? {
+      key   = regex("^([^:]+):(.*)$", tag)[0]
+      value = regex("^([^:]+):(.*)$", tag)[1]
+      } : {
+      key   = tag
+      value = "true"
+    }
+  ]
+  k8s_pipeline_yaml_tags = join("\n", [for tag in local.k8s_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
   pipeline_change_governance_dev_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
                   - stepGroup:
                       name: Change Governance
@@ -257,7 +267,7 @@ resource "harness_platform_pipeline" "k8s_canary" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = "DEPRECATED: Use ${var.strategy_pipeline_id} with deployment_strategy=canary instead. ${var.canary_pipeline_description}"
-  tags        = ["deployment-type:kubernetes", "strategy:canary", "deprecated:true", "managed-by:provisioner"]
+  tags        = concat(["deployment-type:kubernetes", "strategy:canary", "deprecated:true"], var.pipeline_tags)
 
   yaml = <<-EOT
     pipeline:
@@ -270,7 +280,7 @@ resource "harness_platform_pipeline" "k8s_canary" {
         deployment-type: kubernetes
         strategy: canary
         deprecated: "true"
-        managed-by: provisioner
+${local.k8s_pipeline_yaml_tags != "" ? "${local.k8s_pipeline_yaml_tags}\n" : ""}
       variables:
         - name: image_tag
           type: String
@@ -331,7 +341,7 @@ resource "harness_platform_pipeline" "k8s_blue_green_canary" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.blue_green_pipeline_description
-  tags        = ["deployment-type:kubernetes", "strategy:blue-green-canary", "managed-by:provisioner"]
+  tags        = concat(["deployment-type:kubernetes", "strategy:blue-green-canary"], var.pipeline_tags)
 
   yaml = <<-EOT
     pipeline:
@@ -343,7 +353,7 @@ resource "harness_platform_pipeline" "k8s_blue_green_canary" {
       tags:
         deployment-type: kubernetes
         strategy: blue-green-canary
-        managed-by: provisioner
+${local.k8s_pipeline_yaml_tags != "" ? "${local.k8s_pipeline_yaml_tags}\n" : ""}
       variables:
         - name: image_tag
           type: String

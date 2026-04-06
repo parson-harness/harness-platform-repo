@@ -4,6 +4,19 @@
 # Separate from the EKS CI pipeline (which builds Docker images for HAR)
 ################################################################################
 
+locals {
+  asg_ci_pipeline_tag_objects = [
+    for tag in var.pipeline_tags : can(regex("^([^:]+):(.*)$", tag)) ? {
+      key   = regex("^([^:]+):(.*)$", tag)[0]
+      value = regex("^([^:]+):(.*)$", tag)[1]
+      } : {
+      key   = tag
+      value = "true"
+    }
+  ]
+  asg_ci_pipeline_yaml_tags = join("\n", [for tag in local.asg_ci_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
+}
+
 resource "harness_platform_pipeline" "asg_ci_build" {
   count       = var.create_asg_ci_pipeline ? 1 : 0
   identifier  = var.asg_ci_pipeline_id
@@ -11,7 +24,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.asg_ci_pipeline_description
-  tags        = ["pipeline-type:ci", "build:gradle-packer", "deployment:asg", "standard-template:true", "harness-intelligence:enabled", "security-scanning:enabled", "managed-by:provisioner"]
+  tags        = concat(["pipeline-type:ci", "build:gradle-packer", "deployment:asg", "standard-template:true", "harness-intelligence:enabled", "security-scanning:enabled"], var.pipeline_tags)
 
   yaml = <<-CI_EOT
     pipeline:
@@ -26,8 +39,8 @@ resource "harness_platform_pipeline" "asg_ci_build" {
         deployment: asg
         standard-template: "true"
         harness-intelligence: enabled
-        managed-by: provisioner
         security-scanning: enabled
+${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n" : ""}
       variables:
         - name: auto_deploy
           type: String
