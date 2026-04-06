@@ -315,16 +315,9 @@ ${local.strategy_governance_stage_yaml}
                           minimumCount: 1
                           disallowPipelineExecutor: false
                   - step:
-                      name: Swap Primary
-                      identifier: swap_primary
-                      type: K8sBGSwapServices
-                      timeout: 10m
-                      spec:
-                        skipDryRun: false
-                  - step:
-                      name: Scale Down Old Version
-                      identifier: scale_down_old
-                      type: K8sBlueGreenStageScaleDown
+                      name: Swap Blue Green
+                      identifier: swap_bluegreen
+                      type: K8sBlueGreenSwap
                       timeout: 10m
                       spec: {}
                   - step:
@@ -351,7 +344,13 @@ ${local.strategy_governance_stage_yaml}
                         environmentVariables: []
                         outputVariables: []
                       timeout: 1m
-                rollbackSteps: []
+                rollbackSteps:
+                  - step:
+                      type: K8sBlueGreenRollback
+                      name: Blue-Green Rollback
+                      identifier: bluegreen_rollback
+                      spec: {}
+                      timeout: 10m
             failureStrategies:
               - onFailure:
                   errors:
