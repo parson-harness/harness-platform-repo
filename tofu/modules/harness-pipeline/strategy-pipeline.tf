@@ -18,11 +18,20 @@ locals {
   ]
   strategy_pipeline_yaml_tags = join("\n", [for tag in local.strategy_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
   strategy_governance_stage_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
+        - stage:
+            name: Release Governance
+            identifier: change_governance
+            description: Policy-driven approval gate for deployment risk evaluation
+            type: Custom
+            when:
+              pipelineStatus: Success
+${local.strategy_delegate_yaml}            spec:
+              execution:
+                steps:
                   - step:
                       type: ShellScript
                       name: Assemble Change Context
                       identifier: assemble_change_context
-                      timeout: 10m
                       spec:
                         shell: Bash
                         executionTarget: {}
@@ -39,9 +48,9 @@ locals {
                                 },
                                 "change": {
                                   "request_id": "<+pipeline.identifier>-<+pipeline.sequenceId>",
-                                  "service": "<+service.identifier>",
-                                  "environment": "<+env.identifier>",
-                                  "environment_type": "<+env.type>",
+                                  "service": "${var.service_ref}",
+                                  "environment": "${var.environment_name}",
+                                  "environment_type": "${var.environment_type}",
                                   "deployment_strategy": "<+pipeline.variables.deployment_strategy>",
                                   "blast_radius": "<+pipeline.variables.change_blast_radius>",
                                   "freeze_window_active": <+pipeline.variables.change_freeze_active>,
@@ -72,60 +81,107 @@ locals {
                           - name: change_context
                             type: String
                             value: change_context
-                  - step:
-                      type: Policy
-                      name: Evaluate Change Risk
-                      identifier: evaluate_change_risk
                       timeout: 10m
-                      spec:
-                        policySets:
-                          - ${var.change_governance_policy_set}
-                        type: Custom
-                        policySpec:
-                          payload: <+execution.steps.assemble_change_context.output.outputVariables.change_context>
-                      failureStrategies:
-                        - onFailure:
-                            errors:
-                              - PolicyEvaluationFailure
-                            action:
-                              type: MarkAsSuccess
-                  - step:
-                      type: HarnessApproval
-                      name: Governance Approval
-                      identifier: governance_approval
-                      timeout: 1d
-                      spec:
-                        approvalMessage: |
-                          Change governance policies flagged this deployment for manual approval.
+                  - stepGroup:
+                      name: Governance
+                      identifier: governance
+                      steps:
+                        - step:
+                            type: Policy
+                            name: Evaluate Change Risk
+                            identifier: evaluate_change_risk
+                            spec:
+                              policySets:
+                                - ${var.change_governance_policy_set}
+                              type: Custom
+                              policySpec:
+                                payload: <+execution.steps.assemble_change_context.output.outputVariables.change_context>
+                            timeout: 10m
+                            failureStrategies:
+                              - onFailure:
+                                  errors:
+                                    - PolicyEvaluationFailure
+                                  action:
+                                    type: MarkAsSuccess
+                  - parallel:
+                      - stepGroup:
+                          name: Manual Approval Required
+                          identifier: manual_approval_required
+                          steps:
+                            - step:
+                                type: HarnessApproval
+                                name: Governance Approval
+                                identifier: governance_approval
+                                spec:
+                                  approvalMessage: |
+                                    Release governance policies flagged this deployment for manual approval.
 
-                          Policy evaluation status: <+execution.steps.evaluate_change_risk.output.status>
-                          Review the Evaluate Change Risk step for the full policy decision details.
+                                    Policy evaluation status: <+execution.steps.governance.steps.evaluate_change_risk.output.status>
+                                    Review the Evaluate Change Risk step for the full policy decision details.
 
-                          Release summary:
-                          - Service: <+service.identifier>
-                          - Environment: <+env.identifier>
-                          - Strategy: <+pipeline.variables.deployment_strategy>
-                          - Image tag: <+pipeline.variables.image_tag>
-                          - Test pass rate: <+pipeline.variables.test_pass_rate>
-                          - Critical vulnerabilities: <+pipeline.variables.critical_vulnerabilities>
-                          - High vulnerabilities: <+pipeline.variables.high_vulnerabilities>
-                          - Rollback ready: <+pipeline.variables.rollback_ready>
-                          - Open change failures: <+pipeline.variables.open_change_failures>
-                          - Change freeze active: <+pipeline.variables.change_freeze_active>
-                          - Requires data migration: <+pipeline.variables.requires_data_migration>
+                                    Release summary:
+                                    - Service: ${var.service_ref}
+                                    - Environment: ${var.environment_name}
+                                    - Strategy: <+pipeline.variables.deployment_strategy>
+                                    - Image tag: <+pipeline.variables.image_tag>
+                                    - Test pass rate: <+pipeline.variables.test_pass_rate>
+                                    - Critical vulnerabilities: <+pipeline.variables.critical_vulnerabilities>
+                                    - High vulnerabilities: <+pipeline.variables.high_vulnerabilities>
+                                    - Rollback ready: <+pipeline.variables.rollback_ready>
+                                    - Open change failures: <+pipeline.variables.open_change_failures>
+                                    - Change freeze active: <+pipeline.variables.change_freeze_active>
+                                    - Requires data migration: <+pipeline.variables.requires_data_migration>
 
-                          Release candidate evidence:
-                          <+pipeline.variables.release_candidate_evidence>
-                        includePipelineExecutionHistory: true
-                        approvers:
-                          userGroups:
-                            - ${var.change_governance_approver_group}
-                          minimumCount: 1
-                          disallowPipelineExecutor: false
-                        approverInputs: []
-                      when:
-                        stageStatus: All
-                        condition: <+execution.steps.evaluate_change_risk.output.status> == "error"
+                                    Release candidate evidence:
+                                    <+pipeline.variables.release_candidate_evidence>
+                                  includePipelineExecutionHistory: true
+                                  isAutoRejectEnabled: false
+                                  approvers:
+                                    userGroups:
+                                      - ${var.change_governance_approver_group}
+                                    minimumCount: 1
+                                    disallowPipelineExecutor: false
+                                  approverInputs: []
+                                timeout: 10m
+                                when:
+                                  stageStatus: All
+                          when:
+                            stageStatus: All
+                            condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> == "error"
+                      - stepGroup:
+                          name: Auto Approval Path
+                          identifier: auto_approval_path
+                          steps:
+                            - step:
+                                type: ShellScript
+                                name: Record Auto Approval
+                                identifier: record_auto_approval
+                                spec:
+                                  shell: Bash
+                                  executionTarget: {}
+                                  source:
+                                    type: Inline
+                                    spec:
+                                      script: |
+                                        echo "Policy evaluation passed."
+                                        echo "Service: ${var.service_ref}"
+                                        echo "Environment: ${var.environment_name}"
+                                        echo "Strategy: <+pipeline.variables.deployment_strategy>"
+                                  environmentVariables: []
+                                  outputVariables: []
+                                timeout: 10m
+                                when:
+                                  stageStatus: All
+                          when:
+                            stageStatus: All
+                            condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> != "error"
+            tags: {}
+            failureStrategies:
+              - onFailure:
+                  errors:
+                    - AllErrors
+                  action:
+                    type: StageRollback
 
     EOT
   ) : ""
@@ -208,6 +264,7 @@ ${local.strategy_pipeline_yaml_tags != "" ? "${local.strategy_pipeline_yaml_tags
           required: false
           value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})
       stages:
+${local.strategy_governance_stage_yaml}
         - stage:
             name: Blue-Green Deployment
             identifier: blue_green
@@ -227,7 +284,6 @@ ${local.strategy_delegate_yaml}            spec:
                   - identifier: ${var.infrastructure_ref}
               execution:
                 steps:
-${local.strategy_governance_stage_yaml}
                   - step:
                       type: ShellScript
                       name: Reset Strategy State
