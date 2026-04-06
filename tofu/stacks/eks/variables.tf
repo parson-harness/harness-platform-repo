@@ -320,6 +320,12 @@ variable "create_opa_policies" {
   default     = true
 }
 
+variable "manage_shared_change_governance" {
+  description = "Manage shared change-governance policies and policy set from this stack. Leave false for sandbox workspaces that should reuse project-level governance assets."
+  type        = bool
+  default     = false
+}
+
 variable "enforce_ci_policies" {
   description = "Enable enforcement of CI pipeline policies"
   type        = bool

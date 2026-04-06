@@ -178,16 +178,19 @@ module "opa_policies" {
   create_ci_policies       = true
   create_security_policies = true
   create_quality_policies  = true
+  create_change_governance_policies = var.manage_shared_change_governance
 
   # Policy set creation flags
   create_ci_policy_set       = true
   create_security_policy_set = true
   create_quality_policy_set  = true
+  create_change_governance_policy_set = var.manage_shared_change_governance
 
   # Enforcement flags
   enforce_ci_policies       = var.enforce_ci_policies
   enforce_security_policies = var.enforce_security_policies
   enforce_quality_policies  = var.enforce_quality_policies
+  enforce_change_governance_policies = var.manage_shared_change_governance
 
   depends_on = [module.harness_org_project]
 }
