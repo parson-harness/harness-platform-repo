@@ -55,7 +55,8 @@ template:
                             "open_failures": <+stage.variables.open_change_failures>,
                             "rollback_ready": <+stage.variables.rollback_ready>
                           }
-                        }
+                        },
+                        "release_candidate": <+stage.variables.release_candidate_evidence>
                       }
                       EOF
 
@@ -105,8 +106,20 @@ template:
                             Policy evaluation status: <+execution.steps.governance.steps.evaluate_change_risk.output.status>
                             Review the Evaluate Change Risk step for the full policy decision details.
 
-                            Change context submitted for policy evaluation:
-                            <+execution.steps.assemble_change_context.output.outputVariables.change_context>
+                            Release summary:
+                            - Service: <+stage.variables.service_name>
+                            - Environment: <+stage.variables.target_environment>
+                            - Strategy: <+stage.variables.deployment_strategy>
+                            - Test pass rate: <+stage.variables.test_pass_rate>
+                            - Critical vulnerabilities: <+stage.variables.critical_vulnerabilities>
+                            - High vulnerabilities: <+stage.variables.high_vulnerabilities>
+                            - Rollback ready: <+stage.variables.rollback_ready>
+                            - Open change failures: <+stage.variables.open_change_failures>
+                            - Change freeze active: <+stage.variables.change_freeze_active>
+                            - Requires data migration: <+stage.variables.requires_data_migration>
+
+                            Release candidate evidence:
+                            <+stage.variables.release_candidate_evidence>
                           includePipelineExecutionHistory: true
                           isAutoRejectEnabled: false
                           approvers:
@@ -238,3 +251,8 @@ template:
         description: "Whether the change includes a database or data migration"
         required: true
         value: <+input>.default(false)
+      - name: release_candidate_evidence
+        type: String
+        description: "JSON release-candidate evidence bundle from CI or manual input"
+        required: true
+        value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})

@@ -436,62 +436,6 @@ resource "harness_platform_policy" "require_harness_scanners" {
   REGO
 }
 
-# Policy: Require Code Coverage
-resource "harness_platform_policy" "require_code_coverage" {
-  count      = var.create_quality_policies ? 1 : 0
-  identifier = "require_code_coverage"
-  name       = "Require Code Coverage"
-  org_id     = var.org_id
-  project_id = var.project_id
-
-  rego = <<-REGO
-    package pipeline
-
-    ${local.scope_check_rego}
-
-    # Warn if CI pipeline doesn't have code coverage step (only if in scope)
-    warn[msg] {
-      in_scope
-      input.pipeline.stages[i].stage.type == "CI"
-      stage := input.pipeline.stages[i].stage
-      has_test_step(stage)
-      not has_coverage_step(stage)
-      msg := sprintf("CI stage '%s' should include a code coverage step (e.g., JaCoCo) to track test coverage metrics.", [stage.name])
-    }
-
-    has_test_step(stage) {
-      stage.spec.execution.steps[_].step.type == "RunTests"
-    }
-
-    has_test_step(stage) {
-      stage.spec.execution.steps[_].stepGroup.steps[_].step.type == "RunTests"
-    }
-
-    has_test_step(stage) {
-      stage.spec.execution.steps[_].stepGroup.steps[_].parallel[_].step.type == "RunTests"
-    }
-
-    # Check for coverage step (Run step with "coverage" or "jacoco" in name/identifier)
-    has_coverage_step(stage) {
-      step := stage.spec.execution.steps[_].step
-      step.type == "Run"
-      contains(lower(step.identifier), "coverage")
-    }
-
-    has_coverage_step(stage) {
-      step := stage.spec.execution.steps[_].step
-      step.type == "Run"
-      contains(lower(step.name), "coverage")
-    }
-
-    has_coverage_step(stage) {
-      step := stage.spec.execution.steps[_].step
-      step.type == "Run"
-      contains(lower(step.identifier), "jacoco")
-    }
-  REGO
-}
-
 # Policy: Require Pipeline Tags
 resource "harness_platform_policy" "require_pipeline_tags" {
   count      = var.create_quality_policies ? 1 : 0
@@ -807,15 +751,9 @@ resource "harness_platform_policyset" "quality_gates" {
     severity   = "warning"
   }
 
-  policies {
-    identifier = harness_platform_policy.require_code_coverage[0].identifier
-    severity   = "warning"
-  }
-
   depends_on = [
     harness_platform_policy.require_test_reports,
-    harness_platform_policy.require_pipeline_tags,
-    harness_platform_policy.require_code_coverage
+    harness_platform_policy.require_pipeline_tags
   ]
 }
 

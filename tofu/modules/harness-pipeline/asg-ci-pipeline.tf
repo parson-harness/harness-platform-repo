@@ -124,36 +124,6 @@ resource "harness_platform_pipeline" "asg_ci_build" {
                                     gradle build -x test --build-cache --parallel
                                     echo "Build artifacts:"
                                     ls -la build/libs/
-                  - step:
-                      type: Run
-                      name: Code Coverage
-                      identifier: code_coverage
-                      spec:
-                        connectorRef: account.harnessImage
-                        image: gradle:8.5-jdk17
-                        shell: Sh
-                        command: |
-                          echo "=== GENERATING CODE COVERAGE REPORT ==="
-                          gradle jacocoTestReport
-                          echo ""
-                          echo "=== COVERAGE SUMMARY ==="
-                          if [ -f build/reports/jacoco/test/jacocoTestReport.xml ]; then
-                            INSTRUCTION_COVERED=$(grep -o 'type="INSTRUCTION" missed="[0-9]*" covered="[0-9]*"' build/reports/jacoco/test/jacocoTestReport.xml | head -1 | grep -o 'covered="[0-9]*"' | grep -o '[0-9]*')
-                            INSTRUCTION_MISSED=$(grep -o 'type="INSTRUCTION" missed="[0-9]*" covered="[0-9]*"' build/reports/jacoco/test/jacocoTestReport.xml | head -1 | grep -o 'missed="[0-9]*"' | grep -o '[0-9]*')
-                            if [ -n "$INSTRUCTION_COVERED" ] && [ -n "$INSTRUCTION_MISSED" ]; then
-                              TOTAL=$((INSTRUCTION_COVERED + INSTRUCTION_MISSED))
-                              if [ $TOTAL -gt 0 ]; then
-                                COVERAGE=$((INSTRUCTION_COVERED * 100 / TOTAL))
-                                echo "Instruction Coverage: $${COVERAGE}%"
-                              fi
-                            fi
-                          fi
-                          echo "Full report: build/reports/jacoco/test/html/index.html"
-                        reports:
-                          type: JUnit
-                          spec:
-                            paths:
-                              - build/reports/jacoco/test/jacocoTestReport.xml
                   - stepGroup:
                       name: SAST Scans
                       identifier: sast_scans

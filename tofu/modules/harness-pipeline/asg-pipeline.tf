@@ -63,7 +63,8 @@ locals {
                                           "open_failures": <+pipeline.variables.open_change_failures>,
                                           "rollback_ready": <+pipeline.variables.rollback_ready>
                                         }
-                                      }
+                                      },
+                                      "release_candidate": <+pipeline.variables.release_candidate_evidence>
                                     }
                                     EOF
 
@@ -101,11 +102,24 @@ locals {
                               approvalMessage: |
                                 Change governance policies flagged this deployment for manual approval.
 
-                                Service: <+service.identifier>
-                                Environment: <+env.identifier>
-                                Strategy: <+pipeline.variables.deployment_strategy>
+                                Policy evaluation status: <+execution.steps.change_governance.steps.evaluate_change_risk.output.status>
+                                Review the Evaluate Change Risk step for the full policy decision details.
 
-                                Review the deployment context and approve if the risk is acceptable.
+                                Release summary:
+                                - Service: <+service.identifier>
+                                - Environment: <+env.identifier>
+                                - Strategy: <+pipeline.variables.deployment_strategy>
+                                - AMI name: <+pipeline.variables.ami_name>
+                                - Test pass rate: <+pipeline.variables.test_pass_rate>
+                                - Critical vulnerabilities: <+pipeline.variables.critical_vulnerabilities>
+                                - High vulnerabilities: <+pipeline.variables.high_vulnerabilities>
+                                - Rollback ready: <+pipeline.variables.rollback_ready>
+                                - Open change failures: <+pipeline.variables.open_change_failures>
+                                - Change freeze active: <+pipeline.variables.change_freeze_active>
+                                - Requires data migration: <+pipeline.variables.requires_data_migration>
+
+                                Release candidate evidence:
+                                <+pipeline.variables.release_candidate_evidence>
                               includePipelineExecutionHistory: true
                               approvers:
                                 userGroups:
@@ -191,6 +205,11 @@ resource "harness_platform_pipeline" "asg_strategy" {
           description: Whether the deployment includes a database or data migration; provided by CI/webhook or entered manually for demo/manual runs
           required: false
           value: <+input>.default(false).allowedValues(true,false)
+        - name: release_candidate_evidence
+          type: String
+          description: JSON release-candidate evidence bundle; auto-populated from CI/webhook runs or entered manually for demo/manual runs
+          required: false
+          value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})
       stages:
         - stage:
             name: Blue-Green Deployment

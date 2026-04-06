@@ -1,6 +1,6 @@
 template:
-  name: Sandbox Provisioner ASG
-  identifier: Sandbox_Provisioner_ASG
+  name: POV Provisioner
+  identifier: POV_Provisioner
   projectIdentifier: parson
   orgIdentifier: sandbox
   versionLabel: "1.0"
@@ -39,12 +39,18 @@ template:
       name: harness-demo-app
       branch: main
       gitFetchType: branch
-      path: tofu/stacks/asg
+      path: tofu/stacks/eks
       locked: true
     variables: []
     terraform_variables:
       - key: owner
         value: <+pipeline.variables.owner>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: eks_cluster_name
+        value: <+pipeline.variables.eks_cluster_name>
         value_type: string
         status: manual
         locked: false
@@ -63,6 +69,12 @@ template:
         type: String
       - key: harness_api_key
         value: <+pipeline.variables.target_api_key>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: harness_api_key_email
+        value: <+pipeline.variables.target_api_key_email>
         value_type: string
         status: manual
         locked: false
@@ -91,56 +103,38 @@ template:
         status: manual
         locked: false
         type: String
-      - key: aws_region
-        value: us-east-1
+      - key: artifact_registry_type
+        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>
         value_type: string
         status: manual
         locked: false
         type: String
-      - key: instance_type
-        value: t3.small
+      - key: create_dockerhub_upstream
+        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_dockerhub_upstream>
         value_type: string
         status: manual
         locked: false
         type: String
-      - key: asg_min_size
-        value: "1"
+      - key: create_strategy_pipeline
+        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>
         value_type: string
         status: manual
         locked: false
         type: String
-      - key: asg_desired_capacity
-        value: "1"
+      - key: create_ci_pipeline
+        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_ci_pipeline>
         value_type: string
         status: manual
         locked: false
         type: String
-      - key: asg_max_size
-        value: "4"
+      - key: create_standard_ci_gradle
+        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>
         value_type: string
         status: manual
         locked: false
         type: String
-      - key: asg_canary_instance_count
-        value: "1"
-        value_type: string
-        status: manual
-        locked: false
-        type: String
-      - key: create_asg_strategy_pipeline
-        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>
-        value_type: string
-        status: manual
-        locked: false
-        type: String
-      - key: create_asg_ci_pipeline
-        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>
-        value_type: string
-        status: manual
-        locked: false
-        type: String
-      - key: standard_ci_gradle_test_packages
-        value: io.harness.demo
+      - key: create_opa_policies
+        value: <+pipeline.variables.create_opa_policies>
         value_type: string
         status: manual
         locked: false
@@ -151,50 +145,8 @@ template:
         status: manual
         locked: false
         type: String
-      - key: create_dns_record
-        value: "true"
-        value_type: string
-        status: manual
-        locked: false
-        type: String
-      - key: route53_zone_name
-        value: harness-demo.dev
-        value_type: string
-        status: manual
-        locked: false
-        type: String
-      - key: create_delegate
-        value: "true"
-        value_type: string
-        status: manual
-        locked: false
-        type: String
-      - key: eks_cluster_name
-        value: <+pipeline.variables.eks_cluster_name>
-        value_type: string
-        status: manual
-        locked: false
-        type: String
-      - key: aws_auth_type
-        value: irsa
-        value_type: string
-        status: manual
-        locked: false
-        type: String
-      - key: enable_cross_account_access
-        value: "false"
-        value_type: string
-        status: manual
-        locked: false
-        type: String
-      - key: cross_account_role_arn
-        value: ""
-        value_type: string
-        status: manual
-        locked: false
-        type: String
-      - key: cross_account_external_id
-        value: ""
+      - key: use_harness_code
+        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>
         value_type: string
         status: manual
         locked: false
@@ -223,8 +175,20 @@ template:
         status: manual
         locked: false
         type: String
-      - key: use_harness_code
-        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>
+      - key: create_delegate
+        value: "true"
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: manage_dns
+        value: "true"
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_alb_dns_name
+        value: <+pipeline.variables.shared_alb_dns_name>
         value_type: string
         status: manual
         locked: false

@@ -192,9 +192,6 @@ resource "harness_platform_pipeline" "ci_build" {
                                 echo "╚══════════════════════════════════════════════════════════════╝"
                                 echo "Test Intelligence analyzed code changes and selected relevant tests."
                                 echo "View the Tests tab for detailed test selection visualization."
-                                echo ""
-                                # Generate JaCoCo coverage report
-                                mvn jacoco:report -q || true
                               reports:
                                 type: JUnit
                                 spec:
@@ -202,33 +199,6 @@ resource "harness_platform_pipeline" "ci_build" {
                                     - "target/surefire-reports/*.xml"
                               enableTestSplitting: false
                             timeout: 15m
-                        - step:
-                            type: Run
-                            name: Code Coverage Summary
-                            identifier: coverage_summary
-                            spec:
-                              shell: Bash
-                              command: |
-                                echo "╔══════════════════════════════════════════════════════════════╗"
-                                echo "║           CODE COVERAGE REPORT                               ║"
-                                echo "╚══════════════════════════════════════════════════════════════╝"
-                                if [ -f target/site/jacoco/index.html ]; then
-                                  # Extract coverage percentage from JaCoCo report
-                                  COVERAGE=$(grep -oP 'Total.*?([0-9]+)%' target/site/jacoco/index.html | head -1 || echo "Coverage data available in JaCoCo report")
-                                  echo "Coverage: $COVERAGE"
-                                  echo ""
-                                  echo "Full report available at: target/site/jacoco/index.html"
-                                else
-                                  echo "JaCoCo report not generated. Run with tests to see coverage."
-                                fi
-                            when:
-                              stageStatus: Success
-                            failureStrategies:
-                              - onFailure:
-                                  errors:
-                                    - AllErrors
-                                  action:
-                                    type: MarkAsSuccess
                   - step:
                       type: Run
                       name: Build Application

@@ -26,7 +26,6 @@ output "quality_policy_ids" {
   value = {
     require_test_reports  = var.create_quality_policies ? harness_platform_policy.require_test_reports[0].identifier : null
     require_pipeline_tags = var.create_quality_policies ? harness_platform_policy.require_pipeline_tags[0].identifier : null
-    require_code_coverage = var.create_quality_policies ? harness_platform_policy.require_code_coverage[0].identifier : null
   }
 }
 

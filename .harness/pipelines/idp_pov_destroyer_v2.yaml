@@ -897,7 +897,7 @@ pipeline:
 
                           echo ""
                           echo "=== OPA Policies ==="
-                          for POLICY in require_tests_in_ci require_cache_intelligence require_harness_cloud require_docker_layer_caching no_hardcoded_secrets recommend_artifact_scanning require_test_reports require_harness_scanners require_code_coverage require_pipeline_tags; do
+                          for POLICY in require_tests_in_ci require_cache_intelligence require_harness_cloud require_docker_layer_caching no_hardcoded_secrets recommend_artifact_scanning require_test_reports require_harness_scanners require_pipeline_tags; do
                             api_delete "$POLICY" "${ENDPOINT}/pm/api/v1/policies/${POLICY}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
                           done
 
