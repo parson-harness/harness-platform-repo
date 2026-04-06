@@ -12,6 +12,26 @@ output "state_bucket_arn" {
   value       = aws_s3_bucket.tfstate.arn
 }
 
+output "coverage_artifact_bucket_name" {
+  description = "S3 bucket name for shared published coverage artifacts"
+  value       = aws_s3_bucket.coverage_artifacts.id
+}
+
+output "coverage_artifact_bucket_arn" {
+  description = "S3 bucket ARN for shared published coverage artifacts"
+  value       = aws_s3_bucket.coverage_artifacts.arn
+}
+
+output "coverage_artifact_base_url" {
+  description = "Base URL for shared published coverage artifacts"
+  value       = "https://${aws_s3_bucket.coverage_artifacts.bucket}.s3.${var.aws_region}.amazonaws.com"
+}
+
+output "coverage_artifact_path_prefix" {
+  description = "Path prefix inside the shared coverage artifact bucket"
+  value       = var.coverage_report_artifact_path_prefix
+}
+
 output "dynamodb_table_name" {
   description = "DynamoDB table name for state locking"
   value       = aws_dynamodb_table.tfstate_lock.name

@@ -19,6 +19,24 @@ variable "bucket_prefix" {
   default     = "harness-demo-tfstate"
 }
 
+variable "coverage_bucket_prefix" {
+  description = "Prefix for the shared coverage artifact S3 bucket name"
+  type        = string
+  default     = "harness-demo-coverage-artifacts"
+}
+
+variable "coverage_report_artifact_path_prefix" {
+  description = "Prefix within the shared coverage artifact bucket where published reports are stored"
+  type        = string
+  default     = "coverage-reports"
+}
+
+variable "coverage_artifact_retention_days" {
+  description = "Number of days to retain published coverage artifacts in the shared bucket"
+  type        = number
+  default     = 30
+}
+
 ################################################################################
 # Harness Integration Variables
 # Required to automatically push cert ARN into the POV_Provisioner IACM template

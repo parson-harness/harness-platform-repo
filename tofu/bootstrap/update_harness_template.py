@@ -11,6 +11,7 @@ Usage (called by Terraform local-exec):
 """
 
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -34,6 +35,46 @@ def harness_request(method, url, api_key, body=None):
             return json.loads(raw), e.code
         except json.JSONDecodeError:
             return {"raw": raw.decode(errors="replace")}, e.code
+
+
+def build_var_block(key, value, value_type="string", type_label="String"):
+    return (
+        f"      - key: {key}\n"
+        f"        value: \"{value}\"\n"
+        f"        value_type: {value_type}\n"
+        f"        status: manual\n"
+        f"        locked: false\n"
+        f"        canEditKey: true\n"
+        f"        canEditValue: true\n"
+        f"        canEditValueType: true\n"
+        f"        canDelete: true\n"
+        f"        type: {type_label}"
+    )
+
+
+def upsert_tf_var(yaml_str, key, value, value_type="string", type_label="String"):
+    block = build_var_block(key, value, value_type=value_type, type_label=type_label)
+    pattern = re.compile(
+        rf'^      - (?:id: [^\n]+\n        )?key: {re.escape(key)}\n(?:        .*\n)*?(?=^      - (?:id: [^\n]+\n        )?key: |^    terraform_variable_files:)',
+        re.MULTILINE,
+    )
+
+    if pattern.search(yaml_str):
+        yaml_str = pattern.sub(block + "\n", yaml_str, count=1)
+        print(f"Updated existing {key} → {value}")
+        return yaml_str
+
+    if "    terraform_variable_files:" not in yaml_str:
+        print("ERROR: could not find insertion point in template YAML")
+        sys.exit(1)
+
+    yaml_str = yaml_str.replace(
+        "    terraform_variable_files:",
+        block + "\n    terraform_variable_files:",
+        1,
+    )
+    print(f"Added {key} = {value} to template")
+    return yaml_str
 
 
 def main():
@@ -63,46 +104,35 @@ def main():
 
     yaml_str = data["data"]["yaml"]
 
-    # Build the new variable entry
-    new_var_block = (
-        f"      - key: acm_cert_arn\n"
-        f"        value: \"{cert_arn}\"\n"
-        f"        value_type: string\n"
-        f"        status: manual\n"
-        f"        locked: false\n"
-        f"        canEditKey: true\n"
-        f"        canEditValue: true\n"
-        f"        canEditValueType: true\n"
-        f"        canDelete: true\n"
-        f"        type: String"
-    )
+    coverage_bucket_name = os.environ.get("COVERAGE_BUCKET_NAME", "")
+    coverage_bucket_region = os.environ.get("COVERAGE_BUCKET_REGION", "")
+    coverage_artifact_path_prefix = os.environ.get("COVERAGE_ARTIFACT_PATH_PREFIX", "")
 
-    if "key: acm_cert_arn" in yaml_str:
-        # Update the value of the existing entry (handles optional leading id: line)
-        yaml_str = re.sub(
-            r'(      - (?:id: \S+\n        )?key: acm_cert_arn\n        value: )"?[^"\n]+"?',
-            rf'      - key: acm_cert_arn\n        value: "{cert_arn}"',
-            yaml_str,
-        )
-        print(f"Updated existing acm_cert_arn → {cert_arn}")
-    else:
-        # Insert before terraform_variable_files section
-        if "    terraform_variable_files:" not in yaml_str:
-            print("ERROR: could not find insertion point in template YAML")
-            sys.exit(1)
-        yaml_str = yaml_str.replace(
-            "    terraform_variable_files:",
-            new_var_block + "\n    terraform_variable_files:",
-        )
-        print(f"Added acm_cert_arn = {cert_arn} to template")
+    yaml_str = upsert_tf_var(yaml_str, "acm_cert_arn", cert_arn)
+
+    if coverage_bucket_name:
+        yaml_str = upsert_tf_var(yaml_str, "publish_coverage_report_artifact", "true")
+        yaml_str = upsert_tf_var(yaml_str, "coverage_report_artifact_bucket", coverage_bucket_name)
+
+    if coverage_bucket_region:
+        yaml_str = upsert_tf_var(yaml_str, "coverage_report_artifact_region", coverage_bucket_region)
+
+    if coverage_artifact_path_prefix:
+        yaml_str = upsert_tf_var(yaml_str, "coverage_report_artifact_path_prefix", coverage_artifact_path_prefix)
 
     # Verify the YAML looks sane
     if "key: acm_cert_arn" not in yaml_str:
         print("ERROR: acm_cert_arn not found in YAML after modification")
         sys.exit(1)
-    print(f"YAML snippet around acm_cert_arn:")
+    print(f"YAML snippet around managed variables:")
     for i, line in enumerate(yaml_str.splitlines()):
-        if "acm_cert_arn" in line:
+        if any(key in line for key in [
+            "acm_cert_arn",
+            "publish_coverage_report_artifact",
+            "coverage_report_artifact_bucket",
+            "coverage_report_artifact_region",
+            "coverage_report_artifact_path_prefix",
+        ]):
             print(f"  {line}")
 
     # Try several known Harness template update endpoint variants

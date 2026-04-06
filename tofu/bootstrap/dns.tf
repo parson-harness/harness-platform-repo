@@ -109,10 +109,18 @@ resource "aws_acm_certificate_validation" "wildcard" {
 ################################################################################
 
 resource "terraform_data" "push_cert_arn_to_harness" {
-  triggers_replace = [data.aws_acm_certificate.wildcard.arn]
+  triggers_replace = {
+    cert_arn                   = data.aws_acm_certificate.wildcard.arn
+    coverage_bucket_name       = aws_s3_bucket.coverage_artifacts.id
+    coverage_bucket_region     = var.aws_region
+    coverage_artifact_prefix   = var.coverage_report_artifact_path_prefix
+  }
 
   provisioner "local-exec" {
     command = <<-EOT
+      COVERAGE_BUCKET_NAME="${aws_s3_bucket.coverage_artifacts.id}" \
+      COVERAGE_BUCKET_REGION="${var.aws_region}" \
+      COVERAGE_ARTIFACT_PATH_PREFIX="${var.coverage_report_artifact_path_prefix}" \
       python3 ${path.module}/update_harness_template.py \
         "${var.harness_endpoint}" \
         "${var.harness_account_id}" \
@@ -124,5 +132,5 @@ resource "terraform_data" "push_cert_arn_to_harness" {
     EOT
   }
 
-  depends_on = [aws_acm_certificate_validation.wildcard]
+  depends_on = [aws_acm_certificate_validation.wildcard, aws_s3_bucket.coverage_artifacts]
 }
