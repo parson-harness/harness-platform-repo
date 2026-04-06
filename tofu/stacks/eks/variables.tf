@@ -315,7 +315,13 @@ variable "shared_alb_dns_name" {
 ################################################################################
 
 variable "create_opa_policies" {
-  description = "Create OPA policies for CI/CD governance"
+  description = "Create project-scoped OPA policies from this stack. Leave false for sandbox workspaces that should reuse a separate governance workspace."
+  type        = bool
+  default     = false
+}
+
+variable "enable_change_governance" {
+  description = "Enable policy-driven change governance gates in generated deployment pipelines. This does not create the project policy resources."
   type        = bool
   default     = true
 }

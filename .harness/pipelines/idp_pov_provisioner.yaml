@@ -130,7 +130,7 @@ pipeline:
       value: <+input>.default(true).allowedValues(true,false)
     - name: create_opa_policies
       type: String
-      description: Create Harness OPA policies for the EKS stack. Default true so sandbox provisions include the broader governance policy sets unless you explicitly disable them.
+      description: Create or reuse the project-scoped governance workspace and enable policy-driven deployment governance for this sandbox. Default true so project-level OPA assets are bootstrapped once per project.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
     - name: create_asg_strategy_pipeline
@@ -329,6 +329,243 @@ pipeline:
                   timeout: 2m
               - step:
                   type: Http
+                  name: Check Governance Workspace Exists
+                  identifier: check_governance_workspace_exists
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces/<+pipeline.variables.harness_project_id>_governance
+                    method: GET
+                    headers:
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    outputVariables:
+                      - name: workspace_exists
+                        value: <+httpResponseCode>
+                        type: String
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                  timeout: 1m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.create_opa_policies> == "true"
+              - step:
+                  type: Http
+                  name: Create Governance Workspace
+                  identifier: create_governance_workspace
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces
+                    method: POST
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    requestBody: |
+                      {
+                        "identifier": "<+pipeline.variables.harness_project_id>_governance",
+                        "name": "<+pipeline.variables.harness_project_id> Project Governance Workspace",
+                        "description": "Project-scoped governance assets for <+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>",
+                        "provisioner": "opentofu",
+                        "provisioner_version": "1.11.2",
+                        "repository_connector": "parsongh",
+                        "repository": "harness-demo-app",
+                        "repository_branch": "main",
+                        "repository_path": "tofu/stacks/project-governance",
+                        "provider_connector": "aws_oidc_iacm",
+                        "cost_estimation_enabled": false,
+                        "provider_connectors": [
+                          {
+                            "connector_ref": "aws_oidc_iacm",
+                            "type": "aws"
+                          }
+                        ],
+                        "default_pipelines": {
+                          "provision": {
+                            "project_pipeline": "pov_provisioning"
+                          },
+                          "destroy": {
+                            "project_pipeline": "pov_destroy"
+                          }
+                        },
+                        "terraform_variables": {
+                          "harness_account_id": {
+                            "key": "harness_account_id",
+                            "value": "<+pipeline.variables.harness_account_id>",
+                            "value_type": "string"
+                          },
+                          "harness_endpoint": {
+                            "key": "harness_endpoint",
+                            "value": "<+pipeline.variables.harness_endpoint>",
+                            "value_type": "string"
+                          },
+                          "harness_api_key": {
+                            "key": "harness_api_key",
+                            "value": "<+pipeline.variables.target_api_key>",
+                            "value_type": "string"
+                          },
+                          "harness_org_id": {
+                            "key": "harness_org_id",
+                            "value": "<+pipeline.variables.harness_org_id>",
+                            "value_type": "string"
+                          },
+                          "harness_project_id": {
+                            "key": "harness_project_id",
+                            "value": "<+pipeline.variables.harness_project_id>",
+                            "value_type": "string"
+                          },
+                          "create_harness_org": {
+                            "key": "create_harness_org",
+                            "value": "<+pipeline.variables.create_harness_org>",
+                            "value_type": "string"
+                          },
+                          "create_harness_project": {
+                            "key": "create_harness_project",
+                            "value": "<+pipeline.variables.create_harness_project>",
+                            "value_type": "string"
+                          },
+                          "policy_scope_tag": {
+                            "key": "policy_scope_tag",
+                            "value": "managed-by:provisioner",
+                            "value_type": "string"
+                          }
+                        },
+                        "environment_variables": {}
+                      }
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201
+                  timeout: 2m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.create_opa_policies> == "true" && <+execution.steps.check_governance_workspace_exists.output.outputVariables.workspace_exists> == "404"
+              - step:
+                  type: Http
+                  name: Link Governance Workspace to Template
+                  identifier: link_governance_workspace_template
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspace/templates
+                    method: POST
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    requestBody: |
+                      {
+                        "template_id": "Project_Governance",
+                        "version": "1.0",
+                        "workspace_id": "<+pipeline.variables.harness_project_id>_governance"
+                      }
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201 || <+httpResponseCode> == 409
+                  timeout: 1m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.create_opa_policies> == "true"
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: ShellScript
+                  name: Reconcile Governance Workspace Variables
+                  identifier: reconcile_governance_workspace_variables
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          WORKSPACE_ID="<+pipeline.variables.harness_project_id>_governance"
+                          ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
+                          ENDPOINT="<+pipeline.variables.harness_endpoint>"
+                          ORG_ID="<+pipeline.variables.harness_org_id>"
+                          PROJECT_ID="<+pipeline.variables.harness_project_id>"
+                          PROVISIONER_API_KEY="<+pipeline.variables.provisioner_api_key>"
+                          TARGET_API_KEY="<+pipeline.variables.target_api_key>"
+
+                          json_escape() {
+                            local value="$1"
+                            value=${value//\\/\\\\}
+                            value=${value//"/\\"}
+                            value=${value//$'\n'/\\n}
+                            value=${value//$'\r'/\\r}
+                            value=${value//$'\t'/\\t}
+                            printf '%s' "$value"
+                          }
+
+                          build_payload() {
+                            printf '{"value":"%s","value_type":"%s"}' "$(json_escape "$1")" "$(json_escape "$2")"
+                          }
+
+                          build_create_payload() {
+                            printf '{"key":"%s","kind":"tf","value":"%s","value_type":"%s"}' "$(json_escape "$1")" "$(json_escape "$2")" "$(json_escape "$3")"
+                          }
+
+                          update_tf_var() {
+                            local key="$1"
+                            local value="$2"
+                            local value_type="$3"
+                            local payload
+                            local create_payload
+                            local status_code
+                            local response_file
+
+                            payload=$(build_payload "$value" "$value_type")
+                            response_file=$(mktemp)
+
+                            status_code=$(curl -s -o "$response_file" -w "%{http_code}" \
+                              -X PUT "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces/${WORKSPACE_ID}/variables/tf/${key}" \
+                              -H "Content-Type: application/json" \
+                              -H "Harness-Account: ${ACCOUNT_ID}" \
+                              -H "x-api-key: ${PROVISIONER_API_KEY}" \
+                              -d "$payload")
+
+                            if [ "$status_code" = "404" ]; then
+                              create_payload=$(build_create_payload "$key" "$value" "$value_type")
+
+                              status_code=$(curl -s -o "$response_file" -w "%{http_code}" \
+                                -X POST "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces/${WORKSPACE_ID}/variables" \
+                                -H "Content-Type: application/json" \
+                                -H "Harness-Account: ${ACCOUNT_ID}" \
+                                -H "x-api-key: ${PROVISIONER_API_KEY}" \
+                                -d "$create_payload")
+                            fi
+
+                            if [ "$status_code" != "200" ] && [ "$status_code" != "201" ]; then
+                              echo "Failed to upsert tf variable ${key} (HTTP ${status_code})"
+                              cat "$response_file"
+                              rm -f "$response_file"
+                              exit 1
+                            fi
+
+                            rm -f "$response_file"
+                          }
+
+                          update_tf_var "harness_account_id" "$ACCOUNT_ID" "string"
+                          update_tf_var "harness_endpoint" "$ENDPOINT" "string"
+                          update_tf_var "harness_api_key" "$TARGET_API_KEY" "string"
+                          update_tf_var "harness_org_id" "$ORG_ID" "string"
+                          update_tf_var "harness_project_id" "$PROJECT_ID" "string"
+                          update_tf_var "create_harness_org" "<+pipeline.variables.create_harness_org>" "string"
+                          update_tf_var "create_harness_project" "<+pipeline.variables.create_harness_project>" "string"
+                          update_tf_var "policy_scope_tag" "managed-by:provisioner" "string"
+
+                          echo "Governance workspace variables reconciled for ${WORKSPACE_ID}"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 5m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.create_opa_policies> == "true"
+              - step:
+                  type: Http
                   name: Create IACM Workspace
                   identifier: create_iacm_workspace
                   spec:
@@ -455,9 +692,14 @@ pipeline:
                             "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>",
                             "value_type": "string"
                           },
+                          "enable_change_governance": {
+                            "key": "enable_change_governance",
+                            "value": "<+pipeline.variables.create_opa_policies>",
+                            "value_type": "string"
+                          },
                           "create_opa_policies": {
                             "key": "create_opa_policies",
-                            "value": "<+pipeline.variables.create_opa_policies>",
+                            "value": "false",
                             "value_type": "string"
                           },
                           "acm_cert_arn": {
@@ -639,6 +881,11 @@ pipeline:
                           "create_asg_ci_pipeline": {
                             "key": "create_asg_ci_pipeline",
                             "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>",
+                            "value_type": "string"
+                          },
+                          "enable_change_governance": {
+                            "key": "enable_change_governance",
+                            "value": "<+pipeline.variables.create_opa_policies>",
                             "value_type": "string"
                           },
                           "standard_ci_gradle_test_packages": {
@@ -1014,6 +1261,7 @@ pipeline:
                             update_tf_var "asg_canary_instance_count" "1" "string"
                             update_tf_var "create_asg_strategy_pipeline" "$CREATE_ASG_STRATEGY_PIPELINE" "string"
                             update_tf_var "create_asg_ci_pipeline" "$CREATE_ASG_CI_PIPELINE" "string"
+                            update_tf_var "enable_change_governance" "$CREATE_OPA_POLICIES" "string"
                             update_tf_var "standard_ci_gradle_test_packages" "io.harness.demo" "string"
                             update_tf_var "acm_cert_arn" "$ACM_CERT_ARN" "string"
                             update_tf_var "create_dns_record" "true" "string"
@@ -1032,7 +1280,8 @@ pipeline:
                             update_tf_var "create_strategy_pipeline" "$CREATE_STRATEGY_PIPELINE" "string"
                             update_tf_var "create_ci_pipeline" "$CREATE_CI_PIPELINE" "string"
                             update_tf_var "create_standard_ci_gradle" "$CREATE_STANDARD_CI_GRADLE" "string"
-                            update_tf_var "create_opa_policies" "$CREATE_OPA_POLICIES" "string"
+                            update_tf_var "enable_change_governance" "$CREATE_OPA_POLICIES" "string"
+                            update_tf_var "create_opa_policies" "false" "string"
                             update_tf_var "acm_cert_arn" "$ACM_CERT_ARN" "string"
                             update_tf_var "create_delegate" "true" "string"
                             update_tf_var "manage_dns" "true" "string"
@@ -1431,9 +1680,14 @@ pipeline:
                             "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>",
                             "value_type": "string"
                           },
+                          "enable_change_governance": {
+                            "key": "enable_change_governance",
+                            "value": "<+pipeline.variables.create_opa_policies>",
+                            "value_type": "string"
+                          },
                           "create_opa_policies": {
                             "key": "create_opa_policies",
-                            "value": "<+pipeline.variables.create_opa_policies>",
+                            "value": "false",
                             "value_type": "string"
                           },
                           "acm_cert_arn": {
@@ -1604,6 +1858,11 @@ pipeline:
                           "create_asg_ci_pipeline": {
                             "key": "create_asg_ci_pipeline",
                             "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>",
+                            "value_type": "string"
+                          },
+                          "enable_change_governance": {
+                            "key": "enable_change_governance",
+                            "value": "<+pipeline.variables.create_opa_policies>",
                             "value_type": "string"
                           },
                           "standard_ci_gradle_test_packages": {
@@ -1941,6 +2200,76 @@ pipeline:
                           - AllErrors
                         action:
                           type: MarkAsSuccess
+    - stage:
+        name: Bootstrap Project Governance
+        identifier: bootstrap_project_governance
+        description: Create or reconcile project-scoped governance assets before provisioning the sandbox workspace
+        type: IACM
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.create_opa_policies> == "true"
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+pipeline.variables.harness_project_id>_governance
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Plan
+                  identifier: plan
+                  timeout: 15m
+                  spec:
+                    command: plan
+              - step:
+                  type: Run
+                  name: Show Governance Plan Summary
+                  identifier: show_governance_plan_summary
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=== Project Governance Plan Summary ==="
+                      echo "Workspace: <+pipeline.variables.harness_project_id>_governance"
+                      echo "Org: <+pipeline.variables.harness_org_id>"
+                      echo "Project: <+pipeline.variables.harness_project_id>"
+                      echo "======================================"
+
+                      if [ -f /harness/plan.json ]; then
+                        echo ""
+                        echo "Resources to be created/modified:"
+                        jq -r '.resource_changes[] | select(.change.actions | contains(["create"]) or contains(["update"]) or contains(["delete"])) | "  \(.change.actions[0]): \(.type).\(.name)"' /harness/plan.json 2>/dev/null || echo "  (unable to parse plan)"
+                      fi
+              - step:
+                  type: IACMApproval
+                  name: Approve Governance Plan
+                  identifier: approve_governance_plan
+                  spec:
+                    autoApprove: true
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - Timeout
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Apply
+                  identifier: apply
+                  timeout: 30m
+                  spec:
+                    command: apply
     - stage:
         name: Plan and Apply
         identifier: plan_and_apply

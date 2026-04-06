@@ -896,18 +896,9 @@ pipeline:
                           api_delete "${OWNER}-demo-app" "${ENDPOINT}/code/api/v1/repos/${OWNER}-demo-app?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
 
                           echo ""
-                          echo "=== OPA Policies ==="
-                          for POLICY in require_tests_in_ci require_cache_intelligence require_harness_cloud require_docker_layer_caching no_hardcoded_secrets recommend_artifact_scanning require_test_reports require_harness_scanners require_pipeline_tags; do
-                            api_delete "$POLICY" "${ENDPOINT}/pm/api/v1/policies/${POLICY}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
-                          done
+                          echo "=== Project Governance ==="
+                          echo "Skipping project-scoped OPA cleanup here; shared governance assets are owned by ${PROJECT_ID}_governance"
 
-                          echo ""
-                          echo "=== OPA Policy Sets ==="
-                          for POLICYSET in ci_pipeline_standards ci_pipeline_standards_on_run security_standards security_standards_on_run build_quality_gates; do
-                            api_delete "$POLICYSET" "${ENDPOINT}/pm/api/v1/policysets/${POLICYSET}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
-                          done
-
-                          echo ""
                           echo "=== Delegate Token ==="
                           # List and delete matching tokens
                           TOKENS=$(curl -s "${ENDPOINT}/ng/api/delegate-token-ng?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \

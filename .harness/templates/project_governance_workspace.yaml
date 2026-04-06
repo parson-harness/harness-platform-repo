@@ -1,0 +1,94 @@
+template:
+  name: Project Governance
+  identifier: Project_Governance
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  versionLabel: "1.0"
+  type: Workspace
+  tags: {}
+  spec:
+    provider:
+      type: others
+      title: thirdPartyGitProvider
+      info: thirdPartyGitProviderInfo
+      icon: service-github
+      size: 20
+      disabled: false
+    tags: []
+    cost_estimation:
+      enabled: false
+      locked: false
+    default_pipelines:
+      plan: pov_provisioning
+      apply: pov_provisioning
+      destroy: pov_destroy
+      drift: pov_provisioning
+      locked: true
+    provisioner:
+      type: opentofu
+      version: 1.11.2
+      connector: aws_oidc_iacm
+      locked: true
+    provider_connectors:
+      - connector_ref: aws_oidc_iacm
+        type: aws
+        locked: true
+    repository:
+      isHarnessCode: false
+      connector: parsongh
+      name: harness-demo-app
+      branch: main
+      gitFetchType: branch
+      path: tofu/stacks/project-governance
+      locked: true
+    variables: []
+    terraform_variables:
+      - key: harness_account_id
+        value: <+pipeline.variables.harness_account_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: harness_endpoint
+        value: <+pipeline.variables.harness_endpoint>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: harness_api_key
+        value: <+pipeline.variables.target_api_key>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: harness_org_id
+        value: <+pipeline.variables.harness_org_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: harness_project_id
+        value: <+pipeline.variables.harness_project_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: create_harness_org
+        value: <+pipeline.variables.create_harness_org>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: create_harness_project
+        value: <+pipeline.variables.create_harness_project>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: policy_scope_tag
+        value: managed-by:provisioner
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+    terraform_variable_files: []

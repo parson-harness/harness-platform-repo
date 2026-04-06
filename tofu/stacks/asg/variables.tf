@@ -265,6 +265,12 @@ variable "create_asg_ci_pipeline" {
   default     = true
 }
 
+variable "enable_change_governance" {
+  description = "Enable policy-driven change governance gates in generated ASG deployment pipelines"
+  type        = bool
+  default     = true
+}
+
 variable "standard_ci_gradle_test_packages" {
   description = "Java packages to scan for Test Intelligence in the ASG Gradle CI pipeline (e.g., io.harness.demo)"
   type        = string

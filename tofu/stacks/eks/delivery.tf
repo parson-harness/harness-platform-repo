@@ -176,7 +176,7 @@ module "harness_pipelines" {
 
   delegate_selector        = local.delegate_selector
   pipeline_tags            = ["tofu-managed", var.owner, "eks"]
-  enable_change_governance = var.create_opa_policies
+  enable_change_governance = var.enable_change_governance
 
   # Standard CI Gradle pipeline (with security scanning and supply chain)
   # Include owner prefix for multi-sandbox support in same project

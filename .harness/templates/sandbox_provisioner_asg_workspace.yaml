@@ -139,6 +139,12 @@ template:
         status: manual
         locked: false
         type: String
+      - key: enable_change_governance
+        value: <+pipeline.variables.create_opa_policies>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
       - key: standard_ci_gradle_test_packages
         value: io.harness.demo
         value_type: string

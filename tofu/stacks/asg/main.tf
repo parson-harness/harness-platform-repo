@@ -517,8 +517,9 @@ module "harness_pipelines_asg" {
   asg_aws_access_key_secret = "aws_access_key_id"
   asg_aws_secret_key_secret = "aws_secret_access_key"
 
-  delegate_selector = local.delegate_selector
-  pipeline_tags     = ["tofu-managed", var.owner, "asg"]
+  enable_change_governance = var.enable_change_governance
+  delegate_selector        = local.delegate_selector
+  pipeline_tags            = ["tofu-managed", var.owner, "asg"]
 
   # HAR not used for ASG
   har_registry_ref       = ""

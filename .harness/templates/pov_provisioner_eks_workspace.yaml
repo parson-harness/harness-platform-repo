@@ -133,8 +133,14 @@ template:
         status: manual
         locked: false
         type: String
-      - key: create_opa_policies
+      - key: enable_change_governance
         value: <+pipeline.variables.create_opa_policies>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: create_opa_policies
+        value: "false"
         value_type: string
         status: manual
         locked: false
