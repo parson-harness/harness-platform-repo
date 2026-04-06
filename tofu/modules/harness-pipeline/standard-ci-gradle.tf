@@ -26,6 +26,8 @@ locals {
     }
   ]
   standard_ci_gradle_yaml_tags = join("\n", [for tag in local.standard_ci_gradle_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
+  standard_ci_gradle_publish_coverage_report_artifact = var.publish_coverage_report_artifact && var.coverage_report_artifact_connector_ref != "" && var.coverage_report_artifact_bucket != ""
+  standard_ci_gradle_coverage_report_artifact_base_url = trimspace(var.coverage_report_artifact_base_url) != "" ? trimsuffix(trimspace(var.coverage_report_artifact_base_url), "/") : "https://${var.coverage_report_artifact_bucket}.s3.${var.coverage_report_artifact_region}.amazonaws.com"
 }
 
 resource "harness_platform_pipeline" "standard_ci_gradle" {
@@ -168,6 +170,63 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                                     gradle build -x test --build-cache --parallel
                                     echo "Build artifacts:"
                                     ls -la build/libs/
+                  - step:
+                      type: Run
+                      name: Upload Code Coverage
+                      identifier: upload_code_coverage
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: gradle:8.5-jdk17
+                        shell: Sh
+                        command: |
+                          set -e
+                          /tmp/harness/bin/auto-injection || true
+                          $HARNESS_WORKSPACE/bi/auto-injection || true
+
+                          echo "=== GENERATING CODE COVERAGE REPORT ==="
+                          gradle clean test jacocoTestReport bootJar --no-build-cache --rerun-tasks
+
+                          COVERAGE_FILE="build/reports/jacoco/test/jacocoTestReport.xml"
+
+                          if [ ! -s "$COVERAGE_FILE" ]; then
+                            echo "Coverage report not found at $COVERAGE_FILE"
+                            exit 1
+                          fi
+
+                          if [ "$COVERAGE_PROVIDER" = "github" ]; then
+                            COVERAGE_OWNER="$${COVERAGE_REPO_NAME%%/*}"
+                            COVERAGE_IDENTIFIER="$${COVERAGE_REPO_NAME##*/}"
+                          else
+                            COVERAGE_OWNER="$HARNESS_COVERAGE_OWNER"
+                            COVERAGE_IDENTIFIER="$COVERAGE_REPO_NAME"
+                          fi
+
+                          mkdir -p jacoco
+                          cp "$COVERAGE_FILE" jacoco/jacoco.xml
+                          UPLOAD_COVERAGE_FILE="$(pwd)/jacoco/jacoco.xml"
+
+                          echo ""
+                          echo "=== COVERAGE FILE DETAILS ==="
+                          ls -lah build/reports/jacoco/test || true
+                          ls -lah jacoco || true
+                          echo "=== JAR FILE DETAILS ==="
+                          ls -lah build/libs || true
+                          find build/libs -maxdepth 1 -name '*.jar' | sort || true
+                          wc -c "$UPLOAD_COVERAGE_FILE" || true
+
+                          hcli cov analyze --file "$UPLOAD_COVERAGE_FILE" || true
+
+                          echo ""
+                          echo "=== UPLOADING COVERAGE TO HARNESS ==="
+
+                          hcli --verbose cov upload \
+                            --file "$UPLOAD_COVERAGE_FILE" \
+                            --provider "$COVERAGE_PROVIDER" \
+                            --owner "$COVERAGE_OWNER" \
+                            --identifier "$COVERAGE_IDENTIFIER" \
+                            -- sh -c "test -s '$UPLOAD_COVERAGE_FILE'"
+
+                          echo "Full report: build/reports/jacoco/test/html/index.html"
                   - stepGroup:
                       name: SAST Scans
                       identifier: sast_scans
@@ -529,6 +588,201 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                           file_urls:
                             - Published Image:::<+execution.steps.prepare_artifact_links.output.outputVariables.PUBLISHED_IMAGE_URL>
                             - Build Execution:::<+execution.steps.prepare_artifact_links.output.outputVariables.BUILD_EXECUTION_URL>
+%{if local.standard_ci_gradle_publish_coverage_report_artifact~}
+                  - step:
+                      type: Run
+                      name: Prepare Coverage Report Artifact
+                      identifier: prepare_coverage_report_artifact
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: python:3.11-alpine
+                        shell: Sh
+                        command: |
+                          set -e
+
+                          if [ ! -s jacoco/jacoco.xml ]; then
+                            echo "Coverage XML not found at jacoco/jacoco.xml"
+                            exit 1
+                          fi
+
+                          if [ ! -f build/reports/jacoco/test/html/index.html ]; then
+                            echo "Coverage HTML report not found at build/reports/jacoco/test/html/index.html"
+                            exit 1
+                          fi
+
+                          mkdir -p coverage-artifact/jacoco-html
+                          cp -R build/reports/jacoco/test/html/. coverage-artifact/jacoco-html/
+
+                          python3 - <<'PY'
+                          from pathlib import Path
+                          import html
+                          import xml.etree.ElementTree as ET
+
+                          xml_path = Path("jacoco/jacoco.xml")
+                          root = ET.parse(xml_path).getroot()
+
+                          rows = []
+                          total_lines = 0
+                          covered_lines = 0
+
+                          for package in root.findall("package"):
+                              package_name = package.get("name", "")
+                              for sourcefile in package.findall("sourcefile"):
+                                  counter = next((item for item in sourcefile.findall("counter") if item.get("type") == "LINE"), None)
+                                  if counter is None:
+                                      continue
+                                  missed = int(counter.get("missed", "0"))
+                                  covered = int(counter.get("covered", "0"))
+                                  total = missed + covered
+                                  if total == 0:
+                                      continue
+                                  coverage = (covered / total) * 100
+                                  source_name = sourcefile.get("name", "")
+                                  relative_path = f"{package_name}/{source_name}" if package_name else source_name
+                                  rows.append((relative_path, total, covered, missed, coverage))
+                                  total_lines += total
+                                  covered_lines += covered
+
+                          rows.sort(key=lambda item: (item[4], item[0]))
+                          uncovered_lines = total_lines - covered_lines
+                          overall_coverage = (covered_lines / total_lines) * 100 if total_lines else 0
+
+                          def badge_class(value: float) -> str:
+                              if value >= 90:
+                                  return "good"
+                              if value >= 75:
+                                  return "warn"
+                              return "bad"
+
+                          table_rows = "\n".join(
+                              f"<tr><td>{html.escape(path)}</td><td>{total}</td><td>{covered}</td><td>{missed}</td><td><span class='badge {badge_class(value)}'>{value:.2f}%</span></td></tr>"
+                              for path, total, covered, missed, value in rows
+                          )
+
+                          output = f"""<!doctype html>
+                          <html lang='en'>
+                          <head>
+                            <meta charset='utf-8'>
+                            <meta name='viewport' content='width=device-width, initial-scale=1'>
+                            <title>Coverage Summary</title>
+                            <style>
+                              :root {{ color-scheme: light dark; font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
+                              body {{ margin: 0; padding: 32px; background: #0b1020; color: #e5eefc; }}
+                              .container {{ max-width: 1120px; margin: 0 auto; }}
+                              .hero {{ background: linear-gradient(135deg, #182848, #4b6cb7); border-radius: 20px; padding: 28px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28); }}
+                              h1 {{ margin: 0 0 8px; font-size: 32px; }}
+                              p {{ margin: 0; color: #d7e3ff; }}
+                              .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-top: 24px; }}
+                              .card {{ background: rgba(10, 17, 35, 0.72); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 18px; }}
+                              .label {{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #8fa6d8; }}
+                              .value {{ margin-top: 8px; font-size: 30px; font-weight: 700; }}
+                              .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }}
+                              .button {{ display: inline-block; padding: 12px 16px; border-radius: 999px; text-decoration: none; font-weight: 600; }}
+                              .button.primary {{ background: #7dd3fc; color: #082f49; }}
+                              .button.secondary {{ background: rgba(255, 255, 255, 0.08); color: #f8fbff; border: 1px solid rgba(255, 255, 255, 0.12); }}
+                              .panel {{ margin-top: 28px; background: #11182b; border-radius: 20px; padding: 24px; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22); }}
+                              table {{ width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }}
+                              th, td {{ text-align: left; padding: 12px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }}
+                              th {{ color: #9cb4e9; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }}
+                              .badge {{ display: inline-block; min-width: 74px; text-align: center; border-radius: 999px; padding: 6px 10px; font-weight: 700; }}
+                              .badge.good {{ background: rgba(74, 222, 128, 0.16); color: #86efac; }}
+                              .badge.warn {{ background: rgba(250, 204, 21, 0.14); color: #fde68a; }}
+                              .badge.bad {{ background: rgba(248, 113, 113, 0.16); color: #fca5a5; }}
+                              .footer {{ margin-top: 18px; color: #9cb4e9; font-size: 13px; }}
+                            </style>
+                          </head>
+                          <body>
+                            <div class='container'>
+                              <section class='hero'>
+                                <h1>Coverage Summary</h1>
+                                <p>Demo-friendly overview generated from the JaCoCo XML report and published from Harness CI.</p>
+                                <div class='stats'>
+                                  <div class='card'><div class='label'>Overall Coverage</div><div class='value'>{overall_coverage:.2f}%</div></div>
+                                  <div class='card'><div class='label'>Covered Lines</div><div class='value'>{covered_lines}</div></div>
+                                  <div class='card'><div class='label'>Uncovered Lines</div><div class='value'>{uncovered_lines}</div></div>
+                                  <div class='card'><div class='label'>Files Reported</div><div class='value'>{len(rows)}</div></div>
+                                </div>
+                                <div class='actions'>
+                                  <a class='button primary' href='jacoco-html/index.html'>Open Full JaCoCo Report</a>
+                                  <a class='button secondary' href='jacoco-html/index.html'>Browse Source Details</a>
+                                </div>
+                              </section>
+                              <section class='panel'>
+                                <h2>Per-file coverage</h2>
+                                <table>
+                                  <thead>
+                                    <tr><th>File</th><th>Total Lines</th><th>Covered</th><th>Uncovered</th><th>Coverage</th></tr>
+                                  </thead>
+                                  <tbody>
+                                    {table_rows}
+                                  </tbody>
+                                </table>
+                                <div class='footer'>This summary is intentionally optimized for demo readability. Use the full JaCoCo report for drill-down details.</div>
+                              </section>
+                            </div>
+                          </body>
+                          </html>
+                          """
+
+                          Path("coverage-artifact/index.html").write_text(output, encoding="utf-8")
+                          PY
+
+                          COVERAGE_REPORT_TARGET="$ARTIFACT_PATH_PREFIX/$PIPELINE_ID/$PIPELINE_SEQUENCE_ID"
+                          COVERAGE_REPORT_URL="$ARTIFACT_BASE_URL/$COVERAGE_REPORT_TARGET/index.html"
+                          FULL_JACOCO_REPORT_URL="$ARTIFACT_BASE_URL/$COVERAGE_REPORT_TARGET/jacoco-html/index.html"
+
+                          export COVERAGE_REPORT_TARGET
+                          export COVERAGE_REPORT_URL
+                          export FULL_JACOCO_REPORT_URL
+
+                          echo "Coverage report artifact target: $COVERAGE_REPORT_TARGET"
+                          echo "Coverage report summary URL: $COVERAGE_REPORT_URL"
+                          echo "Full JaCoCo report URL: $FULL_JACOCO_REPORT_URL"
+                        envVariables:
+                          ARTIFACT_PATH_PREFIX: ${var.coverage_report_artifact_path_prefix}
+                          ARTIFACT_BASE_URL: ${local.standard_ci_gradle_coverage_report_artifact_base_url}
+                          PIPELINE_ID: <+pipeline.identifier>
+                          PIPELINE_SEQUENCE_ID: <+pipeline.sequenceId>
+                        outputVariables:
+                          - name: COVERAGE_REPORT_TARGET
+                            value: COVERAGE_REPORT_TARGET
+                          - name: COVERAGE_REPORT_URL
+                            value: COVERAGE_REPORT_URL
+                          - name: FULL_JACOCO_REPORT_URL
+                            value: FULL_JACOCO_REPORT_URL
+                  - step:
+                      type: S3Upload
+                      name: Upload Coverage Summary Artifact
+                      identifier: upload_coverage_summary_artifact
+                      spec:
+                        connectorRef: ${var.coverage_report_artifact_connector_ref}
+                        region: ${var.coverage_report_artifact_region}
+                        bucket: ${var.coverage_report_artifact_bucket}
+                        sourcePath: coverage-artifact/index.html
+                        target: <+execution.steps.prepare_coverage_report_artifact.output.outputVariables.COVERAGE_REPORT_TARGET>
+                  - step:
+                      type: S3Upload
+                      name: Upload Full JaCoCo Artifact
+                      identifier: upload_full_jacoco_artifact
+                      spec:
+                        connectorRef: ${var.coverage_report_artifact_connector_ref}
+                        region: ${var.coverage_report_artifact_region}
+                        bucket: ${var.coverage_report_artifact_bucket}
+                        sourcePath: coverage-artifact/jacoco-html
+                        target: <+execution.steps.prepare_coverage_report_artifact.output.outputVariables.COVERAGE_REPORT_TARGET>/jacoco-html
+                  - step:
+                      type: Plugin
+                      name: Publish Coverage Report Links
+                      identifier: publish_coverage_report_links
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: plugins/artifact-metadata-publisher
+                        settings:
+                          artifact_file: coverage-report-links.txt
+                          file_urls:
+                            - Coverage Summary:::<+execution.steps.prepare_coverage_report_artifact.output.outputVariables.COVERAGE_REPORT_URL>
+                            - Full JaCoCo Report:::<+execution.steps.prepare_coverage_report_artifact.output.outputVariables.FULL_JACOCO_REPORT_URL>
+%{endif~}
                   - step:
                       type: Run
                       name: Trigger CD Pipeline

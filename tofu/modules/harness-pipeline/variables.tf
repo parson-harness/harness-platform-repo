@@ -505,6 +505,42 @@ variable "har_base_image_registry" {
   default     = ""
 }
 
+variable "publish_coverage_report_artifact" {
+  description = "Publish the JaCoCo HTML coverage report to the Artifacts tab via S3"
+  type        = bool
+  default     = false
+}
+
+variable "coverage_report_artifact_connector_ref" {
+  description = "Harness AWS connector reference used to upload the coverage HTML report to S3"
+  type        = string
+  default     = ""
+}
+
+variable "coverage_report_artifact_bucket" {
+  description = "S3 bucket used to host the coverage HTML report artifact"
+  type        = string
+  default     = ""
+}
+
+variable "coverage_report_artifact_region" {
+  description = "AWS region for the coverage report artifact bucket"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "coverage_report_artifact_base_url" {
+  description = "Public base URL for the published coverage report artifacts. Defaults to the standard S3 HTTPS URL when empty"
+  type        = string
+  default     = ""
+}
+
+variable "coverage_report_artifact_path_prefix" {
+  description = "Prefix within the artifact bucket where coverage report artifacts are stored"
+  type        = string
+  default     = "coverage-reports"
+}
+
 ################################################################################
 # Common Variables
 ################################################################################

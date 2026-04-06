@@ -186,6 +186,12 @@ module "harness_pipelines" {
   standard_ci_gradle_description   = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
   standard_ci_gradle_test_packages = var.standard_ci_gradle_test_packages
   har_base_image_registry          = var.artifact_registry_type == "har" ? "pkg.harness.io/${lower(var.harness_account_id)}/${local.har_registry_id}" : ""
+  publish_coverage_report_artifact = var.publish_coverage_report_artifact
+  coverage_report_artifact_connector_ref = var.publish_coverage_report_artifact ? local.aws_connector_id : ""
+  coverage_report_artifact_bucket        = var.coverage_report_artifact_bucket
+  coverage_report_artifact_region        = var.coverage_report_artifact_region
+  coverage_report_artifact_base_url      = var.coverage_report_artifact_base_url
+  coverage_report_artifact_path_prefix   = var.coverage_report_artifact_path_prefix
 
   # Disable other pipeline types
   create_canary_pipeline       = false
