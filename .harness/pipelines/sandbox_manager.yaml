@@ -3,7 +3,7 @@ pipeline:
   identifier: sandbox_manager
   projectIdentifier: parson
   orgIdentifier: sandbox
-  description: "Self-service sandbox management - list, extend TTL, protect, or destroy"
+  description: "Self-service demo and sandbox management - list, extend TTL, protect, or destroy current POV workspaces"
   tags:
     self-service: "true"
     sandbox: "true"
@@ -72,8 +72,8 @@ pipeline:
                             -H "Harness-Account: ${ACCOUNT_ID}" \
                             -H "Content-Type: application/json")
                           
-                          echo "| Owner | Workspace | TTL | Status | Expires/Protected |"
-                          echo "|-------|-----------|-----|--------|-------------------|"
+                          echo "| Owner | Profile | Target | Workspace | TTL | Status | Expires/Protected |"
+                          echo "|-------|---------|--------|-----------|-----|--------|-------------------|"
                           
                           for WS_ID in $(echo "$WORKSPACES" | jq -r '.content[]?.identifier // empty' | grep -E '_sandbox$|_pov$' || true); do
                             WS_DETAILS=$(curl -s -X GET \
@@ -83,25 +83,31 @@ pipeline:
                               -H "Content-Type: application/json")
                             
                             TTL_DAYS=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "ttl_days") | .value // "45"' 2>/dev/null || echo "45")
-                            CREATED_AT=$(echo "$WS_DETAILS" | jq -r '.created // empty' 2>/dev/null || echo "")
+                            CREATED_AT=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "created_at") | .value // empty' 2>/dev/null || echo "")
                             OWNER=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "owner") | .value // "unknown"' 2>/dev/null || echo "unknown")
-                            
+                            PROFILE=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "sandbox_profile") | .value // "unknown"' 2>/dev/null || echo "unknown")
+                            TARGET=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "deployment_target") | .value // "unknown"' 2>/dev/null || echo "unknown")
+
+                            if [ -z "$CREATED_AT" ]; then
+                              CREATED_AT=$(echo "$WS_DETAILS" | jq -r '.created // empty' 2>/dev/null || echo "")
+                            fi
+
                             if [ "$TTL_DAYS" = "0" ]; then
-                              echo "| $OWNER | $WS_ID | ∞ | 🛡️ Protected | Never |"
+                              echo "| $OWNER | $PROFILE | $TARGET | $WS_ID | ∞ | 🛡️ Protected | Never |"
                             elif [ -n "$CREATED_AT" ]; then
                               CREATED_EPOCH=$(date -d "$CREATED_AT" +%s 2>/dev/null || date -j -f "%Y-%m-%dT%H:%M:%S" "$CREATED_AT" +%s 2>/dev/null || echo "0")
                               EXPIRY_EPOCH=$((CREATED_EPOCH + TTL_DAYS * 86400))
                               DAYS_REMAINING=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
                               
                               if [ $DAYS_REMAINING -lt 0 ]; then
-                                echo "| $OWNER | $WS_ID | ${TTL_DAYS}d | ⚠️ EXPIRED | ${DAYS_REMAINING}d ago |"
+                                echo "| $OWNER | $PROFILE | $TARGET | $WS_ID | ${TTL_DAYS}d | ⚠️ EXPIRED | ${DAYS_REMAINING}d ago |"
                               elif [ $DAYS_REMAINING -lt 7 ]; then
-                                echo "| $OWNER | $WS_ID | ${TTL_DAYS}d | 🟡 Expiring | ${DAYS_REMAINING}d left |"
+                                echo "| $OWNER | $PROFILE | $TARGET | $WS_ID | ${TTL_DAYS}d | 🟡 Expiring | ${DAYS_REMAINING}d left |"
                               else
-                                echo "| $OWNER | $WS_ID | ${TTL_DAYS}d | 🟢 Active | ${DAYS_REMAINING}d left |"
+                                echo "| $OWNER | $PROFILE | $TARGET | $WS_ID | ${TTL_DAYS}d | 🟢 Active | ${DAYS_REMAINING}d left |"
                               fi
                             else
-                              echo "| $OWNER | $WS_ID | ${TTL_DAYS}d | ❓ Unknown | No timestamp |"
+                              echo "| $OWNER | $PROFILE | $TARGET | $WS_ID | ${TTL_DAYS}d | ❓ Unknown | No timestamp |"
                             fi
                           done
                           
@@ -144,7 +150,7 @@ pipeline:
                           set -e
                           
                           OWNER="<+pipeline.variables.owner>"
-                          WS_ID="${OWNER}_sandbox"
+                          WS_ID="${OWNER}_pov"
                           
                           echo "=== Extending TTL for ${WS_ID} ==="
                           echo ""
@@ -219,7 +225,7 @@ pipeline:
                           set -e
                           
                           OWNER="<+pipeline.variables.owner>"
-                          WS_ID="${OWNER}_sandbox"
+                          WS_ID="${OWNER}_pov"
                           
                           echo "=== Protecting ${WS_ID} (Disabling TTL) ==="
                           echo ""
@@ -266,7 +272,7 @@ pipeline:
                   identifier: confirm_destroy
                   spec:
                     approvalMessage: |
-                      ⚠️ WARNING: You are about to destroy sandbox '<+pipeline.variables.owner>_sandbox'
+                      ⚠️ WARNING: You are about to destroy sandbox '<+pipeline.variables.owner>_pov'
                       
                       This will permanently delete:
                       - All Kubernetes deployments in harness-demo-<+pipeline.variables.owner>
@@ -300,7 +306,7 @@ pipeline:
                           
                           OWNER="<+pipeline.variables.owner>"
                           
-                          echo "=== Triggering Destroy for ${OWNER}_sandbox ==="
+                          echo "=== Triggering Destroy for ${OWNER}_pov ==="
                           echo ""
                           
                           ACCOUNT_ID="<+account.identifier>"

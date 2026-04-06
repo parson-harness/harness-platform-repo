@@ -15,6 +15,21 @@ pipeline:
       description: "If true, only report expired sandboxes without destroying them"
       required: false
       value: <+input>.default(false).allowedValues(true,false)
+    - name: owner_filter
+      type: String
+      description: "Optional owner filter. Leave blank to evaluate all managed POV workspaces"
+      required: false
+      value: <+input>
+    - name: sandbox_profile_filter
+      type: String
+      description: "Optional profile filter for cleanup targeting"
+      required: false
+      value: <+input>.default(all).allowedValues(all,se-demo,se-pov-sandbox,se-pov-ref-arch,se-workshop,manual)
+    - name: deployment_target_filter
+      type: String
+      description: "Optional deployment target filter for cleanup targeting"
+      required: false
+      value: <+input>.default(all).allowedValues(all,eks,asg)
     
     - name: harness_api_key
       type: Secret
@@ -61,6 +76,9 @@ pipeline:
                           PROJECT_ID="<+project.identifier>"
                           API_KEY="${HARNESS_API_KEY}"
                           ENDPOINT="https://app.harness.io"
+                          OWNER_FILTER="${OWNER_FILTER}"
+                          PROFILE_FILTER="${PROFILE_FILTER}"
+                          TARGET_FILTER="${TARGET_FILTER}"
                           
                           # List all IACM workspaces in the project
                           echo "Fetching IACM workspaces..."
@@ -92,16 +110,33 @@ pipeline:
                             TTL_DAYS=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "ttl_days") | .value // "45"' 2>/dev/null || echo "45")
                             CREATED_AT=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "created_at") | .value // empty' 2>/dev/null || echo "")
                             OWNER=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "owner") | .value // empty' 2>/dev/null || echo "unknown")
+                            PROFILE=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "sandbox_profile") | .value // "unknown"' 2>/dev/null || echo "unknown")
+                            TARGET=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "deployment_target") | .value // "unknown"' 2>/dev/null || echo "unknown")
                             
                             # If no created_at, use workspace created timestamp
                             if [ -z "$CREATED_AT" ]; then
                               CREATED_AT=$(echo "$WS_DETAILS" | jq -r '.created // empty' 2>/dev/null || echo "")
                             fi
+
+                            if [ -n "$OWNER_FILTER" ] && [ "$OWNER_FILTER" != "$OWNER" ]; then
+                              echo "  → Skipping due to owner filter"
+                              continue
+                            fi
+
+                            if [ "$PROFILE_FILTER" != "all" ] && [ "$PROFILE_FILTER" != "$PROFILE" ]; then
+                              echo "  → Skipping due to profile filter"
+                              continue
+                            fi
+
+                            if [ "$TARGET_FILTER" != "all" ] && [ "$TARGET_FILTER" != "$TARGET" ]; then
+                              echo "  → Skipping due to target filter"
+                              continue
+                            fi
                             
                             # TTL of 0 means never expire
                             if [ "$TTL_DAYS" = "0" ]; then
-                              echo "  → TTL disabled (protected)"
-                              PROTECTED_WORKSPACES="${PROTECTED_WORKSPACES}${WS_ID}|${OWNER}|protected\n"
+                              echo "  → TTL disabled (protected) [profile=${PROFILE}, target=${TARGET}]"
+                              PROTECTED_WORKSPACES="${PROTECTED_WORKSPACES}${WS_ID}|${OWNER}|${PROFILE}|${TARGET}|protected\n"
                               continue
                             fi
                             
@@ -112,11 +147,11 @@ pipeline:
                               DAYS_REMAINING=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
                               
                               if [ $CURRENT_EPOCH -gt $EXPIRY_EPOCH ]; then
-                                echo "  → EXPIRED (${DAYS_REMAINING} days past TTL)"
-                                EXPIRED_WORKSPACES="${EXPIRED_WORKSPACES}${WS_ID}|${OWNER}|${DAYS_REMAINING}\n"
+                                echo "  → EXPIRED (${DAYS_REMAINING} days past TTL) [profile=${PROFILE}, target=${TARGET}]"
+                                EXPIRED_WORKSPACES="${EXPIRED_WORKSPACES}${WS_ID}|${OWNER}|${PROFILE}|${TARGET}|${DAYS_REMAINING}\n"
                               else
-                                echo "  → Active (${DAYS_REMAINING} days remaining)"
-                                ACTIVE_WORKSPACES="${ACTIVE_WORKSPACES}${WS_ID}|${OWNER}|${DAYS_REMAINING}\n"
+                                echo "  → Active (${DAYS_REMAINING} days remaining) [profile=${PROFILE}, target=${TARGET}]"
+                                ACTIVE_WORKSPACES="${ACTIVE_WORKSPACES}${WS_ID}|${OWNER}|${PROFILE}|${TARGET}|${DAYS_REMAINING}\n"
                               fi
                             else
                               echo "  → No created_at timestamp, skipping"
@@ -131,11 +166,20 @@ pipeline:
                           echo ""
                           
                           # Output for next steps
-                          echo "$EXPIRED_WORKSPACES" | tr -d '\n' > /tmp/expired_workspaces.txt
+                          printf "%b" "$EXPIRED_WORKSPACES" > /tmp/expired_workspaces.txt
                     environmentVariables:
                       - name: DRY_RUN
                         type: String
                         value: <+pipeline.variables.dry_run>
+                      - name: OWNER_FILTER
+                        type: String
+                        value: <+pipeline.variables.owner_filter>
+                      - name: PROFILE_FILTER
+                        type: String
+                        value: <+pipeline.variables.sandbox_profile_filter>
+                      - name: TARGET_FILTER
+                        type: String
+                        value: <+pipeline.variables.deployment_target_filter>
                       - name: HARNESS_API_KEY
                         type: String
                         value: <+pipeline.variables.harness_api_key>
@@ -172,14 +216,13 @@ pipeline:
                             
                             echo "The following sandboxes have exceeded their TTL:"
                             echo ""
-                            echo "| Workspace ID | Owner | Days Past TTL |"
-                            echo "|--------------|-------|---------------|"
+                            echo "| Workspace ID | Owner | Profile | Target | Days Past TTL |"
+                            echo "|--------------|-------|---------|--------|---------------|"
                             
-                            COUNT=0
-                            echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER DAYS; do
+                            COUNT=$(printf "%s" "$EXPIRED" | grep -c '|' || true)
+                            echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER PROFILE TARGET DAYS; do
                               if [ -n "$WS_ID" ]; then
-                                echo "| $WS_ID | $OWNER | $DAYS |"
-                                COUNT=$((COUNT + 1))
+                                echo "| $WS_ID | $OWNER | $PROFILE | $TARGET | $DAYS |"
                               fi
                             done
                             
@@ -237,9 +280,9 @@ pipeline:
                           
                           EXPIRED=$(cat /tmp/expired_workspaces.txt)
                           
-                          echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER DAYS; do
+                          echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER PROFILE TARGET DAYS; do
                             if [ -n "$WS_ID" ]; then
-                              echo "Destroying workspace: $WS_ID (owner: $OWNER)"
+                              echo "Destroying workspace: $WS_ID (owner: $OWNER, profile: $PROFILE, target: $TARGET)"
                               
                               # Trigger the POV destroy pipeline for this workspace
                               RESPONSE=$(curl -s -X POST \

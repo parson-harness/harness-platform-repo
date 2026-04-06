@@ -136,13 +136,13 @@ spec:
         sandbox_profile:
           title: Sandbox Profile
           type: string
-          description: "Recommended one-click mode. auto chooses self_contained_ci_cd for eks and self_contained_asg for asg"
-          default: auto
+          description: "Recommended profile for this POV. Use se-demo for the full demo path, se-pov-sandbox for iterative shared-account POV work, se-pov-ref-arch for a portable reference baseline, and se-workshop for a simplified hands-on flow"
+          default: se-demo
           enum:
-            - auto
-            - self_contained_ci_cd
-            - self_contained_cd_only
-            - self_contained_asg
+            - se-demo
+            - se-pov-sandbox
+            - se-pov-ref-arch
+            - se-workshop
 
         eks_cluster_name:
           title: EKS Cluster

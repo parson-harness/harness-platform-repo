@@ -8,7 +8,7 @@ projectIdentifier: parson
 orgIdentifier: sandbox
 owner: todd.parson@harness.io
 metadata:
-  description: "View and manage SE sandbox environments with TTL status"
+  description: "View and manage SE demo and sandbox environments with TTL status"
   tags:
     - sandbox
     - ttl
@@ -16,7 +16,7 @@ metadata:
 spec:
   presentation:
     customTitle: SE Sandbox Manager
-    customSubTitle: View sandbox status, extend TTL, or destroy your sandbox
+    customSubTitle: View demo/sandbox status, extend TTL, protect, or destroy an existing managed POV workspace
     customCreateButtonText: View Sandboxes
   
   output:
@@ -73,4 +73,5 @@ spec:
         inputset:
           action: ${{ parameters.action }}
           owner: ${{ parameters.owner }}
+          harness_api_key: ${{ parameters.token }}
         apikey: ${{ parameters.token }}

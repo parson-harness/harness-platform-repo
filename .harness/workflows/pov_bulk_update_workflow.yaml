@@ -1,0 +1,109 @@
+apiVersion: harness.io/v1
+kind: Workflow
+name: POV Bulk Update
+identifier: pov_bulk_update_workflow
+type: workflow
+scope: project
+projectIdentifier: parson
+orgIdentifier: sandbox
+owner: todd.parson@harness.io
+metadata:
+  description: "Bulk reconcile existing managed POV demos and sandboxes by owner, profile, target, or template family"
+  tags:
+    - pov
+    - bulk-update
+    - self-service
+spec:
+  presentation:
+    customTitle: POV Bulk Update
+    customSubTitle: Reconcile existing managed POV workspaces after shared template, pipeline, or Terraform changes
+    customCreateButtonText: Run Bulk Update
+  
+  output:
+    links:
+      - title: IACM Workspaces
+        url: https://app.harness.io/ng/account/<+account.identifier>/module/iacm/orgs/sandbox/projects/parson/workspaces
+  
+  lifecycle: production
+  
+  parameters:
+    - title: Authentication
+      required:
+        - token
+      properties:
+        token:
+          title: Harness Token
+          type: string
+          ui:widget: password
+          ui:field: HarnessAuthToken
+
+    - title: Workspace Selection
+      properties:
+        template_id:
+          title: Template Scope
+          type: string
+          description: "Use all for every managed POV workspace, POV_Provisioner for EKS-linked workspaces, or Sandbox_Provisioner_ASG for ASG-linked workspaces"
+          default: all
+          enum:
+            - all
+            - POV_Provisioner
+            - Sandbox_Provisioner_ASG
+        owner_filter:
+          title: Owner Filter
+          type: string
+          description: "Optional owner filter (for example: todd). Leave blank to target all matching workspaces"
+        sandbox_profile_filter:
+          title: Profile Filter
+          type: string
+          description: "Optional profile filter"
+          default: all
+          enum:
+            - all
+            - se-demo
+            - se-pov-sandbox
+            - se-pov-ref-arch
+            - se-workshop
+            - manual
+        deployment_target_filter:
+          title: Deployment Target Filter
+          type: string
+          description: "Optional deployment target filter"
+          default: all
+          enum:
+            - all
+            - eks
+            - asg
+
+    - title: Update Options
+      properties:
+        action:
+          title: Reconcile Action
+          type: string
+          description: "Both modes trigger the managed POV workspace reconciliation path; use dry run first when targeting many workspaces"
+          default: apply
+          enum:
+            - plan
+            - apply
+        dry_run:
+          title: Dry Run?
+          type: string
+          description: "If true, only list matching workspaces without triggering updates"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+
+  steps:
+    - id: trigger
+      name: Running Bulk Update
+      action: trigger:harness-custom-pipeline
+      input:
+        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/pov_bulk_update/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
+        inputset:
+          template_id: ${{ parameters.template_id }}
+          owner_filter: ${{ parameters.owner_filter }}
+          sandbox_profile_filter: ${{ parameters.sandbox_profile_filter }}
+          deployment_target_filter: ${{ parameters.deployment_target_filter }}
+          action: ${{ parameters.action }}
+          dry_run: ${{ parameters.dry_run }}
+        apikey: ${{ parameters.token }}

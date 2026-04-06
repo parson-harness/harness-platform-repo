@@ -3,7 +3,7 @@ pipeline:
   identifier: pov_bulk_update
   projectIdentifier: parson
   orgIdentifier: sandbox
-  description: Triggers plan/apply on all POV workspaces linked to the POV_Provisioner template. Use this to push Terraform changes to all POVs at once.
+  description: Trigger plan/apply style reconciliation on managed POV workspaces using owner/profile/target filters. Use this to push shared Terraform or template changes across existing demos and sandboxes.
   tags:
     pov: "true"
     iacm: "true"
@@ -27,12 +27,27 @@ pipeline:
       value: acct-automation-svc-acct
     - name: template_id
       type: String
-      description: IACM workspace template ID to find linked workspaces
-      required: true
-      value: <+input>.default(POV_Provisioner)
+      description: Optional template-family scope. all targets all managed POV workspaces, POV_Provisioner scopes to EKS-linked workspaces, and Sandbox_Provisioner_ASG scopes to ASG-linked workspaces.
+      required: false
+      value: <+input>.default(all).allowedValues(all,POV_Provisioner,Sandbox_Provisioner_ASG)
+    - name: owner_filter
+      type: String
+      description: Optional owner filter. Leave blank to target all matching managed workspaces.
+      required: false
+      value: <+input>
+    - name: sandbox_profile_filter
+      type: String
+      description: Optional sandbox profile filter.
+      required: false
+      value: <+input>.default(all).allowedValues(all,se-demo,se-pov-sandbox,se-pov-ref-arch,se-workshop,manual)
+    - name: deployment_target_filter
+      type: String
+      description: Optional deployment target filter.
+      required: false
+      value: <+input>.default(all).allowedValues(all,eks,asg)
     - name: action
       type: String
-      description: Action to perform on each workspace
+      description: Action label to perform on each workspace. Both modes trigger the provisioner workspace pipeline for reconciliation.
       required: true
       value: <+input>.default(apply).allowedValues(plan,apply)
     - name: dry_run
@@ -44,17 +59,17 @@ pipeline:
     - stage:
         name: List Linked Workspaces
         identifier: list_workspaces
-        description: Find all workspaces linked to the specified template
+        description: Find all managed POV workspaces matching the requested filters
         type: Custom
         spec:
           execution:
             steps:
               - step:
                   type: Http
-                  name: Get Workspaces from Template
+                  name: Get Managed Workspaces
                   identifier: get_workspaces
                   spec:
-                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+org.identifier>/projects/<+project.identifier>/workspace/templates/<+pipeline.variables.template_id>/workspaces
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+org.identifier>/projects/<+project.identifier>/workspaces?accountIdentifier=<+pipeline.variables.harness_account_id>
                     method: GET
                     headers:
                       - key: Harness-Account
@@ -81,42 +96,104 @@ pipeline:
                       type: Inline
                       spec:
                         script: |
-                          echo "=== Workspaces Linked to Template: <+pipeline.variables.template_id> ==="
+                          set -euo pipefail
+
+                          echo "=== Managed POV Workspaces Matching Filters ==="
                           echo ""
-                          
-                          # Parse the JSON response to extract workspace identifiers
                           WORKSPACES_JSON='<+execution.steps.get_workspaces.output.outputVariables.workspaces_json>'
-                          
-                          # Extract workspace identifiers using jq-like parsing
-                          # The response is an array of workspace objects with 'identifier' field
-                          WORKSPACE_IDS=$(echo "$WORKSPACES_JSON" | python3 -c "
-                          import sys, json
-                          try:
-                              data = json.load(sys.stdin)
-                              if isinstance(data, list):
-                                  ids = [w.get('identifier', '') for w in data if w.get('identifier')]
-                                  print(','.join(ids))
-                              else:
-                                  print('')
-                          except:
-                              print('')
-                          ")
-                          
-                          echo "Found workspaces: $WORKSPACE_IDS"
-                          echo ""
-                          
-                          # Count workspaces
-                          if [ -z "$WORKSPACE_IDS" ]; then
+                          ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
+                          ENDPOINT="<+pipeline.variables.harness_endpoint>"
+                          ORG_ID="<+org.identifier>"
+                          PROJECT_ID="<+project.identifier>"
+                          API_KEY="<+pipeline.variables.provisioner_api_key>"
+                          TEMPLATE_SCOPE="<+pipeline.variables.template_id>"
+                          OWNER_FILTER="<+pipeline.variables.owner_filter>"
+                          PROFILE_FILTER="<+pipeline.variables.sandbox_profile_filter>"
+                          TARGET_FILTER="<+pipeline.variables.deployment_target_filter>"
+
+                          case "$TEMPLATE_SCOPE" in
+                            POV_Provisioner)
+                              TEMPLATE_TARGET_FILTER="eks"
+                              ;;
+                            Sandbox_Provisioner_ASG)
+                              TEMPLATE_TARGET_FILTER="asg"
+                              ;;
+                            *)
+                              TEMPLATE_TARGET_FILTER="all"
+                              ;;
+                          esac
+
+                          ALL_IDS=$(printf "%s" "$WORKSPACES_JSON" | python3 -c 'import sys,json; raw=sys.stdin.read(); data=json.loads(raw) if raw.strip() else []; items=data.get("content", []) if isinstance(data, dict) else data if isinstance(data, list) else []; print("\\n".join(item.get("identifier", "") for item in items if item.get("identifier")))')
+
+                          FILTERED_IDS=""
+                          WORKSPACE_REPORT=""
+
+                          while IFS= read -r WS_ID; do
+                            if [ -z "$WS_ID" ]; then
+                              continue
+                            fi
+
+                            case "$WS_ID" in
+                              *_pov|*_sandbox)
+                                ;;
+                              *)
+                                continue
+                                ;;
+                            esac
+
+                            WS_DETAILS=$(curl -s -X GET \
+                              "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces/${WS_ID}?accountIdentifier=${ACCOUNT_ID}" \
+                              -H "x-api-key: ${API_KEY}" \
+                              -H "Harness-Account: ${ACCOUNT_ID}" \
+                              -H "Content-Type: application/json")
+
+                            OWNER=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "owner") | .value // "unknown"' 2>/dev/null || echo "unknown")
+                            PROFILE=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "sandbox_profile") | .value // "unknown"' 2>/dev/null || echo "unknown")
+                            TARGET=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "deployment_target") | .value // "unknown"' 2>/dev/null || echo "unknown")
+                            TTL_DAYS=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "ttl_days") | .value // "unknown"' 2>/dev/null || echo "unknown")
+
+                            if [ -n "$OWNER_FILTER" ] && [ "$OWNER_FILTER" != "$OWNER" ]; then
+                              continue
+                            fi
+
+                            if [ "$PROFILE_FILTER" != "all" ] && [ "$PROFILE_FILTER" != "$PROFILE" ]; then
+                              continue
+                            fi
+
+                            if [ "$TARGET_FILTER" != "all" ] && [ "$TARGET_FILTER" != "$TARGET" ]; then
+                              continue
+                            fi
+
+                            if [ "$TEMPLATE_TARGET_FILTER" != "all" ] && [ "$TEMPLATE_TARGET_FILTER" != "$TARGET" ]; then
+                              continue
+                            fi
+
+                            if [ -n "$FILTERED_IDS" ]; then
+                              FILTERED_IDS="${FILTERED_IDS},${WS_ID}"
+                            else
+                              FILTERED_IDS="$WS_ID"
+                            fi
+
+                            WORKSPACE_REPORT="${WORKSPACE_REPORT}- ${WS_ID} | owner=${OWNER} | profile=${PROFILE} | target=${TARGET} | ttl=${TTL_DAYS}\n"
+                          done <<< "$ALL_IDS"
+
+                          if [ -z "$FILTERED_IDS" ]; then
                             WORKSPACE_COUNT=0
                           else
-                            WORKSPACE_COUNT=$(echo "$WORKSPACE_IDS" | tr ',' '\n' | wc -l | tr -d ' ')
+                            WORKSPACE_COUNT=$(printf "%s" "$FILTERED_IDS" | tr ',' '\n' | grep -c . || true)
                           fi
-                          
+
+                          echo "Template scope: $TEMPLATE_SCOPE"
+                          echo "Owner filter: ${OWNER_FILTER:-<none>}"
+                          echo "Profile filter: $PROFILE_FILTER"
+                          echo "Target filter: $TARGET_FILTER"
+                          echo ""
+                          printf "%b" "$WORKSPACE_REPORT"
                           echo "Total: $WORKSPACE_COUNT workspace(s)"
                           
-                          # Export for next steps
-                          export WORKSPACE_IDS
+                          export WORKSPACE_IDS="$FILTERED_IDS"
                           export WORKSPACE_COUNT
+                          export WORKSPACE_REPORT
                     environmentVariables: []
                     outputVariables:
                       - name: workspace_ids
@@ -125,6 +202,9 @@ pipeline:
                       - name: workspace_count
                         type: String
                         value: WORKSPACE_COUNT
+                      - name: workspace_report
+                        type: String
+                        value: WORKSPACE_REPORT
                   timeout: 2m
     - stage:
         name: Update Workspaces
@@ -157,27 +237,12 @@ pipeline:
                           PROJECT_ID="<+project.identifier>"
                           API_KEY="<+pipeline.variables.provisioner_api_key>"
                           ACTION="<+pipeline.variables.action>"
-                          
-                          # Get workspace list from previous stage
-                          WORKSPACES_JSON='<+stages.list_workspaces.spec.execution.steps.get_workspaces.output.outputVariables.workspaces_json>'
+                          WORKSPACE_IDS="<+stages.list_workspaces.spec.execution.steps.parse_workspaces.output.outputVariables.workspace_ids>"
                           
                           echo "=== POV Bulk Update ==="
                           echo "Action: $ACTION"
                           echo ""
-                          
-                          # Parse workspace identifiers
-                          WORKSPACE_IDS=$(echo "$WORKSPACES_JSON" | python3 -c "
-                          import sys, json
-                          try:
-                              data = json.load(sys.stdin)
-                              if isinstance(data, list):
-                                  ids = [w.get('identifier', '') for w in data if w.get('identifier')]
-                                  for id in ids:
-                                      print(id)
-                          except:
-                              pass
-                          ")
-                          
+
                           if [ -z "$WORKSPACE_IDS" ]; then
                             echo "No workspaces found to update."
                             exit 0
@@ -193,7 +258,7 @@ pipeline:
                           SUCCESS_COUNT=0
                           FAIL_COUNT=0
                           
-                          echo "$WORKSPACE_IDS" | while read WORKSPACE_ID; do
+                          for WORKSPACE_ID in $(printf "%s" "$WORKSPACE_IDS" | tr ',' ' '); do
                             if [ -z "$WORKSPACE_ID" ]; then
                               continue
                             fi
@@ -249,7 +314,7 @@ pipeline:
                           echo "Template: <+pipeline.variables.template_id>"
                           echo "Action: <+pipeline.variables.action>"
                           echo ""
-                          echo "All linked workspaces have been triggered."
+                          echo "All matching managed workspaces have been triggered."
                           echo "Check individual workspace executions for status."
                           echo "=============================================="
                     environmentVariables: []
@@ -286,24 +351,9 @@ pipeline:
                           echo ""
                           echo "The following workspaces WOULD be updated:"
                           echo ""
-                          
-                          WORKSPACES_JSON='<+stages.list_workspaces.spec.execution.steps.get_workspaces.output.outputVariables.workspaces_json>'
-                          
-                          echo "$WORKSPACES_JSON" | python3 -c "
-                          import sys, json
-                          try:
-                              data = json.load(sys.stdin)
-                              if isinstance(data, list):
-                                  for i, w in enumerate(data, 1):
-                                      name = w.get('name', 'Unknown')
-                                      identifier = w.get('identifier', 'Unknown')
-                                      print(f'  {i}. {name} ({identifier})')
-                                  print(f'\nTotal: {len(data)} workspace(s)')
-                              else:
-                                  print('  No workspaces found')
-                          except Exception as e:
-                              print(f'  Error parsing response: {e}')
-                          "
+                          printf "%b" "<+stages.list_workspaces.spec.execution.steps.parse_workspaces.output.outputVariables.workspace_report>"
+                          echo ""
+                          echo "Total: <+stages.list_workspaces.spec.execution.steps.parse_workspaces.output.outputVariables.workspace_count> workspace(s)"
                           
                           echo ""
                           echo "To actually trigger updates, run again with dry_run=false"

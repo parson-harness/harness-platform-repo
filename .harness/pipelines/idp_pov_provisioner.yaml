@@ -25,9 +25,9 @@ pipeline:
       value: <+input>.default(eks).allowedValues(eks,asg)
     - name: sandbox_profile
       type: String
-      description: Recommended one-click sandbox mode. auto chooses self_contained_ci_cd for eks and self_contained_asg for asg.
+      description: Recommended one-click profile. Supports the named profiles plus legacy aliases for backward compatibility.
       required: false
-      value: <+input>.default(auto).allowedValues(auto,self_contained_ci_cd,self_contained_cd_only,self_contained_asg)
+      value: <+input>.default(se-demo).allowedValues(se-demo,se-pov-sandbox,se-pov-ref-arch,se-workshop,auto,self_contained_ci_cd,self_contained_cd_only,self_contained_asg)
     - name: use_profile_defaults
       type: String
       description: Recommended true. When true, sandbox_profile drives the delivery defaults. Set false only for advanced manual override mode.
@@ -212,18 +212,27 @@ pipeline:
                           RESOLVED_USE_HARNESS_CODE="true"
 
                           if [ "$USE_PROFILE_DEFAULTS" = "true" ]; then
-                            if [ "$SANDBOX_PROFILE" = "auto" ]; then
-                              if [ "$DEPLOYMENT_TARGET" = "asg" ]; then
-                                RESOLVED_PROFILE="self_contained_asg"
-                              else
-                                RESOLVED_PROFILE="self_contained_ci_cd"
-                              fi
-                            else
-                              RESOLVED_PROFILE="$SANDBOX_PROFILE"
-                            fi
+                            case "$SANDBOX_PROFILE" in
+                              auto|self_contained_ci_cd)
+                                RESOLVED_PROFILE="se-demo"
+                                ;;
+                              self_contained_cd_only)
+                                RESOLVED_PROFILE="se-workshop"
+                                ;;
+                              self_contained_asg)
+                                RESOLVED_PROFILE="se-demo"
+                                ;;
+                              se-demo|se-pov-sandbox|se-pov-ref-arch|se-workshop)
+                                RESOLVED_PROFILE="$SANDBOX_PROFILE"
+                                ;;
+                              *)
+                                echo "Unsupported sandbox profile: ${SANDBOX_PROFILE}"
+                                exit 1
+                                ;;
+                            esac
 
-                            case "$RESOLVED_PROFILE" in
-                              self_contained_ci_cd)
+                            case "$RESOLVED_PROFILE:$DEPLOYMENT_TARGET" in
+                              se-demo:eks|se-pov-sandbox:eks|se-pov-ref-arch:eks)
                                 RESOLVED_ARTIFACT_REGISTRY_TYPE="har"
                                 RESOLVED_CREATE_DOCKERHUB_UPSTREAM="true"
                                 RESOLVED_CREATE_STRATEGY_PIPELINE="true"
@@ -232,16 +241,25 @@ pipeline:
                                 RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="false"
                                 RESOLVED_CREATE_ASG_CI_PIPELINE="false"
                                 ;;
-                              self_contained_cd_only)
+                              se-demo:asg|se-pov-sandbox:asg|se-pov-ref-arch:asg)
+                                RESOLVED_ARTIFACT_REGISTRY_TYPE="har"
+                                RESOLVED_CREATE_DOCKERHUB_UPSTREAM="true"
+                                RESOLVED_CREATE_STRATEGY_PIPELINE="false"
+                                RESOLVED_CREATE_CI_PIPELINE="false"
+                                RESOLVED_CREATE_STANDARD_CI_GRADLE="false"
+                                RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="true"
+                                RESOLVED_CREATE_ASG_CI_PIPELINE="true"
+                                ;;
+                              se-workshop:eks)
                                 RESOLVED_ARTIFACT_REGISTRY_TYPE="har"
                                 RESOLVED_CREATE_DOCKERHUB_UPSTREAM="true"
                                 RESOLVED_CREATE_STRATEGY_PIPELINE="true"
-                                RESOLVED_CREATE_CI_PIPELINE="false"
+                                RESOLVED_CREATE_CI_PIPELINE="true"
                                 RESOLVED_CREATE_STANDARD_CI_GRADLE="false"
                                 RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="false"
                                 RESOLVED_CREATE_ASG_CI_PIPELINE="false"
                                 ;;
-                              self_contained_asg)
+                              se-workshop:asg)
                                 RESOLVED_ARTIFACT_REGISTRY_TYPE="har"
                                 RESOLVED_CREATE_DOCKERHUB_UPSTREAM="true"
                                 RESOLVED_CREATE_STRATEGY_PIPELINE="false"
@@ -251,7 +269,7 @@ pipeline:
                                 RESOLVED_CREATE_ASG_CI_PIPELINE="true"
                                 ;;
                               *)
-                                echo "Unsupported sandbox profile: ${RESOLVED_PROFILE}"
+                                echo "Profile ${RESOLVED_PROFILE} is not compatible with deployment_target=${DEPLOYMENT_TARGET}"
                                 exit 1
                                 ;;
                             esac
@@ -265,16 +283,6 @@ pipeline:
                             RESOLVED_CREATE_STANDARD_CI_GRADLE="$RAW_CREATE_STANDARD_CI_GRADLE"
                             RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="$RAW_CREATE_ASG_STRATEGY_PIPELINE"
                             RESOLVED_CREATE_ASG_CI_PIPELINE="$RAW_CREATE_ASG_CI_PIPELINE"
-                          fi
-
-                          if [ "$DEPLOYMENT_TARGET" = "asg" ] && [ "$RESOLVED_PROFILE" != "self_contained_asg" ] && [ "$RESOLVED_PROFILE" != "manual" ]; then
-                            echo "Profile ${RESOLVED_PROFILE} is not compatible with deployment_target=${DEPLOYMENT_TARGET}"
-                            exit 1
-                          fi
-
-                          if [ "$DEPLOYMENT_TARGET" = "eks" ] && [ "$RESOLVED_PROFILE" = "self_contained_asg" ]; then
-                            echo "Profile ${RESOLVED_PROFILE} is not compatible with deployment_target=${DEPLOYMENT_TARGET}"
-                            exit 1
                           fi
 
                           export RESOLVED_PROFILE
@@ -899,6 +907,28 @@ pipeline:
                           CREATE_OPA_POLICIES="<+pipeline.variables.create_opa_policies>"
                           ACM_CERT_ARN="<+pipeline.variables.acm_cert_arn>"
                           SHARED_ALB_DNS_NAME="<+pipeline.variables.shared_alb_dns_name>"
+                          CURRENT_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+                          WORKSPACE_DETAILS=$(curl -s \
+                            -X GET "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces/${WORKSPACE_ID}?accountIdentifier=${ACCOUNT_ID}" \
+                            -H "Content-Type: application/json" \
+                            -H "Harness-Account: ${ACCOUNT_ID}" \
+                            -H "x-api-key: ${PROVISIONER_API_KEY}")
+
+                          EXISTING_CREATED_AT=$(echo "$WORKSPACE_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "created_at") | .value // empty' 2>/dev/null || true)
+                          EXISTING_TTL_DAYS=$(echo "$WORKSPACE_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "ttl_days") | .value // empty' 2>/dev/null || true)
+
+                          if [ -n "$EXISTING_CREATED_AT" ] && [ "$EXISTING_CREATED_AT" != "null" ]; then
+                            CREATED_AT_VALUE="$EXISTING_CREATED_AT"
+                          else
+                            CREATED_AT_VALUE="$CURRENT_TIMESTAMP"
+                          fi
+
+                          if [ -n "$EXISTING_TTL_DAYS" ] && [ "$EXISTING_TTL_DAYS" != "null" ]; then
+                            TTL_DAYS_VALUE="$EXISTING_TTL_DAYS"
+                          else
+                            TTL_DAYS_VALUE="45"
+                          fi
 
                           json_escape() {
                             local value="$1"
@@ -958,6 +988,13 @@ pipeline:
                             rm -f "$response_file"
                           }
 
+                          update_tf_var "owner" "<+pipeline.variables.owner>" "string"
+                          update_tf_var "workspace_id" "$WORKSPACE_ID" "string"
+                          update_tf_var "sandbox_profile" "$RESOLVED_PROFILE" "string"
+                          update_tf_var "deployment_target" "$DEPLOYMENT_TARGET" "string"
+                          update_tf_var "created_at" "$CREATED_AT_VALUE" "string"
+                          update_tf_var "last_touched_at" "$CURRENT_TIMESTAMP" "string"
+                          update_tf_var "ttl_days" "$TTL_DAYS_VALUE" "string"
                           update_tf_var "harness_account_id" "$ACCOUNT_ID" "string"
                           update_tf_var "harness_endpoint" "$ENDPOINT" "string"
                           update_tf_var "harness_api_key" "$TARGET_API_KEY" "string"
