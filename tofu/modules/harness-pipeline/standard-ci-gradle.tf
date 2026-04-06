@@ -186,6 +186,15 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                           echo "=== GENERATING CODE COVERAGE REPORT ==="
                           gradle clean test jacocoTestReport bootJar --no-build-cache --rerun-tasks
 
+                          if ! ls build/test-results/test/*.xml >/dev/null 2>&1; then
+                            echo "JUnit test reports not found at build/test-results/test/*.xml"
+                            exit 1
+                          fi
+
+                          echo ""
+                          echo "=== UPLOADING TEST REPORTS TO HARNESS ==="
+                          hcli --verbose test-reports upload "build/test-results/test/*.xml"
+
                           COVERAGE_FILE="build/reports/jacoco/test/jacocoTestReport.xml"
 
                           if [ ! -s "$COVERAGE_FILE" ]; then
@@ -227,6 +236,8 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                             -- sh -c "test -s '$UPLOAD_COVERAGE_FILE'"
 
                           echo "Full report: build/reports/jacoco/test/html/index.html"
+                        envVariables:
+                          CI_ENABLE_QUARANTINED_TEST_SKIP: "true"
                   - stepGroup:
                       name: SAST Scans
                       identifier: sast_scans
