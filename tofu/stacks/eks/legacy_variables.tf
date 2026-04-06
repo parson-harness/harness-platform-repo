@@ -80,3 +80,39 @@ variable "create_connectors" {
   type        = bool
   default     = true
 }
+
+variable "workspace_id" {
+  description = "LEGACY: Workspace identifier metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "created_at" {
+  description = "LEGACY: Workspace creation timestamp metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "last_touched_at" {
+  description = "LEGACY: Workspace last touched timestamp metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "ttl_days" {
+  description = "LEGACY: Workspace TTL metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "deployment_target" {
+  description = "LEGACY: Deployment target metadata stamped by the provisioner"
+  type        = string
+  default     = "eks"
+}
+
+variable "sandbox_profile" {
+  description = "LEGACY: Sandbox profile metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
