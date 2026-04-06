@@ -558,10 +558,10 @@ pipeline:
                           echo "Governance workspace variables reconciled for ${WORKSPACE_ID}"
                     environmentVariables:
                       - name: PROVISIONER_API_KEY
-                        type: Secret
+                        type: String
                         value: <+pipeline.variables.provisioner_api_key>
                       - name: TARGET_API_KEY
-                        type: Secret
+                        type: String
                         value: <+pipeline.variables.target_api_key>
                     outputVariables: []
                   timeout: 5m
@@ -1293,10 +1293,10 @@ pipeline:
                           echo "Workspace variables reconciled for ${WORKSPACE_ID} (${DEPLOYMENT_TARGET}, profile=${RESOLVED_PROFILE})"
                     environmentVariables:
                       - name: PROVISIONER_API_KEY
-                        type: Secret
+                        type: String
                         value: <+pipeline.variables.provisioner_api_key>
                       - name: TARGET_API_KEY
-                        type: Secret
+                        type: String
                         value: <+pipeline.variables.target_api_key>
                     outputVariables: []
                   timeout: 5m
@@ -1386,12 +1386,12 @@ pipeline:
                             if [ "$TARGET" = "asg" ]; then
                               if [ "$REPO_CODE" = "404" ]; then
                                 echo ""
-                                echo "⚠️  State is STALE - Harness Code repo is missing"
+                                echo " State is STALE - Harness Code repo is missing"
                                 echo "Will delete and recreate workspace to start fresh"
                                 STATE_STALE="true"
                               else
                                 echo ""
-                                echo "✓ State appears healthy"
+                                echo " State appears healthy"
                               fi
                             else
                               HAR_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
@@ -1406,18 +1406,18 @@ pipeline:
 
                               if [ "$HAR_CODE" = "404" ] || [ "$REG_CODE" = "404" ] || [ "$REPO_CODE" = "404" ]; then
                                 echo ""
-                                echo "⚠️  State is STALE - key EKS resources in state were deleted from Harness"
+                                echo " State is STALE - key EKS resources in state were deleted from Harness"
                                 echo "Will delete and recreate workspace to start fresh"
                                 STATE_STALE="true"
                               else
                                 echo ""
-                                echo "✓ State appears healthy"
+                                echo " State appears healthy"
                               fi
                             fi
                           fi
                     environmentVariables:
                       - name: API_KEY
-                        type: Secret
+                        type: String
                         value: <+pipeline.variables.target_api_key>
                     outputVariables:
                       - name: state_stale
