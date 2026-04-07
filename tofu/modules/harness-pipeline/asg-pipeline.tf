@@ -14,7 +14,6 @@
 #   5. For B/G: validate on <stageUrl> before approving traffic swap to <appUrl>
 #   6. For Canary: observe partial traffic before promoting to 100%
 ################################################################################
-
 locals {
   asg_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
   asg_pipeline_tag_objects = [
@@ -28,118 +27,171 @@ locals {
   ]
   asg_pipeline_yaml_tags = join("\n", [for tag in local.asg_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
   asg_change_governance_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
-                  - stepGroup:
-                      name: Change Governance
-                      identifier: change_governance
-                      steps:
-                        - step:
-                            type: ShellScript
-                            name: Assemble Change Context
-                            identifier: assemble_change_context
-                            timeout: 10m
-                            spec:
-                              shell: Bash
-                              executionTarget: {}
-                              source:
-                                type: Inline
-                                spec:
-                                  script: |
-                                    cat <<'EOF' > change_context.json
-                                    {
-                                      "pipeline": {
-                                        "identifier": "<+pipeline.identifier>",
-                                        "execution_id": "<+pipeline.executionId>",
-                                        "sequence_id": "<+pipeline.sequenceId>"
-                                      },
-                                      "change": {
-                                        "request_id": "<+pipeline.identifier>-<+pipeline.sequenceId>",
-                                        "service": "<+service.identifier>",
-                                        "environment": "<+env.identifier>",
-                                        "environment_type": "<+env.type>",
-                                        "deployment_strategy": "<+pipeline.variables.deployment_strategy>",
-                                        "blast_radius": "<+pipeline.variables.change_blast_radius>",
-                                        "freeze_window_active": <+pipeline.variables.change_freeze_active>,
-                                        "requires_data_migration": <+pipeline.variables.requires_data_migration>
-                                      },
-                                      "validation": {
-                                        "tests": {
-                                          "pass_rate": <+pipeline.variables.test_pass_rate>
-                                        },
-                                        "security": {
-                                          "critical_vulns": <+pipeline.variables.critical_vulnerabilities>,
-                                          "high_vulns": <+pipeline.variables.high_vulnerabilities>
-                                        },
-                                        "operations": {
-                                          "open_failures": <+pipeline.variables.open_change_failures>,
-                                          "rollback_ready": <+pipeline.variables.rollback_ready>
-                                        }
-                                      },
-                                      "release_candidate": <+pipeline.variables.release_candidate_evidence>
-                                    }
-                                    EOF
+        - stage:
+            name: Release Governance
+            identifier: change_governance
+            description: Policy-driven approval gate for deployment risk evaluation
+            type: Custom
+            when:
+              pipelineStatus: Success
+${local.asg_delegate_yaml}            spec:
+              execution:
+                steps:
+                  - step:
+                      type: ShellScript
+                      name: Assemble Change Context
+                      identifier: assemble_change_context
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              cat <<'EOF' > change_context.json
+                              {
+                                "pipeline": {
+                                  "identifier": "<+pipeline.identifier>",
+                                  "execution_id": "<+pipeline.executionId>",
+                                  "sequence_id": "<+pipeline.sequenceId>"
+                                },
+                                "change": {
+                                  "request_id": "<+pipeline.identifier>-<+pipeline.sequenceId>",
+                                  "service": "${var.asg_service_ref}",
+                                  "environment": "${var.environment_name}",
+                                  "environment_type": "${var.environment_type}",
+                                  "deployment_strategy": "<+pipeline.variables.deployment_strategy>",
+                                  "blast_radius": "<+pipeline.variables.change_blast_radius>",
+                                  "freeze_window_active": <+pipeline.variables.change_freeze_active>,
+                                  "requires_data_migration": <+pipeline.variables.requires_data_migration>
+                                },
+                                "validation": {
+                                  "tests": {
+                                    "pass_rate": <+pipeline.variables.test_pass_rate>
+                                  },
+                                  "security": {
+                                    "critical_vulns": <+pipeline.variables.critical_vulnerabilities>,
+                                    "high_vulns": <+pipeline.variables.high_vulnerabilities>
+                                  },
+                                  "operations": {
+                                    "open_failures": <+pipeline.variables.open_change_failures>,
+                                    "rollback_ready": <+pipeline.variables.rollback_ready>
+                                  }
+                                },
+                                "release_candidate": <+pipeline.variables.release_candidate_evidence>
+                              }
+                              EOF
 
-                                    change_context="$(tr -d '\n' < change_context.json)"
-                                    export change_context
-                                    echo "$change_context"
-                              environmentVariables: []
-                              outputVariables:
-                                - name: change_context
-                                  type: String
-                                  value: change_context
+                              change_context="$(tr -d '\n' < change_context.json)"
+                              export change_context
+                              echo "$change_context"
+                        environmentVariables: []
+                        outputVariables:
+                          - name: change_context
+                            type: String
+                            value: change_context
+                      timeout: 10m
+                  - stepGroup:
+                      name: Governance
+                      identifier: governance
+                      steps:
                         - step:
                             type: Policy
                             name: Evaluate Change Risk
                             identifier: evaluate_change_risk
-                            timeout: 10m
                             spec:
                               policySets:
                                 - ${var.change_governance_policy_set}
                               type: Custom
                               policySpec:
-                                payload: <+execution.steps.change_governance.steps.assemble_change_context.output.outputVariables.change_context>
+                                payload: <+execution.steps.assemble_change_context.output.outputVariables.change_context>
+                            timeout: 10m
                             failureStrategies:
                               - onFailure:
                                   errors:
                                     - PolicyEvaluationFailure
                                   action:
                                     type: MarkAsSuccess
-                        - step:
-                            type: HarnessApproval
-                            name: Governance Approval
-                            identifier: governance_approval
-                            timeout: 1d
-                            spec:
-                              approvalMessage: |
-                                Change governance policies flagged this deployment for manual approval.
+                  - parallel:
+                      - stepGroup:
+                          name: Manual Approval Required
+                          identifier: manual_approval_required
+                          steps:
+                            - step:
+                                type: HarnessApproval
+                                name: Governance Approval
+                                identifier: governance_approval
+                                spec:
+                                  approvalMessage: |
+                                    Change governance policies flagged this deployment for manual approval.
 
-                                Policy evaluation status: <+execution.steps.change_governance.steps.evaluate_change_risk.output.status>
-                                Review the Evaluate Change Risk step for the full policy decision details.
+                                    Policy evaluation status: <+execution.steps.governance.steps.evaluate_change_risk.output.status>
+                                    Review the Evaluate Change Risk step for the full policy decision details.
 
-                                Release summary:
-                                - Service: <+service.identifier>
-                                - Environment: <+env.identifier>
-                                - Strategy: <+pipeline.variables.deployment_strategy>
-                                - AMI name: <+pipeline.variables.ami_name>
-                                - Test pass rate: <+pipeline.variables.test_pass_rate>
-                                - Critical vulnerabilities: <+pipeline.variables.critical_vulnerabilities>
-                                - High vulnerabilities: <+pipeline.variables.high_vulnerabilities>
-                                - Rollback ready: <+pipeline.variables.rollback_ready>
-                                - Open change failures: <+pipeline.variables.open_change_failures>
-                                - Change freeze active: <+pipeline.variables.change_freeze_active>
-                                - Requires data migration: <+pipeline.variables.requires_data_migration>
+                                    Release summary:
+                                    - Service: ${var.asg_service_ref}
+                                    - Environment: ${var.environment_name}
+                                    - Strategy: <+pipeline.variables.deployment_strategy>
+                                    - AMI name: <+pipeline.variables.ami_name>
+                                    - Test pass rate: <+pipeline.variables.test_pass_rate>
+                                    - Critical vulnerabilities: <+pipeline.variables.critical_vulnerabilities>
+                                    - High vulnerabilities: <+pipeline.variables.high_vulnerabilities>
+                                    - Rollback ready: <+pipeline.variables.rollback_ready>
+                                    - Open change failures: <+pipeline.variables.open_change_failures>
+                                    - Change freeze active: <+pipeline.variables.change_freeze_active>
+                                    - Requires data migration: <+pipeline.variables.requires_data_migration>
 
-                                Release candidate evidence:
-                                <+pipeline.variables.release_candidate_evidence>
-                              includePipelineExecutionHistory: true
-                              approvers:
-                                userGroups:
-                                  - ${var.change_governance_approver_group}
-                                minimumCount: 1
-                                disallowPipelineExecutor: false
-                              approverInputs: []
-                            when:
-                              stageStatus: All
-                              condition: <+execution.steps.change_governance.steps.evaluate_change_risk.output.status> == "error"
+                                    Release candidate evidence:
+                                    <+pipeline.variables.release_candidate_evidence>
+                                  includePipelineExecutionHistory: true
+                                  isAutoRejectEnabled: false
+                                  approvers:
+                                    userGroups:
+                                      - ${var.change_governance_approver_group}
+                                    minimumCount: 1
+                                    disallowPipelineExecutor: false
+                                  approverInputs: []
+                                timeout: 10m
+                                when:
+                                  stageStatus: All
+                          when:
+                            stageStatus: All
+                            condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> == "error"
+                      - stepGroup:
+                          name: Auto Approval Path
+                          identifier: auto_approval_path
+                          steps:
+                            - step:
+                                type: ShellScript
+                                name: Record Auto Approval
+                                identifier: record_auto_approval
+                                spec:
+                                  shell: Bash
+                                  executionTarget: {}
+                                  source:
+                                    type: Inline
+                                    spec:
+                                      script: |
+                                        echo "Policy evaluation passed."
+                                        echo "Service: ${var.asg_service_ref}"
+                                        echo "Environment: ${var.environment_name}"
+                                        echo "Strategy: <+pipeline.variables.deployment_strategy>"
+                                  environmentVariables: []
+                                  outputVariables: []
+                                timeout: 10m
+                                when:
+                                  stageStatus: All
+                          when:
+                            stageStatus: All
+                            condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> != "error"
+            tags: {}
+            failureStrategies:
+              - onFailure:
+                  errors:
+                    - AllErrors
+                  action:
+                    type: StageRollback
+
     EOT
   ) : ""
 }
@@ -221,6 +273,7 @@ ${local.asg_pipeline_yaml_tags != "" ? "${local.asg_pipeline_yaml_tags}\n" : ""}
           required: false
           value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})
       stages:
+${local.asg_change_governance_yaml}
         - stage:
             name: Blue-Green Deployment
             identifier: asg_blue_green
@@ -240,7 +293,6 @@ ${local.asg_delegate_yaml}            spec:
                   - identifier: ${var.asg_infrastructure_ref}
               execution:
                 steps:
-${local.asg_change_governance_yaml}
                   - step:
                       type: ShellScript
                       name: Print Variables
@@ -371,7 +423,6 @@ ${local.asg_delegate_yaml}            spec:
                   - identifier: ${var.asg_infrastructure_ref}
               execution:
                 steps:
-${local.asg_change_governance_yaml}
                   - step:
                       type: ShellScript
                       name: Print Variables
@@ -505,7 +556,6 @@ ${local.asg_delegate_yaml}            spec:
                   - identifier: ${var.asg_infrastructure_ref}
               execution:
                 steps:
-${local.asg_change_governance_yaml}
                   - step:
                       type: ShellScript
                       name: Print Variables

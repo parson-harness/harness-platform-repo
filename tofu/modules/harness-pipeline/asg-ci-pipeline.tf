@@ -154,7 +154,11 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                                 name: Build Intelligence
                                 identifier: build_intelligence
                                 spec:
+%{if var.har_registry_ref != ""~}
                                   registryRef: ${var.har_registry_ref}
+%{else~}
+                                  registryRef: account.harnessImage
+%{endif~}
                                   image: gradle:8.5-jdk17
                                   shell: Sh
                                   command: |
