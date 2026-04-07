@@ -165,12 +165,17 @@ module "harness_code_repo" {
 ################################################################################
 
 resource "terraform_data" "cleanup_existing_asg_named_resources" {
+  triggers_replace = {
+    recovery_run_id = var.last_touched_at != "" ? var.last_touched_at : var.created_at
+  }
+
   provisioner "local-exec" {
     interpreter = ["/bin/sh", "-c"]
     command     = <<-EOT
       set +e
       AWS_REGION="${var.aws_region}"
       IAM_AUTH_USER="$${AWS_ACCESS_KEY_ID}:$${AWS_SECRET_ACCESS_KEY}"
+      STATE_FILE="${path.root}/terraform.tfstate"
       ALB_NAME="${local.asg_alb_name}"
       PROD_TG_NAME="${local.asg_prod_tg_name}"
       STAGE_TG_NAME="${local.asg_stage_tg_name}"
@@ -178,6 +183,24 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
       LAUNCH_TEMPLATE_NAME="${local.name_prefix}-asg-lt"
       INSTANCE_PROFILE_NAME="${local.name_prefix}-asg-instance-profile"
       INSTANCE_ROLE_NAME="${local.name_prefix}-asg-instance-role"
+
+      STATE_CONTENT=""
+      if [ -f "$${STATE_FILE}" ]; then
+        STATE_CONTENT=$(tr -d '\n\r\t ' < "$${STATE_FILE}" 2>/dev/null || true)
+      fi
+
+      state_tracks_resource() {
+        RESOURCE_MODULE="$1"
+        RESOURCE_TYPE="$2"
+        RESOURCE_NAME="$3"
+        RESOURCE_FRAGMENT="\"module\":\"$${RESOURCE_MODULE}\",\"mode\":\"managed\",\"type\":\"$${RESOURCE_TYPE}\",\"name\":\"$${RESOURCE_NAME}\""
+
+        if [ -z "$${STATE_CONTENT}" ]; then
+          return 1
+        fi
+
+        echo "$${STATE_CONTENT}" | grep -Fq "$${RESOURCE_FRAGMENT}"
+      }
 
       iam_get() {
         curl -s --aws-sigv4 "aws:amz:us-east-1:iam" \
@@ -266,50 +289,64 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
         fi
       }
 
-      ASG_XML=$(autoscaling_post "Action=DescribeAutoScalingGroups&AutoScalingGroupNames.member.1=$${BASE_ASG_NAME}&Version=2011-01-01" 2>&1)
-      if echo "$${ASG_XML}" | grep -q "<AutoScalingGroupName>$${BASE_ASG_NAME}</AutoScalingGroupName>"; then
-        autoscaling_post "Action=UpdateAutoScalingGroup&AutoScalingGroupName=$${BASE_ASG_NAME}&MinSize=0&MaxSize=0&DesiredCapacity=0&Version=2011-01-01" >/dev/null 2>&1 || true
-        autoscaling_post "Action=DeleteAutoScalingGroup&AutoScalingGroupName=$${BASE_ASG_NAME}&ForceDelete=true&Version=2011-01-01" >/dev/null 2>&1 || true
-        wait_for_asg_deletion
+      if ! state_tracks_resource "module.asg" "aws_autoscaling_group" "base"; then
+        ASG_XML=$(autoscaling_post "Action=DescribeAutoScalingGroups&AutoScalingGroupNames.member.1=$${BASE_ASG_NAME}&Version=2011-01-01" 2>&1)
+        if echo "$${ASG_XML}" | grep -q "<AutoScalingGroupName>$${BASE_ASG_NAME}</AutoScalingGroupName>"; then
+          autoscaling_post "Action=UpdateAutoScalingGroup&AutoScalingGroupName=$${BASE_ASG_NAME}&MinSize=0&MaxSize=0&DesiredCapacity=0&Version=2011-01-01" >/dev/null 2>&1 || true
+          autoscaling_post "Action=DeleteAutoScalingGroup&AutoScalingGroupName=$${BASE_ASG_NAME}&ForceDelete=true&Version=2011-01-01" >/dev/null 2>&1 || true
+          wait_for_asg_deletion
+        fi
       fi
 
-      LAUNCH_TEMPLATE_XML=$(ec2_post "Action=DescribeLaunchTemplates&LaunchTemplateName.1=$${LAUNCH_TEMPLATE_NAME}&Version=2016-11-15" 2>&1)
-      LAUNCH_TEMPLATE_ID=$(echo "$${LAUNCH_TEMPLATE_XML}" | grep -o '<launchTemplateId>[^<]*</launchTemplateId>' | sed 's/<[^>]*>//g' | head -1)
-      if [ -n "$${LAUNCH_TEMPLATE_ID}" ]; then
-        ec2_post "Action=DeleteLaunchTemplate&LaunchTemplateId=$${LAUNCH_TEMPLATE_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
+      if ! state_tracks_resource "module.asg" "aws_launch_template" "main"; then
+        LAUNCH_TEMPLATE_XML=$(ec2_post "Action=DescribeLaunchTemplates&LaunchTemplateName.1=$${LAUNCH_TEMPLATE_NAME}&Version=2016-11-15" 2>&1)
+        LAUNCH_TEMPLATE_ID=$(echo "$${LAUNCH_TEMPLATE_XML}" | grep -o '<launchTemplateId>[^<]*</launchTemplateId>' | sed 's/<[^>]*>//g' | head -1)
+        if [ -n "$${LAUNCH_TEMPLATE_ID}" ]; then
+          ec2_post "Action=DeleteLaunchTemplate&LaunchTemplateId=$${LAUNCH_TEMPLATE_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
+        fi
       fi
 
-      LOAD_BALANCER_XML=$(elbv2_get "?Action=DescribeLoadBalancers&Names.member.1=$${ALB_NAME}&Version=2015-12-01" 2>&1)
-      LOAD_BALANCER_ARN=$(echo "$${LOAD_BALANCER_XML}" | grep -o '<LoadBalancerArn>[^<]*</LoadBalancerArn>' | sed 's/<[^>]*>//g' | head -1)
-      if [ -n "$${LOAD_BALANCER_ARN}" ]; then
-        elbv2_post "Action=DeleteLoadBalancer&LoadBalancerArn=$${LOAD_BALANCER_ARN}&Version=2015-12-01" >/dev/null 2>&1 || true
-        wait_for_lb_deletion
+      if ! state_tracks_resource "module.asg" "aws_lb" "main"; then
+        LOAD_BALANCER_XML=$(elbv2_get "?Action=DescribeLoadBalancers&Names.member.1=$${ALB_NAME}&Version=2015-12-01" 2>&1)
+        LOAD_BALANCER_ARN=$(echo "$${LOAD_BALANCER_XML}" | grep -o '<LoadBalancerArn>[^<]*</LoadBalancerArn>' | sed 's/<[^>]*>//g' | head -1)
+        if [ -n "$${LOAD_BALANCER_ARN}" ]; then
+          elbv2_post "Action=DeleteLoadBalancer&LoadBalancerArn=$${LOAD_BALANCER_ARN}&Version=2015-12-01" >/dev/null 2>&1 || true
+          wait_for_lb_deletion
+        fi
       fi
 
-      delete_target_group_by_name "$${PROD_TG_NAME}"
-      delete_target_group_by_name "$${STAGE_TG_NAME}"
-
-      INSTANCE_PROFILE_XML=$(iam_get "?Action=GetInstanceProfile&InstanceProfileName=$${INSTANCE_PROFILE_NAME}&Version=2010-05-08" 2>&1)
-      if echo "$${INSTANCE_PROFILE_XML}" | grep -q "<InstanceProfileName>$${INSTANCE_PROFILE_NAME}</InstanceProfileName>"; then
-        for ROLE_NAME in $(echo "$${INSTANCE_PROFILE_XML}" | grep -o '<RoleName>[^<]*</RoleName>' | sed 's/<[^>]*>//g'); do
-          iam_post "Action=RemoveRoleFromInstanceProfile&InstanceProfileName=$${INSTANCE_PROFILE_NAME}&RoleName=$${ROLE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
-        done
-        iam_post "Action=DeleteInstanceProfile&InstanceProfileName=$${INSTANCE_PROFILE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+      if ! state_tracks_resource "module.asg" "aws_lb_target_group" "prod"; then
+        delete_target_group_by_name "$${PROD_TG_NAME}"
+      fi
+      if ! state_tracks_resource "module.asg" "aws_lb_target_group" "stage"; then
+        delete_target_group_by_name "$${STAGE_TG_NAME}"
       fi
 
-      INSTANCE_ROLE_XML=$(iam_get "?Action=GetRole&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" 2>&1)
-      if echo "$${INSTANCE_ROLE_XML}" | grep -q "<RoleName>$${INSTANCE_ROLE_NAME}</RoleName>"; then
-        ATTACHED_XML=$(iam_get "?Action=ListAttachedRolePolicies&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" 2>&1)
-        for ARN in $(echo "$${ATTACHED_XML}" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
-          iam_post "Action=DetachRolePolicy&RoleName=$${INSTANCE_ROLE_NAME}&PolicyArn=$${ARN}&Version=2010-05-08" >/dev/null 2>&1 || true
-        done
+      if ! state_tracks_resource "module.asg" "aws_iam_instance_profile" "app"; then
+        INSTANCE_PROFILE_XML=$(iam_get "?Action=GetInstanceProfile&InstanceProfileName=$${INSTANCE_PROFILE_NAME}&Version=2010-05-08" 2>&1)
+        if echo "$${INSTANCE_PROFILE_XML}" | grep -q "<InstanceProfileName>$${INSTANCE_PROFILE_NAME}</InstanceProfileName>"; then
+          for ROLE_NAME in $(echo "$${INSTANCE_PROFILE_XML}" | grep -o '<RoleName>[^<]*</RoleName>' | sed 's/<[^>]*>//g'); do
+            iam_post "Action=RemoveRoleFromInstanceProfile&InstanceProfileName=$${INSTANCE_PROFILE_NAME}&RoleName=$${ROLE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+          done
+          iam_post "Action=DeleteInstanceProfile&InstanceProfileName=$${INSTANCE_PROFILE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+        fi
+      fi
 
-        INLINE_XML=$(iam_get "?Action=ListRolePolicies&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" 2>&1)
-        for POLICY in $(echo "$${INLINE_XML}" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
-          iam_post "Action=DeleteRolePolicy&RoleName=$${INSTANCE_ROLE_NAME}&PolicyName=$${POLICY}&Version=2010-05-08" >/dev/null 2>&1 || true
-        done
+      if ! state_tracks_resource "module.asg" "aws_iam_role" "instance"; then
+        INSTANCE_ROLE_XML=$(iam_get "?Action=GetRole&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" 2>&1)
+        if echo "$${INSTANCE_ROLE_XML}" | grep -q "<RoleName>$${INSTANCE_ROLE_NAME}</RoleName>"; then
+          ATTACHED_XML=$(iam_get "?Action=ListAttachedRolePolicies&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" 2>&1)
+          for ARN in $(echo "$${ATTACHED_XML}" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
+            iam_post "Action=DetachRolePolicy&RoleName=$${INSTANCE_ROLE_NAME}&PolicyArn=$${ARN}&Version=2010-05-08" >/dev/null 2>&1 || true
+          done
 
-        iam_post "Action=DeleteRole&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+          INLINE_XML=$(iam_get "?Action=ListRolePolicies&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" 2>&1)
+          for POLICY in $(echo "$${INLINE_XML}" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
+            iam_post "Action=DeleteRolePolicy&RoleName=$${INSTANCE_ROLE_NAME}&PolicyName=$${POLICY}&Version=2010-05-08" >/dev/null 2>&1 || true
+          done
+
+          iam_post "Action=DeleteRole&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+        fi
       fi
 
       exit 0
