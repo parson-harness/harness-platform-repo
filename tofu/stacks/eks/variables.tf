@@ -236,15 +236,15 @@ variable "create_strategy_pipeline" {
 }
 
 variable "create_ci_pipeline" {
-  description = "Create the CI build pipeline (Maven-based)"
+  description = "LEGACY compatibility placeholder for the retired Maven CI pipeline"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "create_standard_ci_gradle" {
   description = "Create Standard CI Gradle pipeline (Gradle build, Test Intelligence, security scanning, supply chain)"
   type        = bool
-  default     = false
+  default     = true
   nullable    = true
 }
 

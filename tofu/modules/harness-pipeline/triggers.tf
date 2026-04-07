@@ -5,7 +5,7 @@
 ################################################################################
 
 resource "harness_platform_triggers" "cd_webhook_trigger" {
-  count       = var.create_ci_completion_trigger && (var.create_ci_pipeline || var.create_standard_ci_gradle) && var.create_strategy_pipeline ? 1 : 0
+  count       = var.create_ci_completion_trigger && var.create_standard_ci_gradle && var.create_strategy_pipeline ? 1 : 0
   identifier  = "auto_deploy_webhook"
   name        = "Auto-Deploy Webhook"
   org_id      = var.org_id

@@ -121,12 +121,6 @@ template:
         status: manual
         locked: false
         type: String
-      - key: create_ci_pipeline
-        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_ci_pipeline>
-        value_type: string
-        status: manual
-        locked: false
-        type: String
       - key: create_standard_ci_gradle
         value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>
         value_type: string

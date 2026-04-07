@@ -477,8 +477,8 @@ module "harness_pipelines_asg" {
   # ASG strategy pipeline
   create_asg_strategy_pipeline      = var.create_asg_strategy_pipeline
   asg_strategy_pipeline_id          = "${var.owner}_asg_strategy_deploy"
-  asg_strategy_pipeline_name        = "${title(var.owner)} ASG Deploy with Strategy Choice"
-  asg_strategy_pipeline_description = "Single pipeline with runtime strategy selection for ASG - Blue/Green, Canary, or Rolling"
+  asg_strategy_pipeline_name        = "${title(var.owner)} Application Delivery - ASG"
+  asg_strategy_pipeline_description = "Unified ASG deployment pipeline with runtime strategy selection for customer demos"
   asg_service_ref                   = "${var.owner}_demo_app_asg"
   asg_infrastructure_ref            = "${var.owner}_asg_dev"
   asg_canary_instance_count         = var.asg_canary_instance_count

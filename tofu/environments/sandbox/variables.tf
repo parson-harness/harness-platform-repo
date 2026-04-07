@@ -259,13 +259,13 @@ variable "harness_code_source_repo" {
 ################################################################################
 
 variable "create_canary_pipeline" {
-  description = "Create Canary deployment pipeline"
+  description = "LEGACY compatibility placeholder for the retired standalone canary pipeline"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "create_blue_green_pipeline" {
-  description = "Create Blue/Green deployment pipeline"
+  description = "LEGACY compatibility placeholder for the retired blue-green pipeline"
   type        = bool
   default     = false
 }
@@ -276,10 +276,16 @@ variable "create_strategy_pipeline" {
   default     = true
 }
 
-variable "create_ci_pipeline" {
-  description = "Create CI build pipeline"
+variable "create_standard_ci_gradle" {
+  description = "Create the standard Gradle CI pipeline with CI intelligence, security scanning, and supply chain features"
   type        = bool
   default     = true
+}
+
+variable "create_ci_pipeline" {
+  description = "LEGACY compatibility placeholder for the retired Maven CI pipeline"
+  type        = bool
+  default     = false
 }
 
 variable "github_repo_name" {
@@ -560,6 +566,12 @@ variable "asg_max_size" {
 
 variable "create_asg_strategy_pipeline" {
   description = "Create ASG strategy pipeline (Blue-Green, Canary, Rolling)"
+  type        = bool
+  default     = true
+}
+
+variable "create_asg_ci_pipeline" {
+  description = "Create the ASG CI pipeline with CI intelligence, security scanning, and Packer bake"
   type        = bool
   default     = true
 }

@@ -261,7 +261,7 @@ locals {
 ################################################################################
 
 resource "harness_platform_pipeline" "k8s_canary" {
-  count       = var.create_canary_pipeline ? 1 : 0
+  count       = 0
   identifier  = var.canary_pipeline_id
   name        = "${var.canary_pipeline_name} - Deprecated"
   org_id      = var.org_id
@@ -335,7 +335,7 @@ ${local.k8s_pipeline_yaml_tags != "" ? "${local.k8s_pipeline_yaml_tags}\n" : ""}
 ################################################################################
 
 resource "harness_platform_pipeline" "k8s_blue_green_canary" {
-  count       = var.create_blue_green_pipeline ? 1 : 0
+  count       = 0
   identifier  = var.blue_green_pipeline_id
   name        = var.blue_green_pipeline_name
   org_id      = var.org_id

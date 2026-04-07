@@ -923,8 +923,8 @@ module "harness_pipelines_asg" {
   # ASG strategy pipeline
   create_asg_strategy_pipeline      = var.create_asg_strategy_pipeline
   asg_strategy_pipeline_id          = "${var.owner}_asg_strategy_deploy"
-  asg_strategy_pipeline_name        = "${title(var.owner)} ASG Deploy with Strategy Choice"
-  asg_strategy_pipeline_description = "Single pipeline with runtime strategy selection for ASG - Blue/Green, Canary, or Rolling"
+  asg_strategy_pipeline_name        = "${title(var.owner)} Application Delivery - ASG"
+  asg_strategy_pipeline_description = "Unified ASG deployment pipeline with runtime strategy selection for customer demos"
   asg_service_ref                   = "${var.owner}_demo_app_asg"
   asg_infrastructure_ref            = "${var.owner}_asg_dev"
   asg_canary_instance_count         = var.asg_canary_instance_count
@@ -946,7 +946,7 @@ module "harness_pipelines_asg" {
   create_ci_pipeline = false
 
   # ASG CI pipeline: Gradle + CI Intelligence + security scans → Packer AMI build (separate from EKS Docker CI pipeline)
-  create_asg_ci_pipeline      = (local.enable_asg && !(local.enable_eks || local.enable_ecs || local.enable_lambda)) ? var.create_ci_pipeline : false
+  create_asg_ci_pipeline      = (local.enable_asg && !(local.enable_eks || local.enable_ecs || local.enable_lambda)) ? var.create_asg_ci_pipeline : false
   asg_ci_pipeline_id          = "${var.owner}_asg_ci_build"
   asg_ci_pipeline_name        = "${title(var.owner)} ASG CI Build"
   asg_ci_pipeline_description = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning, and Packer AMI bake"
@@ -984,39 +984,21 @@ module "harness_pipelines_dev" {
   environment_name   = "Dev"
   infrastructure_ref = local.enable_eks ? "${var.owner}_k8s_dev" : ""
 
-  # Canary pipeline
-  create_canary_pipeline      = var.create_canary_pipeline
-  canary_pipeline_id          = "${var.owner}_k8s_canary_deploy"
-  canary_pipeline_name        = "${title(var.owner)} K8s Canary Deploy"
-  canary_pipeline_description = "Canary deployment with CV for ${var.owner} demo app"
-  canary_instance_count       = 1
-
-  # Continuous Verification
-  enable_cv      = var.enable_cv
-  cv_sensitivity = var.cv_sensitivity
-  cv_duration    = var.cv_duration
-
-  # Blue/Green + Canary pipeline (2-stage: B/G to Dev, Canary to Prod)
-  create_blue_green_pipeline      = var.create_blue_green_pipeline
-  blue_green_pipeline_id          = "${var.owner}_k8s_bg_canary_deploy"
-  blue_green_pipeline_name        = "${title(var.owner)} K8s BlueGreen-Canary"
-  blue_green_pipeline_description = "2-stage pipeline - Blue-Green to Dev then Canary to Prod"
-
-  # Prod environment for 2nd stage
-  prod_environment_ref    = var.create_prod_environment ? "${var.owner}_prod" : ""
-  prod_infrastructure_ref = local.enable_eks && var.create_prod_environment ? "${var.owner}_k8s_prod" : ""
-
   # Strategy Choice pipeline (single pipeline with runtime strategy selection)
   create_strategy_pipeline      = var.create_strategy_pipeline
   strategy_pipeline_id          = "${var.owner}_k8s_strategy_deploy"
-  strategy_pipeline_name        = "${title(var.owner)} K8s Deploy with Strategy Choice"
-  strategy_pipeline_description = "Single pipeline with runtime strategy selection - Blue/Green, Canary, or Rolling"
+  strategy_pipeline_name        = "${title(var.owner)} Application Delivery"
+  strategy_pipeline_description = "Unified deployment pipeline with runtime strategy selection for customer demos"
 
-  # CI Build pipeline
-  create_ci_pipeline      = var.create_ci_pipeline
-  ci_pipeline_id          = "${var.owner}_ci_build"
-  ci_pipeline_name        = "${title(var.owner)} CI Build"
-  ci_pipeline_description = "Builds Docker image and pushes to Harness Artifact Registry"
+  create_standard_ci_gradle      = var.create_standard_ci_gradle
+  standard_ci_gradle_id          = "${var.owner}_standard_ci_gradle"
+  standard_ci_gradle_name        = "${title(var.owner)} Standard CI - Gradle"
+  standard_ci_gradle_description = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
+  standard_ci_gradle_test_packages = "io.harness.demo"
+
+  create_ci_pipeline = false
+  create_canary_pipeline = false
+  create_blue_green_pipeline = false
   git_connector_ref       = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   git_repo_name           = var.github_repo_name
   har_registry_ref        = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""
@@ -1030,13 +1012,6 @@ module "harness_pipelines_dev" {
   harness_org_id         = local.resolved_org_id
   harness_project_id     = local.resolved_project_id
   harness_api_key        = var.harness_api_key
-
-  # ASG Packer AMI build (added to CI pipeline when asg is a deployment target)
-  asg_packer_build_enabled  = local.enable_asg
-  asg_packer_owner          = var.owner
-  asg_packer_region         = var.aws_region
-  asg_aws_access_key_secret = var.asg_packer_aws_access_key_secret
-  asg_aws_secret_key_secret = var.asg_packer_aws_secret_key_secret
 
   delegate_selector = "delegate-${var.owner}"
 

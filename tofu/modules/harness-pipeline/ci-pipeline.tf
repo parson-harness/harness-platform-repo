@@ -55,7 +55,7 @@ EOT
 }
 
 resource "harness_platform_pipeline" "ci_build" {
-  count       = var.create_ci_pipeline ? 1 : 0
+  count       = 0
   identifier  = var.ci_pipeline_id
   name        = var.ci_pipeline_name
   org_id      = var.org_id

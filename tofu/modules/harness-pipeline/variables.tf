@@ -43,7 +43,7 @@ variable "infrastructure_ref" {
 ################################################################################
 
 variable "create_canary_pipeline" {
-  description = "DEPRECATED: Create standalone Canary pipeline. Use create_strategy_pipeline instead with deployment_strategy=canary"
+  description = "LEGACY compatibility placeholder for the retired standalone canary pipeline"
   type        = bool
   default     = false
 }
@@ -101,7 +101,7 @@ variable "monitored_service_ref" {
 ################################################################################
 
 variable "create_blue_green_pipeline" {
-  description = "Create Blue/Green + Canary deployment pipeline (2-stage: B/G to Dev, Canary to Prod)"
+  description = "LEGACY compatibility placeholder for the retired blue-green pipeline"
   type        = bool
   default     = false
 }
@@ -155,13 +155,13 @@ variable "strategy_pipeline_id" {
 variable "strategy_pipeline_name" {
   description = "Name for Strategy Choice pipeline"
   type        = string
-  default     = "K8s Deploy with Strategy Choice"
+  default     = "Application Delivery"
 }
 
 variable "strategy_pipeline_description" {
   description = "Description for Strategy Choice pipeline"
   type        = string
-  default     = "Single pipeline with runtime strategy selection - Blue/Green, Canary, or Rolling"
+  default     = "Unified deployment pipeline with runtime strategy selection for customer demos"
 }
 
 ################################################################################
@@ -169,9 +169,9 @@ variable "strategy_pipeline_description" {
 ################################################################################
 
 variable "create_ci_pipeline" {
-  description = "Create CI build pipeline"
+  description = "LEGACY compatibility placeholder for the retired Maven CI pipeline"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "ci_pipeline_id" {
@@ -384,7 +384,7 @@ variable "asg_ci_pipeline_description" {
 ################################################################################
 
 variable "create_asg_strategy_pipeline" {
-  description = "Create ASG strategy pipeline (Blue-Green, Canary, Rolling)"
+  description = "Create ASG strategy pipeline"
   type        = bool
   default     = false
 }
@@ -398,13 +398,13 @@ variable "asg_strategy_pipeline_id" {
 variable "asg_strategy_pipeline_name" {
   description = "Name for the ASG strategy pipeline"
   type        = string
-  default     = "ASG Deploy with Strategy Choice"
+  default     = "Application Delivery - ASG"
 }
 
 variable "asg_strategy_pipeline_description" {
   description = "Description for the ASG strategy pipeline"
   type        = string
-  default     = "Single pipeline with runtime strategy selection for ASG - Blue/Green, Canary, or Rolling"
+  default     = "Unified ASG deployment pipeline with runtime strategy selection for customer demos"
 }
 
 variable "asg_service_ref" {

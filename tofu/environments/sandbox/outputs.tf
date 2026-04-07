@@ -102,14 +102,14 @@ output "harness_service_id" {
   value       = var.create_harness_service && (local.enable_eks || local.enable_ecs || local.enable_lambda) ? module.harness_service[0].service_id : null
 }
 
-output "canary_pipeline_id" {
-  description = "ID of the Canary deployment pipeline"
-  value       = var.create_harness_service && var.create_harness_environment && (local.enable_eks || local.enable_ecs || local.enable_lambda) ? module.harness_pipelines_dev[0].canary_pipeline_identifier : null
+output "strategy_pipeline_id" {
+  description = "Identifier of the strategy deployment pipeline"
+  value       = var.create_harness_service && var.create_harness_environment && (local.enable_eks || local.enable_ecs || local.enable_lambda) ? module.harness_pipelines_dev[0].strategy_pipeline_identifier : null
 }
 
-output "blue_green_pipeline_id" {
-  description = "ID of the Blue/Green deployment pipeline"
-  value       = var.create_blue_green_pipeline && var.create_harness_service && var.create_harness_environment && (local.enable_eks || local.enable_ecs || local.enable_lambda) ? module.harness_pipelines_dev[0].blue_green_pipeline_identifier : null
+output "standard_ci_gradle_id" {
+  description = "Identifier of the standard Gradle CI pipeline"
+  value       = var.create_harness_service && var.create_harness_environment && (local.enable_eks || local.enable_ecs || local.enable_lambda) ? module.harness_pipelines_dev[0].standard_ci_gradle_identifier : null
 }
 
 output "harness_dev_environment_id" {

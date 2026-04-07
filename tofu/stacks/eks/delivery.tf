@@ -152,15 +152,8 @@ module "harness_pipelines" {
   # Strategy Choice pipeline
   create_strategy_pipeline      = var.create_strategy_pipeline
   strategy_pipeline_id          = "${var.owner}_k8s_strategy_deploy"
-  strategy_pipeline_name        = "${local.owner_title} K8s Deploy with Strategy Choice"
-  strategy_pipeline_description = "Single pipeline with runtime strategy selection - Blue/Green, Canary, or Rolling"
-
-  # CI Build pipeline
-  # Only create CI pipeline if we have a valid codebase source (Harness Code OR GitHub connector)
-  create_ci_pipeline      = var.create_ci_pipeline && local.has_code_source
-  ci_pipeline_id          = "${var.owner}_ci_build"
-  ci_pipeline_name        = "${local.owner_title} CI Build"
-  ci_pipeline_description = "Builds Docker image and pushes to Harness Artifact Registry"
+  strategy_pipeline_name        = "${local.owner_title} Application Delivery"
+  strategy_pipeline_description = "Unified deployment pipeline with runtime strategy selection for customer demos"
   git_connector_ref       = local.pipeline_git_connector_ref
   git_repo_name           = var.github_repo_name
   har_registry_ref        = var.artifact_registry_type == "har" ? local.har_registry_id : ""
@@ -194,6 +187,7 @@ module "harness_pipelines" {
   coverage_report_artifact_path_prefix   = var.coverage_report_artifact_path_prefix
 
   # Disable other pipeline types
+  create_ci_pipeline           = false
   create_canary_pipeline       = false
   create_blue_green_pipeline   = false
   create_asg_strategy_pipeline = false
