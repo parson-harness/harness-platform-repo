@@ -123,7 +123,28 @@ resource "harness_platform_triggers" "asg_cd_webhook_trigger" {
               value: <+trigger.payload.test_pass_rate>
             - name: change_blast_radius
               type: String
-              value: medium
+              value: <+trigger.payload.change_blast_radius>
+            - name: critical_vulnerabilities
+              type: String
+              value: <+trigger.payload.critical_vulnerabilities>
+            - name: high_vulnerabilities
+              type: String
+              value: <+trigger.payload.high_vulnerabilities>
+            - name: rollback_ready
+              type: String
+              value: <+trigger.payload.rollback_ready>
+            - name: open_change_failures
+              type: String
+              value: <+trigger.payload.open_change_failures>
+            - name: change_freeze_active
+              type: String
+              value: <+trigger.payload.change_freeze_active>
+            - name: requires_data_migration
+              type: String
+              value: <+trigger.payload.requires_data_migration>
+            - name: release_candidate_evidence
+              type: String
+              value: <+trigger.payload.release_candidate_evidence>
   TRIGGER_EOT
 }
 
