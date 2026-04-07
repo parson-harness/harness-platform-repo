@@ -169,6 +169,10 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
     recovery_run_id = var.last_touched_at != "" ? var.last_touched_at : var.created_at
   }
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   provisioner "local-exec" {
     interpreter = ["/bin/sh", "-c"]
     command     = <<-EOT
