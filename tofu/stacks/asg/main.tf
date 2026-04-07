@@ -241,12 +241,28 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
         return 0
       }
 
+      wait_for_target_group_deletion() {
+        TARGET_GROUP_NAME="$1"
+        for _ in $(seq 1 30); do
+          RESPONSE=$(elbv2_get "?Action=DescribeTargetGroups&Names.member.1=$${TARGET_GROUP_NAME}&Version=2015-12-01" 2>&1)
+          if echo "$${RESPONSE}" | grep -q "TargetGroupNotFound"; then
+            return 0
+          fi
+          if ! echo "$${RESPONSE}" | grep -q "<TargetGroupArn>"; then
+            return 0
+          fi
+          sleep 5
+        done
+        return 0
+      }
+
       delete_target_group_by_name() {
         TARGET_GROUP_NAME="$1"
         TARGET_GROUP_XML=$(elbv2_get "?Action=DescribeTargetGroups&Names.member.1=$${TARGET_GROUP_NAME}&Version=2015-12-01" 2>&1)
         TARGET_GROUP_ARN=$(echo "$${TARGET_GROUP_XML}" | grep -o '<TargetGroupArn>[^<]*</TargetGroupArn>' | sed 's/<[^>]*>//g' | head -1)
         if [ -n "$${TARGET_GROUP_ARN}" ]; then
           elbv2_post "Action=DeleteTargetGroup&TargetGroupArn=$${TARGET_GROUP_ARN}&Version=2015-12-01" >/dev/null 2>&1 || true
+          wait_for_target_group_deletion "$${TARGET_GROUP_NAME}"
         fi
       }
 

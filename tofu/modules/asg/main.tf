@@ -46,19 +46,17 @@ data "aws_ami" "amazon_linux_2023" {
 }
 
 locals {
-  effective_ami_id = var.ami_id != "" ? var.ami_id : data.aws_ami.amazon_linux_2023[0].id
-  alb_name_source  = "${var.name_prefix}-asg-alb"
-  prod_tg_name_source = "${var.name_prefix}-asg-prod-tg"
+  effective_ami_id     = var.ami_id != "" ? var.ami_id : data.aws_ami.amazon_linux_2023[0].id
+  alb_name_source      = "${var.name_prefix}-asg-alb"
+  prod_tg_name_source  = "${var.name_prefix}-asg-prod-tg"
   stage_tg_name_source = "${var.name_prefix}-asg-stage-tg"
-  alb_name = length(local.alb_name_source) <= 32 ? local.alb_name_source : "${substr(local.alb_name_source, 0, 23)}-${substr(md5(local.alb_name_source), 0, 8)}"
-  prod_tg_name = length(local.prod_tg_name_source) <= 32 ? local.prod_tg_name_source : "${substr(local.prod_tg_name_source, 0, 23)}-${substr(md5(local.prod_tg_name_source), 0, 8)}"
-  stage_tg_name = length(local.stage_tg_name_source) <= 32 ? local.stage_tg_name_source : "${substr(local.stage_tg_name_source, 0, 23)}-${substr(md5(local.stage_tg_name_source), 0, 8)}"
-
+  alb_name             = length(local.alb_name_source) <= 32 ? local.alb_name_source : "${substr(local.alb_name_source, 0, 23)}-${substr(md5(local.alb_name_source), 0, 8)}"
+  prod_tg_name         = length(local.prod_tg_name_source) <= 32 ? local.prod_tg_name_source : "${substr(local.prod_tg_name_source, 0, 23)}-${substr(md5(local.prod_tg_name_source), 0, 8)}"
+  stage_tg_name        = length(local.stage_tg_name_source) <= 32 ? local.stage_tg_name_source : "${substr(local.stage_tg_name_source, 0, 23)}-${substr(md5(local.stage_tg_name_source), 0, 8)}"
   azs = length(var.availability_zones) > 0 ? var.availability_zones : [
     data.aws_availability_zones.available.names[0],
     data.aws_availability_zones.available.names[1]
   ]
-
   public_subnet_cidrs = [
     cidrsubnet(var.vpc_cidr, 8, 1),
     cidrsubnet(var.vpc_cidr, 8, 2)
@@ -410,12 +408,13 @@ data "aws_route53_zone" "harness_demo_dev" {
 }
 
 resource "aws_route53_record" "asg_app" {
-  count   = var.create_dns_record ? 1 : 0
-  zone_id = data.aws_route53_zone.harness_demo_dev[0].zone_id
-  name    = "${var.owner}-asg.${var.route53_zone_name}"
-  type    = "CNAME"
-  ttl     = 60
-  records = [aws_lb.main.dns_name]
+  count           = var.create_dns_record ? 1 : 0
+  zone_id         = data.aws_route53_zone.harness_demo_dev[0].zone_id
+  name            = "${var.owner}-asg.${var.route53_zone_name}"
+  type            = "CNAME"
+  ttl             = 60
+  records         = [aws_lb.main.dns_name]
+  allow_overwrite = true
 }
 
 ################################################################################
