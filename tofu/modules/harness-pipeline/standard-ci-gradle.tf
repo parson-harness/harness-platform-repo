@@ -237,6 +237,7 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
 
                           echo "Full report: build/reports/jacoco/test/html/index.html"
                         envVariables:
+                          CI_ENABLE_HCLI_FOR_TESTS: "true"
                           CI_ENABLE_QUARANTINED_TEST_SKIP: "true"
                   - stepGroup:
                       name: SAST Scans
