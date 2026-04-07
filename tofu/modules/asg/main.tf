@@ -53,10 +53,7 @@ locals {
   alb_name             = length(local.alb_name_source) <= 32 ? local.alb_name_source : "${substr(local.alb_name_source, 0, 23)}-${substr(md5(local.alb_name_source), 0, 8)}"
   prod_tg_name         = length(local.prod_tg_name_source) <= 32 ? local.prod_tg_name_source : "${substr(local.prod_tg_name_source, 0, 23)}-${substr(md5(local.prod_tg_name_source), 0, 8)}"
   stage_tg_name        = length(local.stage_tg_name_source) <= 32 ? local.stage_tg_name_source : "${substr(local.stage_tg_name_source, 0, 23)}-${substr(md5(local.stage_tg_name_source), 0, 8)}"
-  azs = length(var.availability_zones) > 0 ? var.availability_zones : [
-    data.aws_availability_zones.available.names[0],
-    data.aws_availability_zones.available.names[1]
-  ]
+  azs                  = length(var.availability_zones) > 0 ? sort(var.availability_zones) : slice(sort(data.aws_availability_zones.available.names), 0, 2)
   public_subnet_cidrs = [
     cidrsubnet(var.vpc_cidr, 8, 1),
     cidrsubnet(var.vpc_cidr, 8, 2)
@@ -93,6 +90,10 @@ resource "aws_subnet" "public" {
   cidr_block              = local.public_subnet_cidrs[count.index]
   availability_zone       = local.azs[count.index]
   map_public_ip_on_launch = true
+
+  lifecycle {
+    ignore_changes = [availability_zone]
+  }
 
   tags = merge(var.tags, {
     Name = "${var.name_prefix}-asg-public-${count.index + 1}"
