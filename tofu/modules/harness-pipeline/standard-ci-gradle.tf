@@ -412,8 +412,6 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                       name: Prepare Governance Inputs
                       identifier: prepare_governance_inputs
                       spec:
-                        connectorRef: account.harnessImage
-                        image: alpine:latest
                         shell: Sh
                         command: |
                           TEST_PASS_RATE=100
@@ -463,8 +461,6 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                       name: Assemble Release Candidate Evidence
                       identifier: assemble_release_candidate_evidence
                       spec:
-                        connectorRef: account.harnessImage
-                        image: alpine:latest
                         shell: Sh
                         command: |
                           IMAGE_REFERENCE="${var.har_image_name}:1.0.<+pipeline.sequenceId>"
@@ -509,8 +505,6 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                       name: Build Summary
                       identifier: build_summary
                       spec:
-                        connectorRef: account.harnessImage
-                        image: alpine:latest
                         shell: Sh
                         command: |
                           echo "=== BUILD SUMMARY ==="
@@ -556,8 +550,6 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                       name: Prepare Artifact Links
                       identifier: prepare_artifact_links
                       spec:
-                        connectorRef: account.harnessImage
-                        image: alpine:latest
                         shell: Sh
                         command: |
                           HARNESS_UI_BASE="$HARNESS_ENDPOINT"
@@ -593,7 +585,7 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                       name: Publish Artifact Links
                       identifier: publish_artifact_links
                       spec:
-                        connectorRef: account.harnessImage
+                        registryRef: ${var.har_registry_ref}
                         image: plugins/artifact-metadata-publisher
                         settings:
                           artifact_file: artifact-links.txt
@@ -787,7 +779,7 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                       name: Publish Coverage Report Links
                       identifier: publish_coverage_report_links
                       spec:
-                        connectorRef: account.harnessImage
+                        registryRef: ${var.har_registry_ref}
                         image: plugins/artifact-metadata-publisher
                         settings:
                           artifact_file: coverage-report-links.txt
@@ -800,8 +792,6 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                       name: Trigger CD Pipeline
                       identifier: trigger_cd
                       spec:
-                        connectorRef: account.harnessImage
-                        image: curlimages/curl:8.7.1
                         shell: Sh
                         command: |
                           if [ "$AUTO_DEPLOY" = "true" ]; then
