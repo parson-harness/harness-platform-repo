@@ -92,8 +92,11 @@ provider "helm" {
 ################################################################################
 
 locals {
-  name_prefix       = "harness-demo-${var.owner}"
-  delegate_selector = "delegate-${var.owner}"
+  name_prefix           = "harness-demo-${var.owner}"
+  delegate_selector     = "delegate-${var.owner}"
+  har_registry_id       = "har-${var.owner}"
+  har_upstream_proxy_id = "${var.owner}-dockerhub-proxy"
+  har_image_name        = "${var.owner}demoapp"
 
   common_tags = {
     Project     = "harness-demo"
@@ -724,10 +727,10 @@ module "harness_pipelines_asg" {
   delegate_selector        = local.delegate_selector
   pipeline_tags            = ["tofu-managed:true", "owner:${var.owner}", "deployment-target:asg", "managed-by:provisioner"]
 
-  # HAR not used for ASG
-  har_registry_ref       = ""
-  har_upstream_proxy_ref = ""
-  har_image_name         = ""
+  # HAR is used by ASG CI custom Run steps for public base images
+  har_registry_ref       = local.har_registry_id
+  har_upstream_proxy_ref = local.har_upstream_proxy_id
+  har_image_name         = local.har_image_name
 
   depends_on = [module.harness_service_asg, module.harness_environment_dev, module.harness_code_repo]
 }
