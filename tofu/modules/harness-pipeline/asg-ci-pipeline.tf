@@ -129,7 +129,7 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                                 name: Build Intelligence
                                 identifier: build_intelligence
                                 spec:
-                                  connectorRef: account.harnessImage
+                                  registryRef: ${var.har_registry_ref}
                                   image: gradle:8.5-jdk17
                                   shell: Sh
                                   command: |
@@ -137,6 +137,75 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                                     gradle build -x test --build-cache --parallel
                                     echo "Build artifacts:"
                                     ls -la build/libs/
+                  - step:
+                      type: Run
+                      name: Upload Code Coverage
+                      identifier: upload_code_coverage
+                      spec:
+                        connectorRef: account.harnessImage
+                        image: gradle:8.5-jdk17
+                        shell: Sh
+                        command: |
+                          set -e
+                          /tmp/harness/bin/auto-injection || true
+                          $HARNESS_WORKSPACE/bi/auto-injection || true
+
+                          echo "=== GENERATING CODE COVERAGE REPORT ==="
+                          gradle clean test jacocoTestReport bootJar --no-build-cache --rerun-tasks
+
+                          if ! ls build/test-results/test/*.xml >/dev/null 2>&1; then
+                            echo "JUnit test reports not found at build/test-results/test/*.xml"
+                            exit 1
+                          fi
+
+                          echo ""
+                          echo "=== UPLOADING TEST REPORTS TO HARNESS ==="
+                          hcli --verbose test-reports upload "build/test-results/test/*.xml"
+
+                          COVERAGE_FILE="build/reports/jacoco/test/jacocoTestReport.xml"
+
+                          if [ ! -s "$COVERAGE_FILE" ]; then
+                            echo "Coverage report not found at $COVERAGE_FILE"
+                            exit 1
+                          fi
+
+                          if [ "$COVERAGE_PROVIDER" = "github" ]; then
+                            COVERAGE_OWNER="$${COVERAGE_REPO_NAME%%/*}"
+                            COVERAGE_IDENTIFIER="$${COVERAGE_REPO_NAME##*/}"
+                          else
+                            COVERAGE_OWNER="$HARNESS_COVERAGE_OWNER"
+                            COVERAGE_IDENTIFIER="$COVERAGE_REPO_NAME"
+                          fi
+
+                          mkdir -p jacoco
+                          cp "$COVERAGE_FILE" jacoco/jacoco.xml
+                          UPLOAD_COVERAGE_FILE="$(pwd)/jacoco/jacoco.xml"
+
+                          echo ""
+                          echo "=== COVERAGE FILE DETAILS ==="
+                          ls -lah build/reports/jacoco/test || true
+                          ls -lah jacoco || true
+                          echo "=== JAR FILE DETAILS ==="
+                          ls -lah build/libs || true
+                          find build/libs -maxdepth 1 -name '*.jar' | sort || true
+                          wc -c "$UPLOAD_COVERAGE_FILE" || true
+
+                          hcli cov analyze --file "$UPLOAD_COVERAGE_FILE" || true
+
+                          echo ""
+                          echo "=== UPLOADING COVERAGE TO HARNESS ==="
+
+                          hcli --verbose cov upload \
+                            --file "$UPLOAD_COVERAGE_FILE" \
+                            --provider "$COVERAGE_PROVIDER" \
+                            --owner "$COVERAGE_OWNER" \
+                            --identifier "$COVERAGE_IDENTIFIER" \
+                            -- sh -c "test -s '$UPLOAD_COVERAGE_FILE'"
+
+                          echo "Full report: build/reports/jacoco/test/html/index.html"
+                        envVariables:
+                          CI_ENABLE_HCLI_FOR_TESTS: "true"
+                          CI_ENABLE_QUARANTINED_TEST_SKIP: "true"
                   - stepGroup:
                       name: SAST Scans
                       identifier: sast_scans

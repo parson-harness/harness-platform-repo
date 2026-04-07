@@ -143,15 +143,19 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                       steps:
                         - parallel:
                             - step:
-                                type: Test
+                                type: RunTests
                                 name: Test Intelligence
                                 identifier: test_intelligence
                                 spec:
-                                  command: gradle test --build-cache
-                                  shell: Sh
                                   connectorRef: account.harnessImage
                                   image: gradle:8.5-jdk17
-                                  intelligenceMode: true
+                                  language: Java
+                                  buildTool: Gradle
+                                  args: test --build-cache
+                                  packages: ${var.standard_ci_gradle_test_packages}
+                                  runOnlySelectedTests: true
+                                  enableTestSplitting: true
+                                  testSplitStrategy: ClassTiming
                                   reports:
                                     type: JUnit
                                     spec:
