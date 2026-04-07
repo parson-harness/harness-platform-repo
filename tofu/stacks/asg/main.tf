@@ -102,6 +102,13 @@ locals {
     Owner       = var.owner
     Stack       = "asg"
   }
+
+  asg_alb_name_source      = "${local.name_prefix}-asg-alb"
+  asg_prod_tg_name_source  = "${local.name_prefix}-asg-prod-tg"
+  asg_stage_tg_name_source = "${local.name_prefix}-asg-stage-tg"
+  asg_alb_name             = length(local.asg_alb_name_source) <= 32 ? local.asg_alb_name_source : "${substr(local.asg_alb_name_source, 0, 23)}-${substr(md5(local.asg_alb_name_source), 0, 8)}"
+  asg_prod_tg_name         = length(local.asg_prod_tg_name_source) <= 32 ? local.asg_prod_tg_name_source : "${substr(local.asg_prod_tg_name_source, 0, 23)}-${substr(md5(local.asg_prod_tg_name_source), 0, 8)}"
+  asg_stage_tg_name        = length(local.asg_stage_tg_name_source) <= 32 ? local.asg_stage_tg_name_source : "${substr(local.asg_stage_tg_name_source, 0, 23)}-${substr(md5(local.asg_stage_tg_name_source), 0, 8)}"
 }
 
 ################################################################################
@@ -157,6 +164,143 @@ module "harness_code_repo" {
 # AWS Infrastructure - VPC, ALB, ASG
 ################################################################################
 
+resource "terraform_data" "cleanup_existing_asg_named_resources" {
+  provisioner "local-exec" {
+    interpreter = ["/bin/sh", "-c"]
+    command     = <<-EOT
+      set +e
+      AWS_REGION="${var.aws_region}"
+      IAM_AUTH_USER="$${AWS_ACCESS_KEY_ID}:$${AWS_SECRET_ACCESS_KEY}"
+      ALB_NAME="${local.asg_alb_name}"
+      PROD_TG_NAME="${local.asg_prod_tg_name}"
+      STAGE_TG_NAME="${local.asg_stage_tg_name}"
+      BASE_ASG_NAME="${local.name_prefix}-asg-base"
+      LAUNCH_TEMPLATE_NAME="${local.name_prefix}-asg-lt"
+      INSTANCE_PROFILE_NAME="${local.name_prefix}-asg-instance-profile"
+      INSTANCE_ROLE_NAME="${local.name_prefix}-asg-instance-role"
+
+      iam_get() {
+        curl -s --aws-sigv4 "aws:amz:us-east-1:iam" \
+          --user "$${IAM_AUTH_USER}" \
+          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
+          "https://iam.amazonaws.com/$1"
+      }
+      iam_post() {
+        curl -s --aws-sigv4 "aws:amz:us-east-1:iam" \
+          --user "$${IAM_AUTH_USER}" \
+          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
+          -d "$1" "https://iam.amazonaws.com/"
+      }
+      autoscaling_post() {
+        curl -s --aws-sigv4 "aws:amz:$${AWS_REGION}:autoscaling" \
+          --user "$${IAM_AUTH_USER}" \
+          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
+          -d "$1" "https://autoscaling.$${AWS_REGION}.amazonaws.com/"
+      }
+      ec2_post() {
+        curl -s --aws-sigv4 "aws:amz:$${AWS_REGION}:ec2" \
+          --user "$${IAM_AUTH_USER}" \
+          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
+          -d "$1" "https://ec2.$${AWS_REGION}.amazonaws.com/"
+      }
+      elbv2_get() {
+        curl -s --aws-sigv4 "aws:amz:$${AWS_REGION}:elasticloadbalancing" \
+          --user "$${IAM_AUTH_USER}" \
+          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
+          "https://elasticloadbalancing.$${AWS_REGION}.amazonaws.com/$1"
+      }
+      elbv2_post() {
+        curl -s --aws-sigv4 "aws:amz:$${AWS_REGION}:elasticloadbalancing" \
+          --user "$${IAM_AUTH_USER}" \
+          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
+          -d "$1" "https://elasticloadbalancing.$${AWS_REGION}.amazonaws.com/"
+      }
+
+      wait_for_asg_deletion() {
+        for _ in $(seq 1 30); do
+          RESPONSE=$(autoscaling_post "Action=DescribeAutoScalingGroups&AutoScalingGroupNames.member.1=$${BASE_ASG_NAME}&Version=2011-01-01" 2>&1)
+          if ! echo "$${RESPONSE}" | grep -q "<AutoScalingGroupName>$${BASE_ASG_NAME}</AutoScalingGroupName>"; then
+            return 0
+          fi
+          sleep 5
+        done
+        return 0
+      }
+
+      wait_for_lb_deletion() {
+        for _ in $(seq 1 30); do
+          RESPONSE=$(elbv2_get "?Action=DescribeLoadBalancers&Names.member.1=$${ALB_NAME}&Version=2015-12-01" 2>&1)
+          if echo "$${RESPONSE}" | grep -q "LoadBalancerNotFound"; then
+            return 0
+          fi
+          if ! echo "$${RESPONSE}" | grep -q "<LoadBalancerArn>"; then
+            return 0
+          fi
+          sleep 5
+        done
+        return 0
+      }
+
+      delete_target_group_by_name() {
+        TARGET_GROUP_NAME="$1"
+        TARGET_GROUP_XML=$(elbv2_get "?Action=DescribeTargetGroups&Names.member.1=$${TARGET_GROUP_NAME}&Version=2015-12-01" 2>&1)
+        TARGET_GROUP_ARN=$(echo "$${TARGET_GROUP_XML}" | grep -o '<TargetGroupArn>[^<]*</TargetGroupArn>' | sed 's/<[^>]*>//g' | head -1)
+        if [ -n "$${TARGET_GROUP_ARN}" ]; then
+          elbv2_post "Action=DeleteTargetGroup&TargetGroupArn=$${TARGET_GROUP_ARN}&Version=2015-12-01" >/dev/null 2>&1 || true
+        fi
+      }
+
+      ASG_XML=$(autoscaling_post "Action=DescribeAutoScalingGroups&AutoScalingGroupNames.member.1=$${BASE_ASG_NAME}&Version=2011-01-01" 2>&1)
+      if echo "$${ASG_XML}" | grep -q "<AutoScalingGroupName>$${BASE_ASG_NAME}</AutoScalingGroupName>"; then
+        autoscaling_post "Action=UpdateAutoScalingGroup&AutoScalingGroupName=$${BASE_ASG_NAME}&MinSize=0&MaxSize=0&DesiredCapacity=0&Version=2011-01-01" >/dev/null 2>&1 || true
+        autoscaling_post "Action=DeleteAutoScalingGroup&AutoScalingGroupName=$${BASE_ASG_NAME}&ForceDelete=true&Version=2011-01-01" >/dev/null 2>&1 || true
+        wait_for_asg_deletion
+      fi
+
+      LAUNCH_TEMPLATE_XML=$(ec2_post "Action=DescribeLaunchTemplates&LaunchTemplateName.1=$${LAUNCH_TEMPLATE_NAME}&Version=2016-11-15" 2>&1)
+      LAUNCH_TEMPLATE_ID=$(echo "$${LAUNCH_TEMPLATE_XML}" | grep -o '<launchTemplateId>[^<]*</launchTemplateId>' | sed 's/<[^>]*>//g' | head -1)
+      if [ -n "$${LAUNCH_TEMPLATE_ID}" ]; then
+        ec2_post "Action=DeleteLaunchTemplate&LaunchTemplateId=$${LAUNCH_TEMPLATE_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
+      fi
+
+      LOAD_BALANCER_XML=$(elbv2_get "?Action=DescribeLoadBalancers&Names.member.1=$${ALB_NAME}&Version=2015-12-01" 2>&1)
+      LOAD_BALANCER_ARN=$(echo "$${LOAD_BALANCER_XML}" | grep -o '<LoadBalancerArn>[^<]*</LoadBalancerArn>' | sed 's/<[^>]*>//g' | head -1)
+      if [ -n "$${LOAD_BALANCER_ARN}" ]; then
+        elbv2_post "Action=DeleteLoadBalancer&LoadBalancerArn=$${LOAD_BALANCER_ARN}&Version=2015-12-01" >/dev/null 2>&1 || true
+        wait_for_lb_deletion
+      fi
+
+      delete_target_group_by_name "$${PROD_TG_NAME}"
+      delete_target_group_by_name "$${STAGE_TG_NAME}"
+
+      INSTANCE_PROFILE_XML=$(iam_get "?Action=GetInstanceProfile&InstanceProfileName=$${INSTANCE_PROFILE_NAME}&Version=2010-05-08" 2>&1)
+      if echo "$${INSTANCE_PROFILE_XML}" | grep -q "<InstanceProfileName>$${INSTANCE_PROFILE_NAME}</InstanceProfileName>"; then
+        for ROLE_NAME in $(echo "$${INSTANCE_PROFILE_XML}" | grep -o '<RoleName>[^<]*</RoleName>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=RemoveRoleFromInstanceProfile&InstanceProfileName=$${INSTANCE_PROFILE_NAME}&RoleName=$${ROLE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+        iam_post "Action=DeleteInstanceProfile&InstanceProfileName=$${INSTANCE_PROFILE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+      fi
+
+      INSTANCE_ROLE_XML=$(iam_get "?Action=GetRole&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" 2>&1)
+      if echo "$${INSTANCE_ROLE_XML}" | grep -q "<RoleName>$${INSTANCE_ROLE_NAME}</RoleName>"; then
+        ATTACHED_XML=$(iam_get "?Action=ListAttachedRolePolicies&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" 2>&1)
+        for ARN in $(echo "$${ATTACHED_XML}" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DetachRolePolicy&RoleName=$${INSTANCE_ROLE_NAME}&PolicyArn=$${ARN}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        INLINE_XML=$(iam_get "?Action=ListRolePolicies&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" 2>&1)
+        for POLICY in $(echo "$${INLINE_XML}" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DeleteRolePolicy&RoleName=$${INSTANCE_ROLE_NAME}&PolicyName=$${POLICY}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        iam_post "Action=DeleteRole&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+      fi
+
+      exit 0
+    EOT
+  }
+}
+
 module "asg" {
   source = "../../modules/asg"
 
@@ -175,6 +319,8 @@ module "asg" {
   acm_cert_arn      = var.acm_cert_arn
 
   tags = local.common_tags
+
+  depends_on = [terraform_data.cleanup_existing_asg_named_resources]
 }
 
 ################################################################################
