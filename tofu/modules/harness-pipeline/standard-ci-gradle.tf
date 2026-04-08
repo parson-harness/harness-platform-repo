@@ -593,8 +593,6 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                       name: Prepare Coverage Report Artifact
                       identifier: prepare_coverage_report_artifact
                       spec:
-                        connectorRef: account.harnessImage
-                        image: python:3.11-alpine
                         shell: Sh
                         command: |
                           set -e

@@ -288,12 +288,6 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                       name: Build Info
                       identifier: build_info
                       spec:
-%{if var.har_registry_ref != ""~}
-                        registryRef: ${var.har_registry_ref}
-%{else~}
-                        connectorRef: account.harnessImage
-%{endif~}
-                        image: alpine:latest
                         shell: Sh
                         command: |
                           echo "========================================"
@@ -322,8 +316,6 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                       name: Build AMI with Packer
                       identifier: packer_build_ami
                       spec:
-                        connectorRef: ${var.har_upstream_proxy_ref != "" ? var.har_upstream_proxy_ref : "account.harnessImage"}
-                        image: ${var.har_upstream_proxy_ref != "" ? "library/hashicorp/packer:1.11" : "hashicorp/packer:1.11"}
                         shell: Sh
                         command: |
                           echo "======================================="
@@ -480,12 +472,6 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                       name: Build Summary
                       identifier: build_summary
                       spec:
-%{if var.har_registry_ref != ""~}
-                        registryRef: ${var.har_registry_ref}
-%{else~}
-                        connectorRef: account.harnessImage
-%{endif~}
-                        image: alpine:latest
                         shell: Sh
                         command: |
                           echo "========================================"
@@ -532,12 +518,6 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                       name: Trigger CD Pipeline
                       identifier: trigger_cd
                       spec:
-%{if var.har_registry_ref != ""~}
-                        registryRef: ${var.har_registry_ref}
-%{else~}
-                        connectorRef: account.harnessImage
-%{endif~}
-                        image: curlimages/curl:8.7.1
                         shell: Sh
                         command: |
                           if [ "$AUTO_DEPLOY" = "true" ]; then
