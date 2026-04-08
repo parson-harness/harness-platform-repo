@@ -341,17 +341,34 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
 
                           cd asg/packer
                           packer init ami.pkr.hcl
-                          set +e
-                          packer build \
-                            -var "app_version=$APP_VERSION" \
-                            -var "owner=$OWNER" \
-                            -var "ami_name_prefix=harness-demo-app-$OWNER" \
-                            -var "aws_region=$AWS_DEFAULT_REGION" \
-                            -var "jar_source=$JAR_PATH" \
-                            ami.pkr.hcl > /tmp/packer_output.txt 2>&1
-                          PACKER_EXIT=$?
-                          set -e
-                          cat /tmp/packer_output.txt
+                          AMI_PREFIX="harness-demo-app-$OWNER"
+
+                          run_packer_build() {
+                            set +e
+                            packer build \
+                              -var "app_version=$APP_VERSION" \
+                              -var "owner=$OWNER" \
+                              -var "ami_name_prefix=$AMI_PREFIX" \
+                              -var "aws_region=$AWS_DEFAULT_REGION" \
+                              -var "jar_source=$JAR_PATH" \
+                              ami.pkr.hcl > /tmp/packer_output.txt 2>&1
+                            PACKER_EXIT=$?
+                            set -e
+                            cat /tmp/packer_output.txt
+                          }
+
+                          run_packer_build
+
+                          if [ $PACKER_EXIT -ne 0 ] && grep -q "is used by an existing AMI" /tmp/packer_output.txt; then
+                            RETRY_SUFFIX=$(date +%s)
+                            APP_VERSION="$APP_VERSION-$RETRY_SUFFIX"
+                            AMI_NAME="$AMI_PREFIX-$APP_VERSION"
+                            export APP_VERSION
+                            export AMI_NAME
+                            echo "AMI name collision detected, retrying with unique AMI name: $AMI_NAME"
+                            run_packer_build
+                          fi
+
                           if [ $PACKER_EXIT -ne 0 ]; then
                             echo "ERROR: Packer build failed with exit code $PACKER_EXIT"
                             exit 1
