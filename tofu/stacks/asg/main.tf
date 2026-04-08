@@ -560,6 +560,29 @@ module "harness_connectors" {
   depends_on = [module.harness_org_project]
 }
 
+module "har" {
+  source = "../../modules/harness-artifact-registry"
+  count  = var.artifact_registry_type == "har" ? 1 : 0
+
+  account_id = var.harness_account_id
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
+
+  registry_id          = local.har_registry_id
+  registry_description = "Docker registry for ${var.owner} demo app"
+
+  create_dockerhub_upstream     = var.create_dockerhub_upstream
+  dockerhub_upstream_id         = local.har_upstream_proxy_id
+  dockerhub_username            = var.dockerhub_username
+  dockerhub_password_secret_ref = var.dockerhub_password_secret_ref
+  dockerhub_secret_space_path   = var.harness_account_id
+
+  harness_endpoint = var.harness_endpoint
+  harness_api_key  = var.harness_api_key
+
+  depends_on = [module.harness_org_project]
+}
+
 ################################################################################
 # Harness ASG Service
 ################################################################################
@@ -727,12 +750,11 @@ module "harness_pipelines_asg" {
   delegate_selector        = local.delegate_selector
   pipeline_tags            = ["tofu-managed:true", "owner:${var.owner}", "deployment-target:asg", "managed-by:provisioner"]
 
-  # HAR is used by ASG CI custom Run steps for public base images
-  har_registry_ref       = local.har_registry_id
-  har_upstream_proxy_ref = local.har_upstream_proxy_id
+  har_registry_ref       = var.artifact_registry_type == "har" ? local.har_registry_id : ""
+  har_upstream_proxy_ref = var.artifact_registry_type == "har" && var.create_dockerhub_upstream ? local.har_upstream_proxy_id : ""
   har_image_name         = local.har_image_name
 
-  depends_on = [module.harness_service_asg, module.harness_environment_dev, module.harness_code_repo]
+  depends_on = [module.harness_service_asg, module.harness_environment_dev, module.harness_code_repo, module.har]
 }
 
 ################################################################################

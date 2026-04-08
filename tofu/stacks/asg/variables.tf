@@ -214,6 +214,30 @@ variable "github_connector_ref" {
   default     = ""
 }
 
+variable "artifact_registry_type" {
+  description = "Artifact registry type: 'har' (Harness Artifact Registry) or 'ecr'"
+  type        = string
+  default     = "har"
+}
+
+variable "create_dockerhub_upstream" {
+  description = "Create DockerHub upstream proxy in HAR (required for pulling base images through HAR)"
+  type        = bool
+  default     = true
+}
+
+variable "dockerhub_username" {
+  description = "DockerHub username for upstream proxy"
+  type        = string
+  default     = ""
+}
+
+variable "dockerhub_password_secret_ref" {
+  description = "Harness secret reference for DockerHub password"
+  type        = string
+  default     = ""
+}
+
 ################################################################################
 # Service Configuration
 ################################################################################

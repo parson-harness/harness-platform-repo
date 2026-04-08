@@ -91,6 +91,18 @@ template:
         status: manual
         locked: false
         type: String
+      - key: artifact_registry_type
+        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: create_dockerhub_upstream
+        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_dockerhub_upstream>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
       - key: aws_region
         value: us-east-1
         value_type: string
