@@ -140,8 +140,6 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                                   connectorRef: account.harnessImage
                                   image: gradle:8.5-jdk17
                                   intelligenceMode: true
-                                  reports:
-                                    - build/test-results/test/*.xml
                             - step:
                                 type: Run
                                 name: Build Intelligence

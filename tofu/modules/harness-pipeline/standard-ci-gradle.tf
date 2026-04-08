@@ -152,8 +152,6 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                                   connectorRef: account.harnessImage
                                   image: gradle:8.5-jdk17
                                   intelligenceMode: true
-                                  reports:
-                                    - build/test-results/test/*.xml
                             - step:
                                 type: Run
                                 name: Build Intelligence
