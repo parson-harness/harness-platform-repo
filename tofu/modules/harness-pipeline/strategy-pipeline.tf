@@ -357,6 +357,9 @@ ${local.strategy_delegate_yaml}            spec:
                         approvalMessage: |
                           Blue/Green deployment staged successfully.
 
+                          Artifact:
+                            Image tag: <+pipeline.variables.image_tag>
+
                           Validate the new version on the Stage environment:
                             Stage URL:   https://<+serviceVariables.ingressStageHost>
 
@@ -537,7 +540,11 @@ ${local.strategy_delegate_yaml}            spec:
                         approvalMessage: |
                           Canary deployment complete.
 
-                          App URL: https://<+serviceVariables.ingressHost>
+                          Artifact:
+                            Image tag: <+pipeline.variables.image_tag>
+
+                          Validation target:
+                            App URL: https://<+serviceVariables.ingressHost>
                           Traffic split: ~<+execution.steps.get_validation_urls.output.outputVariables.CANARY_PCT>% canary, ~<+execution.steps.get_validation_urls.output.outputVariables.STABLE_PCT>% stable
 
                           Approve to promote canary to 100% of pods. Reject to roll back.

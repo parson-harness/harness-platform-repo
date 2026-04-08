@@ -123,7 +123,7 @@ ${local.asg_delegate_yaml}            spec:
                                 identifier: governance_approval
                                 spec:
                                   approvalMessage: |
-                                    Change governance policies flagged this deployment for manual approval.
+                                    Release governance policies flagged this deployment for manual approval.
 
                                     Policy evaluation status: <+execution.steps.governance.steps.evaluate_change_risk.output.status>
                                     Review the Evaluate Change Risk step for the full policy decision details.
@@ -343,17 +343,19 @@ ${local.asg_delegate_yaml}            spec:
                       timeout: 1d
                       spec:
                         approvalMessage: |
-                          Blue/Green deployment staged successfully!
+                          Blue/Green deployment staged successfully.
 
-                          NEW version is running on the STAGE environment:
+                          Artifact:
+                            AMI Name: <+pipeline.variables.ami_name>
+                            AMI ID:   <+artifact.metadata.ami>
+
+                          Validate the new version on the Stage environment:
                             Stage URL: <+serviceVariables.stageUrl>
 
-                          CURRENT production traffic continues on:
+                          Current production traffic continues to:
                             Prod URL:  <+serviceVariables.appUrl>
 
-                          Open the Stage URL to validate the new version, then:
-                            - APPROVE to swap production traffic to the new version
-                            - REJECT to abort (production unchanged)
+                          Approve to swap traffic to the new version. Reject to abort.
                         includePipelineExecutionHistory: true
                         approvers:
                           userGroups:
@@ -469,16 +471,20 @@ ${local.asg_delegate_yaml}            spec:
                       timeout: 1d
                       spec:
                         approvalMessage: |
-                          Canary deployment running!
+                          Canary deployment complete.
+
+                          Artifact:
+                            AMI Name:  <+pipeline.variables.ami_name>
+                            AMI ID:    <+artifact.metadata.ami>
+                            Canary ASG: ${var.asg_prod_asg_name}__Canary
+
+                          Validation target:
+                            App URL:   <+serviceVariables.appUrl>
 
                           ${var.asg_canary_instance_count} canary instance(s) are live alongside the stable fleet.
-                          A portion of traffic is being served by the new version.
+                          Inspect the temporary canary ASG in AWS using the name above.
 
-                          App URL: <+serviceVariables.appUrl>
-
-                          Validate the new version is behaving correctly, then:
-                            - APPROVE to promote canary to 100% (replace all instances)
-                            - REJECT to roll back (remove canary instances, stable fleet unchanged)
+                          Approve to promote canary to 100% of instances. Reject to roll back.
                         includePipelineExecutionHistory: true
                         approvers:
                           userGroups:

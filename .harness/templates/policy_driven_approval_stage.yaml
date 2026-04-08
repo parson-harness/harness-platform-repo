@@ -101,7 +101,7 @@ template:
                         identifier: cab_approval
                         spec:
                           approvalMessage: |
-                            Change governance policies flagged this deployment for manual approval.
+                            Release governance policies flagged this deployment for manual approval.
 
                             Policy evaluation status: <+execution.steps.governance.steps.evaluate_change_risk.output.status>
                             Review the Evaluate Change Risk step for the full policy decision details.

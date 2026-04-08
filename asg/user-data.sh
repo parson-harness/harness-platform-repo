@@ -18,6 +18,7 @@ set -euo pipefail
 
 cat > /etc/harness-demo-app.env <<'ENVEOF'
 DEPLOYMENT_TARGET=asg
+APP_VERSION=<+pipeline.variables.ami_name>
 APP_ENVIRONMENT=<+env.name>
 DEPLOYMENT_STRATEGY=<+pipeline.variables.deployment_strategy>
 DEPLOYED_AMI=<+artifact.metadata.ami>

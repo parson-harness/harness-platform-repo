@@ -437,10 +437,15 @@ ${local.pipeline_change_governance_dev_yaml}
                       timeout: 1d
                       spec:
                         approvalMessage: |
-                          Blue/Green deployment to Dev complete.
-                          Stage environment is running the new version.
+                          Blue/Green deployment staged successfully.
+
+                          Artifact:
+                            Image tag: <+artifacts.primary.tag>
+
+                          Validate the new version on the Stage environment.
                           Review metrics and logs before swapping traffic.
-                          Approve to shift all Dev traffic to new version.
+
+                          Approve to swap traffic to the new version. Reject to abort.
                         includePipelineExecutionHistory: true
                         approvers:
                           userGroups:
@@ -500,10 +505,16 @@ ${local.pipeline_change_governance_prod_yaml}
                             timeout: 1d
                             spec:
                               approvalMessage: |
-                                Canary deployment to Prod complete.
-                                ${var.canary_instance_count} canary instance(s) running.
+                                Canary deployment complete.
+
+                                Artifact:
+                                  Image tag: <+artifacts.primary.tag>
+
+                                Validation target:
+                                  ${var.canary_instance_count} canary instance(s) running.
                                 Review metrics and logs before full rollout.
-                                Approve to deploy to all Prod instances.
+
+                                Approve to promote canary to 100% of pods. Reject to roll back.
                               includePipelineExecutionHistory: true
                               approvers:
                                 userGroups:
