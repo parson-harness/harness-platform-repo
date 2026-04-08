@@ -26,4 +26,4 @@ ENVEOF
 
 chown harness-app:harness-app /etc/harness-demo-app.env
 
-systemctl start harness-demo-app
+systemctl restart harness-demo-app
