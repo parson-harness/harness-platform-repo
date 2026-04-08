@@ -25,8 +25,8 @@ locals {
       value = "true"
     }
   ]
-  standard_ci_gradle_yaml_tags = join("\n", [for tag in local.standard_ci_gradle_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
-  standard_ci_gradle_publish_coverage_report_artifact = var.publish_coverage_report_artifact && var.coverage_report_artifact_connector_ref != "" && var.coverage_report_artifact_bucket != ""
+  standard_ci_gradle_yaml_tags                         = join("\n", [for tag in local.standard_ci_gradle_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
+  standard_ci_gradle_publish_coverage_report_artifact  = var.publish_coverage_report_artifact && var.coverage_report_artifact_connector_ref != "" && var.coverage_report_artifact_bucket != ""
   standard_ci_gradle_coverage_report_artifact_base_url = trimspace(var.coverage_report_artifact_base_url) != "" ? trimsuffix(trimspace(var.coverage_report_artifact_base_url), "/") : "https://${var.coverage_report_artifact_bucket}.s3.${var.coverage_report_artifact_region}.amazonaws.com"
 }
 
@@ -143,24 +143,17 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                       steps:
                         - parallel:
                             - step:
-                                type: RunTests
+                                type: Test
                                 name: Test Intelligence
                                 identifier: test_intelligence
                                 spec:
+                                  command: gradle test --build-cache
+                                  shell: Sh
                                   connectorRef: account.harnessImage
                                   image: gradle:8.5-jdk17
-                                  language: Java
-                                  buildTool: Gradle
-                                  args: test --build-cache
-                                  packages: ${var.standard_ci_gradle_test_packages}
-                                  runOnlySelectedTests: true
-                                  enableTestSplitting: true
-                                  testSplitStrategy: ClassTiming
+                                  intelligenceMode: true
                                   reports:
-                                    type: JUnit
-                                    spec:
-                                      paths:
-                                        - build/test-results/test/*.xml
+                                    - build/test-results/test/*.xml
                             - step:
                                 type: Run
                                 name: Build Intelligence
