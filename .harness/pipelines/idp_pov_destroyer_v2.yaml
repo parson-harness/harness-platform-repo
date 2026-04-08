@@ -872,13 +872,14 @@ pipeline:
                           for ENV in dev prod; do
                             api_delete "${OWNER}_k8s_${ENV}" "${ENDPOINT}/ng/api/infrastructures/${OWNER}_k8s_${ENV}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_${ENV}&forceDelete=true"
                           done
-                          api_delete "${OWNER}_asg_dev" "${ENDPOINT}/ng/api/infrastructures/${OWNER}_asg_dev?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_dev&forceDelete=true"
+                          api_delete "${OWNER}_asg_dev" "${ENDPOINT}/ng/api/infrastructures/${OWNER}_asg_dev?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&environmentIdentifier=${OWNER}_asg_dev&forceDelete=true"
 
                           echo ""
                           echo "=== Environments ==="
                           for ENV in dev prod; do
                             api_delete "${OWNER}_${ENV}" "${ENDPOINT}/ng/api/environmentsV2/${OWNER}_${ENV}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
                           done
+                          api_delete "${OWNER}_asg_dev" "${ENDPOINT}/ng/api/environmentsV2/${OWNER}_asg_dev?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
 
                           echo ""
                           echo "=== Connectors ==="
