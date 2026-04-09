@@ -233,6 +233,111 @@ pipeline:
 
               - step:
                   type: ShellScript
+                  name: Detect Orphaned ASG VPCs
+                  identifier: detect_orphaned_asg_vpcs
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    delegateSelectors:
+                      - parson-eks-delegate
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          set -euo pipefail
+
+                          ACCOUNT_ID="<+account.identifier>"
+                          ORG_ID="<+org.identifier>"
+                          PROJECT_ID="<+project.identifier>"
+                          API_KEY="${HARNESS_API_KEY}"
+                          ENDPOINT="https://app.harness.io"
+                          OWNER_FILTER="${OWNER_FILTER}"
+                          PROFILE_FILTER="${PROFILE_FILTER}"
+                          TARGET_FILTER="${TARGET_FILTER}"
+                          TEMPLATE_SCOPE="${TEMPLATE_SCOPE}"
+
+                          if [ "$TARGET_FILTER" != "all" ] && [ "$TARGET_FILTER" != "asg" ]; then
+                            echo "Skipping orphaned ASG VPC scan because deployment_target_filter=${TARGET_FILTER}"
+                            : > /tmp/orphaned_asg_vpcs.txt
+                            exit 0
+                          fi
+
+                          if [ "$TEMPLATE_SCOPE" != "all" ] && [ "$TEMPLATE_SCOPE" != "Sandbox_Provisioner_ASG" ]; then
+                            echo "Skipping orphaned ASG VPC scan because template_id=${TEMPLATE_SCOPE}"
+                            : > /tmp/orphaned_asg_vpcs.txt
+                            exit 0
+                          fi
+
+                          if [ "$PROFILE_FILTER" != "all" ]; then
+                            echo "Skipping orphaned ASG VPC scan because sandbox_profile_filter=${PROFILE_FILTER} cannot be mapped safely to orphaned AWS resources"
+                            : > /tmp/orphaned_asg_vpcs.txt
+                            exit 0
+                          fi
+
+                          echo "=== Orphaned ASG VPC Audit ==="
+                          aws sts get-caller-identity >/dev/null
+
+                          WORKSPACES=$(curl -s -X GET \
+                            "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces?accountIdentifier=${ACCOUNT_ID}" \
+                            -H "x-api-key: ${API_KEY}" \
+                            -H "Harness-Account: ${ACCOUNT_ID}" \
+                            -H "Content-Type: application/json")
+
+                          WORKSPACE_JSON=$(mktemp)
+                          printf "%s" "$WORKSPACES" > "$WORKSPACE_JSON"
+
+                          ORPHANED_VPCS=""
+                          VPCS_JSON=$(aws ec2 describe-vpcs \
+                            --filters "Name=tag:Project,Values=harness-demo" "Name=tag:Stack,Values=asg" "Name=tag:ManagedBy,Values=tofu" \
+                            --output json)
+
+                          while IFS='|' read -r VPC_ID OWNER NAME_TAG; do
+                            if [ -z "$VPC_ID" ] || [ -z "$OWNER" ]; then
+                              continue
+                            fi
+
+                            if [ -n "$OWNER_FILTER" ] && [ "$OWNER_FILTER" != "$OWNER" ]; then
+                              continue
+                            fi
+
+                            if jq -e --arg ws1 "${OWNER}_pov" --arg ws2 "${OWNER}_sandbox" '.content[]? | select(.identifier == $ws1 or .identifier == $ws2)' "$WORKSPACE_JSON" >/dev/null 2>&1; then
+                              echo "VPC ${VPC_ID} (${NAME_TAG}): owner ${OWNER} still has an active workspace"
+                              continue
+                            fi
+
+                            echo "VPC ${VPC_ID} (${NAME_TAG}): orphaned owner ${OWNER}"
+                            ORPHANED_VPCS="${ORPHANED_VPCS}${VPC_ID}|${OWNER}|${NAME_TAG}\n"
+                          done < <(printf "%s" "$VPCS_JSON" | jq -r '.Vpcs[]? | [ .VpcId, ((.Tags // []) | map(select(.Key == "Owner") | .Value) | first // ""), ((.Tags // []) | map(select(.Key == "Name") | .Value) | first // "") ] | @tsv' | tr '\t' '|')
+
+                          printf "%b" "$ORPHANED_VPCS" > /tmp/orphaned_asg_vpcs.txt
+                          ORPHAN_COUNT=$(echo -e "$ORPHANED_VPCS" | grep -c '|' || true)
+                          echo "Orphaned ASG VPCs: ${ORPHAN_COUNT}"
+
+                          rm -f "$WORKSPACE_JSON"
+                    environmentVariables:
+                      - name: HARNESS_API_KEY
+                        type: String
+                        value: <+pipeline.variables.harness_api_key>
+                      - name: TEMPLATE_SCOPE
+                        type: String
+                        value: <+pipeline.variables.template_id>
+                      - name: OWNER_FILTER
+                        type: String
+                        value: <+pipeline.variables.owner_filter>
+                      - name: PROFILE_FILTER
+                        type: String
+                        value: <+pipeline.variables.sandbox_profile_filter>
+                      - name: TARGET_FILTER
+                        type: String
+                        value: <+pipeline.variables.deployment_target_filter>
+                      - name: AWS_DEFAULT_REGION
+                        type: String
+                        value: us-east-1
+                  timeout: 10m
+
+              - step:
+                  type: ShellScript
                   name: Report Expired Sandboxes
                   identifier: report_expired
                   spec:
@@ -249,28 +354,46 @@ pipeline:
                           
                           if [ -f /tmp/expired_workspaces.txt ]; then
                             EXPIRED=$(cat /tmp/expired_workspaces.txt)
+                            ORPHANED_VPCS=$(cat /tmp/orphaned_asg_vpcs.txt 2>/dev/null || true)
                             
-                            if [ -z "$EXPIRED" ]; then
-                              echo "✓ No expired sandboxes found!"
+                            EXPIRED_COUNT=$(printf "%s" "$EXPIRED" | grep -c '|' || true)
+                            ORPHAN_VPC_COUNT=$(printf "%s" "$ORPHANED_VPCS" | grep -c '|' || true)
+
+                            if [ "$EXPIRED_COUNT" = "0" ] && [ "$ORPHAN_VPC_COUNT" = "0" ]; then
+                              echo "✓ No expired sandboxes or orphaned ASG VPCs found!"
                               echo "DESTROY_COUNT=0" >> $HARNESS_OUTPUT_FILE
                               exit 0
                             fi
                             
-                            echo "The following sandboxes have exceeded their TTL:"
-                            echo ""
-                            echo "| Workspace ID | Owner | Profile | Target | Template | Days Past TTL |"
-                            echo "|--------------|-------|---------|--------|----------|---------------|"
-                            
-                            COUNT=$(printf "%s" "$EXPIRED" | grep -c '|' || true)
-                            echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER PROFILE TARGET TEMPLATE_ID TARGET_ACCOUNT_ID EKS_CLUSTER_NAME DAYS; do
-                              if [ -n "$WS_ID" ]; then
-                                echo "| $WS_ID | $OWNER | $PROFILE | $TARGET | $TEMPLATE_ID | $DAYS |"
-                              fi
-                            done
-                            
-                            echo ""
-                            echo "Total: $COUNT workspace(s) to be destroyed"
-                            echo "DESTROY_COUNT=$COUNT" >> $HARNESS_OUTPUT_FILE
+                            if [ "$EXPIRED_COUNT" != "0" ]; then
+                              echo "The following sandboxes have exceeded their TTL:"
+                              echo ""
+                              echo "| Workspace ID | Owner | Profile | Target | Template | Days Past TTL |"
+                              echo "|--------------|-------|---------|--------|----------|---------------|"
+                              echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER PROFILE TARGET TEMPLATE_ID TARGET_ACCOUNT_ID EKS_CLUSTER_NAME DAYS; do
+                                if [ -n "$WS_ID" ]; then
+                                  echo "| $WS_ID | $OWNER | $PROFILE | $TARGET | $TEMPLATE_ID | $DAYS |"
+                                fi
+                              done
+                              echo ""
+                            fi
+
+                            if [ "$ORPHAN_VPC_COUNT" != "0" ]; then
+                              echo "The following ASG VPCs are orphaned (no matching active workspace):"
+                              echo ""
+                              echo "| VPC ID | Owner | Name Tag |"
+                              echo "|--------|-------|----------|"
+                              echo -e "$ORPHANED_VPCS" | while IFS='|' read -r VPC_ID OWNER NAME_TAG; do
+                                if [ -n "$VPC_ID" ]; then
+                                  echo "| $VPC_ID | $OWNER | $NAME_TAG |"
+                                fi
+                              done
+                              echo ""
+                            fi
+
+                            TOTAL_COUNT=$((EXPIRED_COUNT + ORPHAN_VPC_COUNT))
+                            echo "Total cleanup actions to trigger: $TOTAL_COUNT"
+                            echo "DESTROY_COUNT=$TOTAL_COUNT" >> $HARNESS_OUTPUT_FILE
                           else
                             echo "No workspace data found"
                             echo "DESTROY_COUNT=0" >> $HARNESS_OUTPUT_FILE
@@ -346,6 +469,35 @@ pipeline:
                               
                               EXEC_ID=$(echo "$RESPONSE" | jq -r '.data.planExecution.uuid // "unknown"')
                               echo "  → Triggered execution: $EXEC_ID"
+                              echo ""
+                            fi
+                          done
+
+                          ORPHANED_VPCS=$(cat /tmp/orphaned_asg_vpcs.txt 2>/dev/null || true)
+                          echo -e "$ORPHANED_VPCS" | while IFS='|' read -r VPC_ID OWNER NAME_TAG; do
+                            if [ -n "$VPC_ID" ]; then
+                              echo "Cleaning orphaned ASG VPC ${VPC_ID} for owner ${OWNER} (${NAME_TAG})"
+
+                              RESPONSE=$(curl -s -X POST \
+                                "${ENDPOINT}/pipeline/api/pipeline/execute/idp_pov_destroyer_v2?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
+                                -H "x-api-key: ${API_KEY}" \
+                                -H "Content-Type: application/json" \
+                                -d "{
+                                  \"owner\": \"${OWNER}\",
+                                  \"deployment_target\": \"asg\",
+                                  \"harness_account_id\": \"${ACCOUNT_ID}\",
+                                  \"harness_endpoint\": \"${ENDPOINT}\",
+                                  \"provisioner_api_key\": \"${API_KEY}\",
+                                  \"target_api_key\": \"${API_KEY}\",
+                                  \"harness_org_id\": \"${ORG_ID}\",
+                                  \"harness_project_id\": \"${PROJECT_ID}\",
+                                  \"eks_cluster_name\": \"harness-eks-parson\",
+                                  \"skip_terraform_destroy\": \"true\",
+                                  \"auto_approve\": \"true\"
+                                }")
+
+                              EXEC_ID=$(echo "$RESPONSE" | jq -r '.data.planExecution.uuid // "unknown"')
+                              echo "  → Triggered orphan VPC cleanup execution: $EXEC_ID"
                               echo ""
                             fi
                           done

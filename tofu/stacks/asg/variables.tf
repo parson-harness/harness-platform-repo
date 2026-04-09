@@ -362,3 +362,9 @@ variable "sandbox_profile" {
   type        = string
   default     = ""
 }
+
+variable "workspace_template_id" {
+  description = "Workspace template identifier metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}

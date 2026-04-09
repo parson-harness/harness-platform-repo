@@ -341,6 +341,52 @@ variable "shared_alb_dns_name" {
 }
 
 ################################################################################
+# Workspace Metadata Compatibility
+################################################################################
+
+variable "workspace_id" {
+  description = "Workspace identifier metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "created_at" {
+  description = "Workspace creation timestamp metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "last_touched_at" {
+  description = "Workspace last touched timestamp metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "ttl_days" {
+  description = "Workspace TTL metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "deployment_target" {
+  description = "Deployment target metadata stamped by the provisioner"
+  type        = string
+  default     = "eks"
+}
+
+variable "sandbox_profile" {
+  description = "Sandbox profile metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "workspace_template_id" {
+  description = "Workspace template identifier metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+################################################################################
 # OPA Policy Configuration
 ################################################################################
 

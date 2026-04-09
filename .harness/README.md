@@ -39,8 +39,9 @@ The scheduled janitor uses the linked IACM workspace as the source of truth inst
 1. **Query linked workspaces**: Read all `_pov` and `_sandbox` workspaces in the project
 2. **Classify by template metadata**: Use `workspace_template_id`, `deployment_target`, `sandbox_profile`, `ttl_days`, and `created_at`
 3. **Audit first**: `sandbox_ttl_cleanup` with `dry_run=true` reports expired sandboxes without deleting anything
-4. **Destroy through the robust path**: Expired workspaces are handed to `idp_pov_destroyer_v2`, not the legacy `pov_destroy` pipeline
-5. **Preserve template linkage**: Template-family filtering stays aligned with `POV_Provisioner` and `Sandbox_Provisioner_ASG`
+4. **Audit orphaned ASG VPCs**: The janitor also scans AWS for `tofu`-managed ASG VPCs whose `Owner` tag no longer has an active linked workspace
+5. **Destroy through the robust path**: Expired workspaces and orphaned ASG VPC cleanup are both handed to `idp_pov_destroyer_v2`, not the legacy `pov_destroy` pipeline
+6. **Preserve template linkage**: Template-family filtering stays aligned with `POV_Provisioner` and `Sandbox_Provisioner_ASG`
 
 ### Why API Cleanup Still Exists
 
@@ -210,7 +211,8 @@ Recommended usage:
 1. Run with `dry_run=true`
 2. Filter by `template_id`, `owner_filter`, `sandbox_profile_filter`, or `deployment_target_filter`
 3. Review the expired workspace report
-4. Re-run with `dry_run=false` to trigger `idp_pov_destroyer_v2` for the expired matches
+4. Review any orphaned ASG VPC findings
+5. Re-run with `dry_run=false` to trigger `idp_pov_destroyer_v2` for the expired matches and orphaned ASG VPC cleanup actions
 
 ### Scheduled Cleanup
 
