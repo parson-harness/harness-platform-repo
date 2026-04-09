@@ -226,52 +226,52 @@ ${local.asg_pipeline_yaml_tags != "" ? "${local.asg_pipeline_yaml_tags}\n" : ""}
           type: String
           description: Full AMI name to deploy (from CI Packer build, e.g. harness-demo-app-owner-42, not app version 1.0.1)
           required: true
-          value: <+<+pipeline.triggerType>=="WEBHOOK_CUSTOM"?<+trigger.payload.ami_name>:<+input>>
+          value: <+input>
         - name: change_blast_radius
           type: String
           description: Expected blast radius for the deployment
           required: false
-          value: <+<+pipeline.triggerType>=="WEBHOOK_CUSTOM"?<+trigger.payload.change_blast_radius>:<+input>.default(medium).allowedValues(low,medium,high)>>
+          value: <+input>.default(medium).allowedValues(low,medium,high)
         - name: test_pass_rate
           type: String
           description: Aggregated automated test pass rate percentage; auto-populated from CI on webhook runs or entered manually for demo/manual runs
           required: false
-          value: <+<+pipeline.triggerType>=="WEBHOOK_CUSTOM"?<+trigger.payload.test_pass_rate>:<+input>.default(100)>>
+          value: <+input>.default(100)
         - name: critical_vulnerabilities
           type: String
           description: Critical vulnerability count; auto-populated from CI on webhook runs or entered manually for demo/manual runs
           required: false
-          value: <+<+pipeline.triggerType>=="WEBHOOK_CUSTOM"?<+trigger.payload.critical_vulnerabilities>:<+input>.default(0)>>
+          value: <+input>.default(0)
         - name: high_vulnerabilities
           type: String
           description: High vulnerability count; auto-populated from CI on webhook runs or entered manually for demo/manual runs
           required: false
-          value: <+<+pipeline.triggerType>=="WEBHOOK_CUSTOM"?<+trigger.payload.high_vulnerabilities>:<+input>.default(0)>>
+          value: <+input>.default(0)
         - name: open_change_failures
           type: String
           description: Demo-time count of unresolved change failures for the proposed change; typically sourced from ITSM in production
           required: false
-          value: <+<+pipeline.triggerType>=="WEBHOOK_CUSTOM"?<+trigger.payload.open_change_failures>:<+input>.default(0)>>
+          value: <+input>.default(0)
         - name: rollback_ready
           type: String
           description: Whether rollback readiness has been verified; currently runtime-controlled for demo/manual runs and a good candidate for future automation
           required: false
-          value: <+<+pipeline.triggerType>=="WEBHOOK_CUSTOM"?<+trigger.payload.rollback_ready>:<+input>.default(true).allowedValues(true,false)>>
+          value: <+input>.default(true).allowedValues(true,false)
         - name: change_freeze_active
           type: String
           description: Whether a change freeze window is currently active; provided by CI/webhook or entered manually for demo/manual runs
           required: false
-          value: <+<+pipeline.triggerType>=="WEBHOOK_CUSTOM"?<+trigger.payload.change_freeze_active>:<+input>.default(false).allowedValues(true,false)>>
+          value: <+input>.default(false).allowedValues(true,false)
         - name: requires_data_migration
           type: String
           description: Whether the deployment includes a database or data migration; provided by CI/webhook or entered manually for demo/manual runs
           required: false
-          value: <+<+pipeline.triggerType>=="WEBHOOK_CUSTOM"?<+trigger.payload.requires_data_migration>:<+input>.default(false).allowedValues(true,false)>>
+          value: <+input>.default(false).allowedValues(true,false)
         - name: release_candidate_evidence
           type: String
           description: JSON release-candidate evidence bundle; auto-populated from CI/webhook runs or entered manually for demo/manual runs
           required: false
-          value: <+<+pipeline.triggerType>=="WEBHOOK_CUSTOM"?<+trigger.payload.release_candidate_evidence>:<+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})>>
+          value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})
       stages:
 ${local.asg_change_governance_yaml}
         - stage:
