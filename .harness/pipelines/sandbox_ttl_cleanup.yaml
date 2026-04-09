@@ -3,7 +3,7 @@ pipeline:
   identifier: sandbox_ttl_cleanup
   projectIdentifier: parson
   orgIdentifier: sandbox
-  description: "Scheduled cleanup of expired SE sandboxes based on TTL settings"
+  description: "Scheduled audit and cleanup of template-linked POV sandboxes based on IACM workspace TTL settings"
   tags:
     automation: "true"
     cleanup: "true"
@@ -30,18 +30,17 @@ pipeline:
       description: "Optional deployment target filter for cleanup targeting"
       required: false
       value: <+input>.default(all).allowedValues(all,eks,asg)
+    - name: template_id
+      type: String
+      description: "Optional template-family scope. all targets all managed POV workspaces, POV_Provisioner scopes to EKS-linked workspaces, and Sandbox_Provisioner_ASG scopes to ASG-linked workspaces."
+      required: false
+      value: <+input>.default(all).allowedValues(all,POV_Provisioner,Sandbox_Provisioner_ASG)
     
     - name: harness_api_key
       type: Secret
       description: "Harness Platform API Key for IACM operations"
-      required: true
-      value: <+input>
-    
-    - name: harness_api_key_email
-      type: String
-      description: "Email associated with the API key"
-      required: true
-      value: <+input>
+      required: false
+      value: acct-automation-svc-acct
 
   stages:
     - stage:
@@ -79,6 +78,19 @@ pipeline:
                           OWNER_FILTER="${OWNER_FILTER}"
                           PROFILE_FILTER="${PROFILE_FILTER}"
                           TARGET_FILTER="${TARGET_FILTER}"
+                          TEMPLATE_SCOPE="${TEMPLATE_SCOPE}"
+
+                          case "$TEMPLATE_SCOPE" in
+                            POV_Provisioner)
+                              TEMPLATE_TARGET_FILTER="eks"
+                              ;;
+                            Sandbox_Provisioner_ASG)
+                              TEMPLATE_TARGET_FILTER="asg"
+                              ;;
+                            *)
+                              TEMPLATE_TARGET_FILTER="all"
+                              ;;
+                          esac
                           
                           # List all IACM workspaces in the project
                           echo "Fetching IACM workspaces..."
@@ -112,6 +124,23 @@ pipeline:
                             OWNER=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "owner") | .value // empty' 2>/dev/null || echo "unknown")
                             PROFILE=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "sandbox_profile") | .value // "unknown"' 2>/dev/null || echo "unknown")
                             TARGET=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "deployment_target") | .value // "unknown"' 2>/dev/null || echo "unknown")
+                            WORKSPACE_TEMPLATE_ID=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "workspace_template_id") | .value // empty' 2>/dev/null || echo "")
+                            TARGET_ACCOUNT_ID=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "harness_account_id") | .value // empty' 2>/dev/null || echo "")
+                            EKS_CLUSTER_NAME=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "eks_cluster_name") | .value // "harness-eks-parson"' 2>/dev/null || echo "harness-eks-parson")
+
+                            if [ -z "$WORKSPACE_TEMPLATE_ID" ] || [ "$WORKSPACE_TEMPLATE_ID" = "null" ]; then
+                              case "$TARGET" in
+                                eks)
+                                  WORKSPACE_TEMPLATE_ID="POV_Provisioner"
+                                  ;;
+                                asg)
+                                  WORKSPACE_TEMPLATE_ID="Sandbox_Provisioner_ASG"
+                                  ;;
+                                *)
+                                  WORKSPACE_TEMPLATE_ID="unknown"
+                                  ;;
+                              esac
+                            fi
                             
                             # If no created_at, use workspace created timestamp
                             if [ -z "$CREATED_AT" ]; then
@@ -132,11 +161,21 @@ pipeline:
                               echo "  → Skipping due to target filter"
                               continue
                             fi
+
+                            if [ "$TEMPLATE_SCOPE" != "all" ] && [ "$TEMPLATE_SCOPE" != "$WORKSPACE_TEMPLATE_ID" ]; then
+                              echo "  → Skipping due to template filter"
+                              continue
+                            fi
+
+                            if [ "$TEMPLATE_TARGET_FILTER" != "all" ] && [ "$TEMPLATE_TARGET_FILTER" != "$TARGET" ]; then
+                              echo "  → Skipping due to template target filter"
+                              continue
+                            fi
                             
                             # TTL of 0 means never expire
                             if [ "$TTL_DAYS" = "0" ]; then
-                              echo "  → TTL disabled (protected) [profile=${PROFILE}, target=${TARGET}]"
-                              PROTECTED_WORKSPACES="${PROTECTED_WORKSPACES}${WS_ID}|${OWNER}|${PROFILE}|${TARGET}|protected\n"
+                              echo "  → TTL disabled (protected) [profile=${PROFILE}, target=${TARGET}, template=${WORKSPACE_TEMPLATE_ID}]"
+                              PROTECTED_WORKSPACES="${PROTECTED_WORKSPACES}${WS_ID}|${OWNER}|${PROFILE}|${TARGET}|${WORKSPACE_TEMPLATE_ID}|protected\n"
                               continue
                             fi
                             
@@ -147,11 +186,11 @@ pipeline:
                               DAYS_REMAINING=$(( (EXPIRY_EPOCH - CURRENT_EPOCH) / 86400 ))
                               
                               if [ $CURRENT_EPOCH -gt $EXPIRY_EPOCH ]; then
-                                echo "  → EXPIRED (${DAYS_REMAINING} days past TTL) [profile=${PROFILE}, target=${TARGET}]"
-                                EXPIRED_WORKSPACES="${EXPIRED_WORKSPACES}${WS_ID}|${OWNER}|${PROFILE}|${TARGET}|${DAYS_REMAINING}\n"
+                                echo "  → EXPIRED (${DAYS_REMAINING} days past TTL) [profile=${PROFILE}, target=${TARGET}, template=${WORKSPACE_TEMPLATE_ID}]"
+                                EXPIRED_WORKSPACES="${EXPIRED_WORKSPACES}${WS_ID}|${OWNER}|${PROFILE}|${TARGET}|${WORKSPACE_TEMPLATE_ID}|${TARGET_ACCOUNT_ID}|${EKS_CLUSTER_NAME}|${DAYS_REMAINING}\n"
                               else
-                                echo "  → Active (${DAYS_REMAINING} days remaining) [profile=${PROFILE}, target=${TARGET}]"
-                                ACTIVE_WORKSPACES="${ACTIVE_WORKSPACES}${WS_ID}|${OWNER}|${PROFILE}|${TARGET}|${DAYS_REMAINING}\n"
+                                echo "  → Active (${DAYS_REMAINING} days remaining) [profile=${PROFILE}, target=${TARGET}, template=${WORKSPACE_TEMPLATE_ID}]"
+                                ACTIVE_WORKSPACES="${ACTIVE_WORKSPACES}${WS_ID}|${OWNER}|${PROFILE}|${TARGET}|${WORKSPACE_TEMPLATE_ID}|${DAYS_REMAINING}\n"
                               fi
                             else
                               echo "  → No created_at timestamp, skipping"
@@ -171,6 +210,9 @@ pipeline:
                       - name: DRY_RUN
                         type: String
                         value: <+pipeline.variables.dry_run>
+                      - name: TEMPLATE_SCOPE
+                        type: String
+                        value: <+pipeline.variables.template_id>
                       - name: OWNER_FILTER
                         type: String
                         value: <+pipeline.variables.owner_filter>
@@ -216,13 +258,13 @@ pipeline:
                             
                             echo "The following sandboxes have exceeded their TTL:"
                             echo ""
-                            echo "| Workspace ID | Owner | Profile | Target | Days Past TTL |"
-                            echo "|--------------|-------|---------|--------|---------------|"
+                            echo "| Workspace ID | Owner | Profile | Target | Template | Days Past TTL |"
+                            echo "|--------------|-------|---------|--------|----------|---------------|"
                             
                             COUNT=$(printf "%s" "$EXPIRED" | grep -c '|' || true)
-                            echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER PROFILE TARGET DAYS; do
+                            echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER PROFILE TARGET TEMPLATE_ID TARGET_ACCOUNT_ID EKS_CLUSTER_NAME DAYS; do
                               if [ -n "$WS_ID" ]; then
-                                echo "| $WS_ID | $OWNER | $PROFILE | $TARGET | $DAYS |"
+                                echo "| $WS_ID | $OWNER | $PROFILE | $TARGET | $TEMPLATE_ID | $DAYS |"
                               fi
                             done
                             
@@ -280,23 +322,26 @@ pipeline:
                           
                           EXPIRED=$(cat /tmp/expired_workspaces.txt)
                           
-                          echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER PROFILE TARGET DAYS; do
+                          echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER PROFILE TARGET TEMPLATE_ID TARGET_ACCOUNT_ID EKS_CLUSTER_NAME DAYS; do
                             if [ -n "$WS_ID" ]; then
-                              echo "Destroying workspace: $WS_ID (owner: $OWNER, profile: $PROFILE, target: $TARGET)"
+                              echo "Destroying workspace: $WS_ID (owner: $OWNER, profile: $PROFILE, target: $TARGET, template: $TEMPLATE_ID)"
                               
-                              # Trigger the POV destroy pipeline for this workspace
                               RESPONSE=$(curl -s -X POST \
-                                "${ENDPOINT}/pipeline/api/pipeline/execute/pov_destroy?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
+                                "${ENDPOINT}/pipeline/api/pipeline/execute/idp_pov_destroyer_v2?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
                                 -H "x-api-key: ${API_KEY}" \
                                 -H "Content-Type: application/json" \
                                 -d "{
                                   \"owner\": \"${OWNER}\",
-                                  \"harness_account_id\": \"${ACCOUNT_ID}\",
+                                  \"deployment_target\": \"${TARGET}\",
+                                  \"harness_account_id\": \"${TARGET_ACCOUNT_ID:-$ACCOUNT_ID}\",
+                                  \"harness_endpoint\": \"${ENDPOINT}\",
+                                  \"provisioner_api_key\": \"${API_KEY}\",
+                                  \"target_api_key\": \"${API_KEY}\",
                                   \"harness_org_id\": \"${ORG_ID}\",
                                   \"harness_project_id\": \"${PROJECT_ID}\",
-                                  \"harness_endpoint\": \"${ENDPOINT}\",
-                                  \"harness_api_key\": \"${API_KEY}\",
-                                  \"harness_api_key_email\": \"${API_KEY_EMAIL}\"
+                                  \"eks_cluster_name\": \"${EKS_CLUSTER_NAME:-harness-eks-parson}\",
+                                  \"skip_terraform_destroy\": \"false\",
+                                  \"auto_approve\": \"true\"
                                 }")
                               
                               EXEC_ID=$(echo "$RESPONSE" | jq -r '.data.planExecution.uuid // "unknown"')
@@ -310,9 +355,6 @@ pipeline:
                       - name: HARNESS_API_KEY
                         type: String
                         value: <+pipeline.variables.harness_api_key>
-                      - name: API_KEY_EMAIL
-                        type: String
-                        value: <+pipeline.variables.harness_api_key_email>
                   timeout: 15m
 
               - step:

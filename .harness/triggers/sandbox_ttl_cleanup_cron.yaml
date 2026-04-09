@@ -2,7 +2,7 @@ trigger:
   name: Weekly Sandbox TTL Cleanup
   identifier: weekly_sandbox_ttl_cleanup
   enabled: true
-  description: "Runs every Sunday at 2 AM UTC to clean up expired SE sandboxes"
+  description: "Runs every Sunday at 2 AM UTC to audit and clean up expired template-linked POV sandboxes"
   tags:
     automation: "true"
     cleanup: "true"
@@ -22,9 +22,15 @@ trigger:
         - name: dry_run
           type: String
           value: "false"
+        - name: template_id
+          type: String
+          value: "all"
+        - name: sandbox_profile_filter
+          type: String
+          value: "all"
+        - name: deployment_target_filter
+          type: String
+          value: "all"
         - name: harness_api_key
           type: Secret
           value: <+secrets.getValue("account.harness_api_key")>
-        - name: harness_api_key_email
-          type: String
-          value: "automation@harness.io"

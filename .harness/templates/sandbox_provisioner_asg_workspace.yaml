@@ -49,6 +49,12 @@ template:
         status: manual
         locked: false
         type: String
+      - key: workspace_template_id
+        value: Sandbox_Provisioner_ASG
+        value_type: string
+        status: manual
+        locked: false
+        type: String
       - key: harness_account_id
         value: <+pipeline.variables.harness_account_id>
         value_type: string

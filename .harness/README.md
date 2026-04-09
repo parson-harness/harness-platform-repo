@@ -32,6 +32,16 @@ The `idp_pov_destroyer_v2` pipeline:
 3. **Cleanup Orphans**: API-delete any resources Terraform couldn't remove
 4. **Delete Workspace**: Remove IACM workspace after successful cleanup
 
+### Sandbox Janitor Behavior
+
+The scheduled janitor uses the linked IACM workspace as the source of truth instead of maintaining a separate sandbox inventory.
+
+1. **Query linked workspaces**: Read all `_pov` and `_sandbox` workspaces in the project
+2. **Classify by template metadata**: Use `workspace_template_id`, `deployment_target`, `sandbox_profile`, `ttl_days`, and `created_at`
+3. **Audit first**: `sandbox_ttl_cleanup` with `dry_run=true` reports expired sandboxes without deleting anything
+4. **Destroy through the robust path**: Expired workspaces are handed to `idp_pov_destroyer_v2`, not the legacy `pov_destroy` pipeline
+5. **Preserve template linkage**: Template-family filtering stays aligned with `POV_Provisioner` and `Sandbox_Provisioner_ASG`
+
 ### Why API Cleanup Still Exists
 
 API cleanup is a **fallback**, not the primary mechanism. It handles:
@@ -101,7 +111,21 @@ The POV provisioner uses IACM **Workspace Templates** with "Use Template" linkag
 | Template | Version | Use Case |
 |----------|---------|----------|
 | `POV_Provisioner` | 1.0 | POV-in-a-Box (shared EKS, cross-account) |
-| `SE_Sandbox_Provisioner` | 1.0 | SE personal sandboxes |
+| `Sandbox_Provisioner_ASG` | 1.0 | Self-contained ASG POV sandboxes |
+| `Project_Governance` | 1.0 | Project-scoped governance workspace |
+
+### Template Metadata for Janitor and Bulk Operations
+
+The janitor and bulk-update flows rely on workspace metadata that is persisted into each linked workspace:
+
+| Variable | Purpose |
+|----------|---------|
+| `workspace_template_id` | Template family classifier (`POV_Provisioner` or `Sandbox_Provisioner_ASG`) |
+| `deployment_target` | Distinguishes `eks` vs `asg` cleanup behavior |
+| `sandbox_profile` | Lets the janitor scope by recommended profile |
+| `ttl_days` | Cleanup retention window (`0` means protected) |
+| `created_at` | TTL start timestamp |
+| `last_touched_at` | Last reconciliation timestamp |
 
 ### Adding Variables to Template
 
@@ -173,6 +197,26 @@ Import the pipeline from `.harness/pipelines/idp_pov_provisioner.yaml`:
 2. Select **Import from Git**
 3. Select connector `parsongh`, repo `harness-demo-app`
 4. Path: `.harness/pipelines/idp_pov_provisioner.yaml`
+
+## Sandbox Janitor Entry Points
+
+### Manual Audit or Cleanup
+
+- **Workflow**: `.harness/workflows/sandbox_cleanup_workflow.yaml`
+- **Pipeline**: `.harness/pipelines/sandbox_ttl_cleanup.yaml`
+
+Recommended usage:
+
+1. Run with `dry_run=true`
+2. Filter by `template_id`, `owner_filter`, `sandbox_profile_filter`, or `deployment_target_filter`
+3. Review the expired workspace report
+4. Re-run with `dry_run=false` to trigger `idp_pov_destroyer_v2` for the expired matches
+
+### Scheduled Cleanup
+
+- **Trigger**: `.harness/triggers/sandbox_ttl_cleanup_cron.yaml`
+
+This weekly trigger runs the same janitor pipeline against all managed linked workspaces. The cleanup still flows through the robust destroyer so Terraform state-aware cleanup remains the primary mechanism.
 
 ### Step 4: Create IDP Workflow (Optional)
 

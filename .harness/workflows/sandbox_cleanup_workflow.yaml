@@ -1,0 +1,102 @@
+apiVersion: harness.io/v1
+kind: Workflow
+name: Sandbox Cleanup
+identifier: sandbox_cleanup_workflow
+type: workflow
+scope: project
+projectIdentifier: parson
+orgIdentifier: sandbox
+owner: todd.parson@harness.io
+metadata:
+  description: "Audit or clean up expired template-linked POV sandboxes using IACM workspace TTL metadata"
+  tags:
+    - sandbox
+    - cleanup
+    - janitor
+spec:
+  presentation:
+    customTitle: Sandbox Cleanup
+    customSubTitle: Audit or clean up expired template-linked POV sandboxes
+    customCreateButtonText: Run Sandbox Cleanup
+
+  output:
+    links:
+      - title: IACM Workspaces
+        url: https://app.harness.io/ng/account/<+account.identifier>/module/iacm/orgs/sandbox/projects/parson/workspaces
+      - title: Destroyer Pipeline
+        url: https://app.harness.io/ng/account/<+account.identifier>/all/orgs/sandbox/projects/parson/pipelines/idp_pov_destroyer_v2/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main
+
+  lifecycle: production
+
+  parameters:
+    - title: Authentication
+      required:
+        - token
+      properties:
+        token:
+          title: Harness Token
+          type: string
+          ui:widget: password
+          ui:field: HarnessAuthToken
+
+    - title: Workspace Scope
+      properties:
+        template_id:
+          title: Template Scope
+          type: string
+          description: "Use all for every managed POV workspace, POV_Provisioner for EKS-linked workspaces, or Sandbox_Provisioner_ASG for ASG-linked workspaces"
+          default: all
+          enum:
+            - all
+            - POV_Provisioner
+            - Sandbox_Provisioner_ASG
+        owner_filter:
+          title: Owner Filter
+          type: string
+          description: "Optional owner filter (for example: todd). Leave blank to target all matching workspaces"
+        sandbox_profile_filter:
+          title: Profile Filter
+          type: string
+          description: "Optional sandbox profile filter"
+          default: all
+          enum:
+            - all
+            - se-demo
+            - se-pov-sandbox
+            - se-pov-ref-arch
+            - se-workshop
+            - manual
+        deployment_target_filter:
+          title: Deployment Target Filter
+          type: string
+          description: "Optional deployment target filter"
+          default: all
+          enum:
+            - all
+            - eks
+            - asg
+
+    - title: Cleanup Mode
+      properties:
+        dry_run:
+          title: Audit Only?
+          type: string
+          description: "Recommended true first. If false, the janitor triggers idp_pov_destroyer_v2 for expired matching workspaces"
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+
+  steps:
+    - id: trigger
+      name: Running Sandbox Cleanup
+      action: trigger:harness-custom-pipeline
+      input:
+        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/sandbox_ttl_cleanup/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
+        inputset:
+          template_id: ${{ parameters.template_id }}
+          owner_filter: ${{ parameters.owner_filter }}
+          sandbox_profile_filter: ${{ parameters.sandbox_profile_filter }}
+          deployment_target_filter: ${{ parameters.deployment_target_filter }}
+          dry_run: ${{ parameters.dry_run }}
+        apikey: ${{ parameters.token }}

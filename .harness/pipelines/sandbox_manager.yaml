@@ -305,8 +305,9 @@ pipeline:
                           set -e
                           
                           OWNER="<+pipeline.variables.owner>"
+                          WS_ID="${OWNER}_pov"
                           
-                          echo "=== Triggering Destroy for ${OWNER}_pov ==="
+                          echo "=== Triggering Destroy for ${WS_ID} ==="
                           echo ""
                           
                           ACCOUNT_ID="<+account.identifier>"
@@ -315,17 +316,32 @@ pipeline:
                           API_KEY="${HARNESS_API_KEY}"
                           ENDPOINT="https://app.harness.io"
                           
-                          # Trigger the POV destroy pipeline
+                          WS_DETAILS=$(curl -s -X GET \
+                            "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces/${WS_ID}?accountIdentifier=${ACCOUNT_ID}" \
+                            -H "x-api-key: ${API_KEY}" \
+                            -H "Harness-Account: ${ACCOUNT_ID}" \
+                            -H "Content-Type: application/json")
+
+                          TARGET=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "deployment_target") | .value // "eks"' 2>/dev/null || echo "eks")
+                          TARGET_ACCOUNT_ID=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "harness_account_id") | .value // empty' 2>/dev/null || echo "")
+                          EKS_CLUSTER_NAME=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "eks_cluster_name") | .value // "harness-eks-parson"' 2>/dev/null || echo "harness-eks-parson")
+                          
                           RESPONSE=$(curl -s -X POST \
-                            "${ENDPOINT}/pipeline/api/pipeline/execute/pov_destroy?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
+                            "${ENDPOINT}/pipeline/api/pipeline/execute/idp_pov_destroyer_v2?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
                             -H "x-api-key: ${API_KEY}" \
                             -H "Content-Type: application/json" \
                             -d "{
                               \"owner\": \"${OWNER}\",
-                              \"harness_account_id\": \"${ACCOUNT_ID}\",
+                              \"deployment_target\": \"${TARGET}\",
+                              \"harness_account_id\": \"${TARGET_ACCOUNT_ID:-$ACCOUNT_ID}\",
+                              \"provisioner_api_key\": \"${API_KEY}\",
+                              \"target_api_key\": \"${API_KEY}\",
                               \"harness_org_id\": \"${ORG_ID}\",
                               \"harness_project_id\": \"${PROJECT_ID}\",
-                              \"harness_endpoint\": \"${ENDPOINT}\"
+                              \"harness_endpoint\": \"${ENDPOINT}\",
+                              \"eks_cluster_name\": \"${EKS_CLUSTER_NAME:-harness-eks-parson}\",
+                              \"skip_terraform_destroy\": \"false\",
+                              \"auto_approve\": \"false\"
                             }")
                           
                           EXEC_ID=$(echo "$RESPONSE" | jq -r '.data.planExecution.uuid // "unknown"')
@@ -335,7 +351,7 @@ pipeline:
                           echo "Execution ID: $EXEC_ID"
                           echo ""
                           echo "Monitor progress at:"
-                          echo "${ENDPOINT}/ng/account/${ACCOUNT_ID}/all/orgs/${ORG_ID}/projects/${PROJECT_ID}/pipelines/pov_destroy/executions/${EXEC_ID}/pipeline"
+                          echo "${ENDPOINT}/ng/account/${ACCOUNT_ID}/all/orgs/${ORG_ID}/projects/${PROJECT_ID}/pipelines/idp_pov_destroyer_v2/executions/${EXEC_ID}/pipeline"
                     environmentVariables:
                       - name: HARNESS_API_KEY
                         type: String

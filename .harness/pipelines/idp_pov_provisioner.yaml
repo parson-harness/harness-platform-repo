@@ -1122,6 +1122,7 @@ pipeline:
                           DEPLOYMENT_TARGET="<+pipeline.variables.deployment_target>"
                           SOURCE_GITHUB_REPO="<+pipeline.variables.source_github_repo>"
                           EKS_CLUSTER_NAME="<+pipeline.variables.eks_cluster_name>"
+                          WORKSPACE_TEMPLATE_ID=$([ "<+pipeline.variables.deployment_target>" = "asg" ] && echo "Sandbox_Provisioner_ASG" || echo "POV_Provisioner")
                           RESOLVED_PROFILE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
                           RESOLVED_USE_HARNESS_CODE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>"
                           CREATE_HARNESS_ORG="<+pipeline.variables.create_harness_org>"
@@ -1218,6 +1219,7 @@ pipeline:
 
                           update_tf_var "owner" "<+pipeline.variables.owner>" "string"
                           update_tf_var "workspace_id" "$WORKSPACE_ID" "string"
+                          update_tf_var "workspace_template_id" "$WORKSPACE_TEMPLATE_ID" "string"
                           update_tf_var "sandbox_profile" "$RESOLVED_PROFILE" "string"
                           update_tf_var "deployment_target" "$DEPLOYMENT_TARGET" "string"
                           update_tf_var "created_at" "$CREATED_AT_VALUE" "string"
