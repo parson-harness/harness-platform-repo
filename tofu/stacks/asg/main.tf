@@ -183,6 +183,7 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
       AWS_REGION="${var.aws_region}"
       IAM_AUTH_USER="$${AWS_ACCESS_KEY_ID}:$${AWS_SECRET_ACCESS_KEY}"
       STATE_FILE="${path.root}/terraform.tfstate"
+      ASG_PREFIX="${local.name_prefix}-asg"
       ALB_NAME="${local.asg_alb_name}"
       PROD_TG_NAME="${local.asg_prod_tg_name}"
       STAGE_TG_NAME="${local.asg_stage_tg_name}"
@@ -247,9 +248,10 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
       }
 
       wait_for_asg_deletion() {
+        TARGET_ASG_NAME="$1"
         for _ in $(seq 1 30); do
-          RESPONSE=$(autoscaling_post "Action=DescribeAutoScalingGroups&AutoScalingGroupNames.member.1=$${BASE_ASG_NAME}&Version=2011-01-01" 2>&1)
-          if ! echo "$${RESPONSE}" | grep -q "<AutoScalingGroupName>$${BASE_ASG_NAME}</AutoScalingGroupName>"; then
+          RESPONSE=$(autoscaling_post "Action=DescribeAutoScalingGroups&AutoScalingGroupNames.member.1=$${TARGET_ASG_NAME}&Version=2011-01-01" 2>&1)
+          if ! echo "$${RESPONSE}" | grep -q "<AutoScalingGroupName>$${TARGET_ASG_NAME}</AutoScalingGroupName>"; then
             return 0
           fi
           sleep 5
@@ -297,20 +299,23 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
       }
 
       if ! state_tracks_resource "module.asg" "aws_autoscaling_group" "base"; then
-        ASG_XML=$(autoscaling_post "Action=DescribeAutoScalingGroups&AutoScalingGroupNames.member.1=$${BASE_ASG_NAME}&Version=2011-01-01" 2>&1)
-        if echo "$${ASG_XML}" | grep -q "<AutoScalingGroupName>$${BASE_ASG_NAME}</AutoScalingGroupName>"; then
-          autoscaling_post "Action=UpdateAutoScalingGroup&AutoScalingGroupName=$${BASE_ASG_NAME}&MinSize=0&MaxSize=0&DesiredCapacity=0&Version=2011-01-01" >/dev/null 2>&1 || true
-          autoscaling_post "Action=DeleteAutoScalingGroup&AutoScalingGroupName=$${BASE_ASG_NAME}&ForceDelete=true&Version=2011-01-01" >/dev/null 2>&1 || true
-          wait_for_asg_deletion
-        fi
+        ASG_XML=$(autoscaling_post "Action=DescribeAutoScalingGroups&Version=2011-01-01" 2>&1)
+        for ASG_NAME in $(echo "$${ASG_XML}" | grep -o '<AutoScalingGroupName>[^<]*</AutoScalingGroupName>' | sed 's/<[^>]*>//g'); do
+          case "$${ASG_NAME}" in
+            "$${ASG_PREFIX}"*)
+              autoscaling_post "Action=UpdateAutoScalingGroup&AutoScalingGroupName=$${ASG_NAME}&MinSize=0&MaxSize=0&DesiredCapacity=0&Version=2011-01-01" >/dev/null 2>&1 || true
+              autoscaling_post "Action=DeleteAutoScalingGroup&AutoScalingGroupName=$${ASG_NAME}&ForceDelete=true&Version=2011-01-01" >/dev/null 2>&1 || true
+              wait_for_asg_deletion "$${ASG_NAME}"
+              ;;
+          esac
+        done
       fi
 
       if ! state_tracks_resource "module.asg" "aws_launch_template" "main"; then
-        LAUNCH_TEMPLATE_XML=$(ec2_post "Action=DescribeLaunchTemplates&LaunchTemplateName.1=$${LAUNCH_TEMPLATE_NAME}&Version=2016-11-15" 2>&1)
-        LAUNCH_TEMPLATE_ID=$(echo "$${LAUNCH_TEMPLATE_XML}" | grep -o '<launchTemplateId>[^<]*</launchTemplateId>' | sed 's/<[^>]*>//g' | head -1)
-        if [ -n "$${LAUNCH_TEMPLATE_ID}" ]; then
+        LAUNCH_TEMPLATE_XML=$(ec2_post "Action=DescribeLaunchTemplates&Version=2016-11-15" 2>&1)
+        for LAUNCH_TEMPLATE_ID in $(echo "$${LAUNCH_TEMPLATE_XML}" | awk -v prefix="$${ASG_PREFIX}" 'BEGIN{RS="<member>"} /<launchTemplateId>/ && /<launchTemplateName>/ { id=$0; sub(/.*<launchTemplateId>/, "", id); sub(/<.*/, "", id); name=$0; sub(/.*<launchTemplateName>/, "", name); sub(/<.*/, "", name); if (index(name, prefix) == 1) print id }'); do
           ec2_post "Action=DeleteLaunchTemplate&LaunchTemplateId=$${LAUNCH_TEMPLATE_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
-        fi
+        done
       fi
 
       if ! state_tracks_resource "module.asg" "aws_lb" "main"; then

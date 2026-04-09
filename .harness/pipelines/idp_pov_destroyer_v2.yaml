@@ -634,13 +634,15 @@ pipeline:
                               echo "No ASGs found with prefix ${ASG_PREFIX}"
                             fi
 
-                            LT_NAME="${ASG_PREFIX}-lt"
-                            LT_ID=$(aws ec2 describe-launch-templates --filters "Name=launch-template-name,Values=${LT_NAME}" --query 'LaunchTemplates[0].LaunchTemplateId' --output text 2>/dev/null || true)
-                            if [ -n "$LT_ID" ] && [ "$LT_ID" != "None" ]; then
-                              echo "Launch Template ${LT_NAME}: deleting"
-                              aws ec2 delete-launch-template --launch-template-id "$LT_ID" 2>/dev/null || true
+                            LTS=$(aws ec2 describe-launch-templates --query "LaunchTemplates[?starts_with(LaunchTemplateName, '${ASG_PREFIX}')].LaunchTemplateId" --output text 2>/dev/null || true)
+                            if [ -n "$LTS" ] && [ "$LTS" != "None" ]; then
+                              for LT_ID in $LTS; do
+                                LT_NAME=$(aws ec2 describe-launch-templates --launch-template-ids "$LT_ID" --query 'LaunchTemplates[0].LaunchTemplateName' --output text 2>/dev/null || true)
+                                echo "Launch Template ${LT_NAME}: deleting"
+                                aws ec2 delete-launch-template --launch-template-id "$LT_ID" 2>/dev/null || true
+                              done
                             else
-                              echo "Launch Template ${LT_NAME}: not found (ok)"
+                              echo "No Launch Templates found with prefix ${ASG_PREFIX}"
                             fi
 
                             ALB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?LoadBalancerName=='${ASG_PREFIX}-alb'].LoadBalancerArn" --output text 2>/dev/null || true)
@@ -651,15 +653,17 @@ pipeline:
                               echo "ALB ${ASG_PREFIX}-alb: not found (ok)"
                             fi
 
-                            for TG in "${ASG_PREFIX}-prod-tg" "${ASG_PREFIX}-stage-tg"; do
-                              TG_ARN=$(aws elbv2 describe-target-groups --names "$TG" --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)
-                              if [ -n "$TG_ARN" ] && [ "$TG_ARN" != "None" ]; then
-                                echo "Target Group ${TG}: deleting"
+                            TG_PREFIX="${NAME_PREFIX}-as"
+                            TGS=$(aws elbv2 describe-target-groups --query "TargetGroups[?starts_with(TargetGroupName, '${TG_PREFIX}')].TargetGroupArn" --output text 2>/dev/null || true)
+                            if [ -n "$TGS" ] && [ "$TGS" != "None" ]; then
+                              for TG_ARN in $TGS; do
+                                TG_NAME=$(aws elbv2 describe-target-groups --target-group-arns "$TG_ARN" --query 'TargetGroups[0].TargetGroupName' --output text 2>/dev/null || true)
+                                echo "Target Group ${TG_NAME}: deleting"
                                 aws elbv2 delete-target-group --target-group-arn "$TG_ARN" 2>/dev/null || true
-                              else
-                                echo "Target Group ${TG}: not found (ok)"
-                              fi
-                            done
+                              done
+                            else
+                              echo "No Target Groups found with prefix ${TG_PREFIX}"
+                            fi
 
                             PROFILE_NAME="${ASG_PREFIX}-instance-profile"
                             ROLE_NAME_APP="${ASG_PREFIX}-instance-role"
