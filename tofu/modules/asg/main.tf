@@ -380,6 +380,24 @@ resource "aws_iam_role" "instance" {
   })
 }
 
+resource "aws_iam_role_policy" "instance_autoscaling_read" {
+  name = "${var.name_prefix}-asg-instance-autoscaling-read"
+  role = aws_iam_role.instance.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "autoscaling:DescribeAutoScalingInstances"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "instance_ssm" {
   role       = aws_iam_role.instance.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"

@@ -80,7 +80,7 @@ build {
 
   provisioner "shell" {
     inline = [
-      "sudo dnf install -y java-17-amazon-corretto",
+      "sudo dnf install -y java-17-amazon-corretto awscli",
       "sudo mkdir -p /opt/app",
       "sudo useradd -r -s /bin/false harness-app || true"
     ]

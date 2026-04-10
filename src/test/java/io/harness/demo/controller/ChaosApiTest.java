@@ -1,5 +1,6 @@
 package io.harness.demo.controller;
 
+import io.harness.demo.config.AppConfig;
 import io.harness.demo.service.ChaosService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -20,6 +21,9 @@ class ChaosApiTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private AppConfig appConfig;
 
     @Autowired
     private ChaosService chaosService;
@@ -182,10 +186,31 @@ class ChaosApiTest {
         @Test
         @DisplayName("Should skip degradation for non-canary deployments")
         void degradeCanary_shouldSkipForNonCanary() throws Exception {
+            appConfig.setDeploymentVariant("");
+            appConfig.setDeploymentTrack("");
+
             mockMvc.perform(post("/api/chaos/degrade-canary"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.status").value("skipped"))
+                    .andExpect(jsonPath("$.variant").value("stable"))
                     .andExpect(jsonPath("$.message").value("Not a canary deployment - chaos not injected"));
+        }
+
+        @Test
+        @DisplayName("Should degrade canary when deployment track is canary")
+        void degradeCanary_shouldUseDeploymentTrack() throws Exception {
+            appConfig.setDeploymentVariant("");
+            appConfig.setDeploymentTrack("canary");
+
+            try {
+                mockMvc.perform(post("/api/chaos/degrade-canary"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.status").value("canary_degraded"))
+                        .andExpect(jsonPath("$.variant").value("canary"));
+            } finally {
+                appConfig.setDeploymentTrack("");
+                chaosService.disableChaos();
+            }
         }
     }
 }

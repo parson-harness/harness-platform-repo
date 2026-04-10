@@ -192,10 +192,10 @@ public class ApiController {
             @RequestParam(defaultValue = "60") int durationSeconds) {
         
         // Only degrade if this is a canary deployment
-        if (!"canary".equalsIgnoreCase(appConfig.getDeploymentVariant())) {
+        if (!"canary".equalsIgnoreCase(appConfig.getEffectiveVariant())) {
             Map<String, Object> response = new HashMap<>();
             response.put("status", "skipped");
-            response.put("variant", appConfig.getDeploymentVariant());
+            response.put("variant", appConfig.getEffectiveVariant());
             response.put("message", "Not a canary deployment - chaos not injected");
             return ResponseEntity.ok(response);
         }
@@ -215,7 +215,7 @@ public class ApiController {
         response.put("latencyMs", 800);
         response.put("errorRate", 0.5);
         response.put("durationSeconds", durationSeconds);
-        response.put("variant", appConfig.getDeploymentVariant());
+        response.put("variant", appConfig.getEffectiveVariant());
         response.put("message", "Canary deployment degraded - CV should detect and trigger rollback");
         
         return ResponseEntity.ok(response);
