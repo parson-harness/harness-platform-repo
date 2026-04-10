@@ -72,7 +72,7 @@
         <span class="inline-flex items-center space-x-3">
             <span class="flex items-center">
                 <span class="w-2 h-2 bg-white rounded-full mr-2 animate-pulse"></span>
-                <span th:text="${config.deploymentVariant.toUpperCase()}">STABLE</span>
+                <span th:text="${config.effectiveVariant.toUpperCase()}">STABLE</span>
             </span>
             <span class="opacity-60">|</span>
             <span th:text="${config.version}">v1.0.0</span>
@@ -323,7 +323,7 @@
                 </div>
                 <div class="flex items-center space-x-6 text-sm text-gray-500">
                     <span th:text="'Version ' + ${config.version}">Version 1.0.0</span>
-                    <span class="variant-badge px-2 py-0.5 rounded text-xs" th:text="${config.deploymentVariant}">stable</span>
+                    <span class="variant-badge px-2 py-0.5 rounded text-xs" th:text="${config.effectiveVariant}">stable</span>
                     <span th:text="${config.environment}">production</span>
                 </div>
             </div>

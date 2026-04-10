@@ -40,7 +40,7 @@
         <span class="inline-flex items-center space-x-3">
             <span class="flex items-center">
                 <span class="w-2 h-2 bg-white rounded-full mr-2 animate-pulse"></span>
-                <span th:text="${config.deploymentVariant.toUpperCase()}">STABLE</span>
+                <span th:text="${config.effectiveVariant.toUpperCase()}">STABLE</span>
             </span>
             <span class="opacity-60">|</span>
             <span th:text="${config.version}">v1.0.0</span>
@@ -186,7 +186,7 @@
                     </div>
                     <div class="flex justify-between py-3 border-b border-white/10">
                         <span class="text-gray-400">Variant</span>
-                        <span class="font-mono font-bold" th:text="${config.deploymentVariant}" th:style="'color: ' + ${config.variantColor}">stable</span>
+                        <span class="font-mono font-bold" th:text="${config.effectiveVariant}" th:style="'color: ' + ${config.variantColor}">stable</span>
                     </div>
                     <div class="flex justify-between py-3 border-b border-white/10">
                         <span class="text-gray-400">Region</span>
@@ -211,7 +211,7 @@ APP_VERSION=<span th:text="${config.version}">1.0.0</span>
 APP_ENVIRONMENT=<span th:text="${config.environment}">production</span>
 
 # Deployment
-DEPLOYMENT_VARIANT=<span th:text="${config.deploymentVariant}">blue</span>
+DEPLOYMENT_VARIANT=<span th:text="${config.effectiveVariant}">blue</span>
 VARIANT_COLOR=<span th:text="${config.variantColor}">#3B82F6</span>
 DEPLOYMENT_TARGET=<span th:text="${config.deploymentTarget}">kubernetes</span>
 
