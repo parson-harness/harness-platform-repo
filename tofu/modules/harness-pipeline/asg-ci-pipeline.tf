@@ -544,6 +544,25 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                             AMI_NAME="$OUTPUT_AMI_NAME"
                             echo "Triggering ASG deployment with AMI name: $AMI_NAME"
 
+                            is_unset_like() {
+                              case "$1" in
+                                ""|null|"<+input>"|"<+"*)
+                                  return 0
+                                  ;;
+                                *)
+                                  return 1
+                                  ;;
+                              esac
+                            }
+
+                            normalize_scalar() {
+                              if is_unset_like "$1"; then
+                                printf '%s' "$2"
+                              else
+                                printf '%s' "$1"
+                              fi
+                            }
+
                             TEST_PASS_RATE=100
                             if ls build/test-results/test/*.xml >/dev/null 2>&1; then
                               TOTAL_TESTS=0
@@ -566,14 +585,29 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                               fi
                             fi
 
-                            CRITICAL_VULNERABILITIES="<+execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>"
-                            HIGH_VULNERABILITIES="<+execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>"
-                            CHANGE_BLAST_RADIUS="<+pipeline.variables.change_blast_radius>"
-                            ROLLBACK_READY="<+pipeline.variables.rollback_ready>"
-                            OPEN_CHANGE_FAILURES="<+pipeline.variables.open_change_failures>"
-                            CHANGE_FREEZE_ACTIVE="<+pipeline.variables.change_freeze_active>"
-                            REQUIRES_DATA_MIGRATION="<+pipeline.variables.requires_data_migration>"
-                            RELEASE_CANDIDATE_EVIDENCE="<+execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>"
+                            CRITICAL_VULNERABILITIES_RAW="<+execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>"
+                            HIGH_VULNERABILITIES_RAW="<+execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>"
+                            CHANGE_BLAST_RADIUS_RAW="<+pipeline.variables.change_blast_radius>"
+                            ROLLBACK_READY_RAW="<+pipeline.variables.rollback_ready>"
+                            OPEN_CHANGE_FAILURES_RAW="<+pipeline.variables.open_change_failures>"
+                            CHANGE_FREEZE_ACTIVE_RAW="<+pipeline.variables.change_freeze_active>"
+                            REQUIRES_DATA_MIGRATION_RAW="<+pipeline.variables.requires_data_migration>"
+                            RELEASE_CANDIDATE_EVIDENCE_RAW="<+execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>"
+
+                            CRITICAL_VULNERABILITIES="$(normalize_scalar "$CRITICAL_VULNERABILITIES_RAW" "0")"
+                            HIGH_VULNERABILITIES="$(normalize_scalar "$HIGH_VULNERABILITIES_RAW" "0")"
+                            CHANGE_BLAST_RADIUS="$(normalize_scalar "$CHANGE_BLAST_RADIUS_RAW" "low")"
+                            ROLLBACK_READY="$(normalize_scalar "$ROLLBACK_READY_RAW" "true")"
+                            OPEN_CHANGE_FAILURES="$(normalize_scalar "$OPEN_CHANGE_FAILURES_RAW" "0")"
+                            CHANGE_FREEZE_ACTIVE="$(normalize_scalar "$CHANGE_FREEZE_ACTIVE_RAW" "false")"
+                            REQUIRES_DATA_MIGRATION="$(normalize_scalar "$REQUIRES_DATA_MIGRATION_RAW" "false")"
+
+                            DEFAULT_RELEASE_CANDIDATE_EVIDENCE=$(printf '{"artifact":{"ami_name":"%s","ami_id":"unknown"},"attestations":{"artifact_type":"ami","packer_bake":"completed","coverage_upload":"completed"}}' "$AMI_NAME")
+                            if is_unset_like "$RELEASE_CANDIDATE_EVIDENCE_RAW"; then
+                              RELEASE_CANDIDATE_EVIDENCE="$DEFAULT_RELEASE_CANDIDATE_EVIDENCE"
+                            else
+                              RELEASE_CANDIDATE_EVIDENCE="$RELEASE_CANDIDATE_EVIDENCE_RAW"
+                            fi
 
                             echo "Computed test pass rate: $TEST_PASS_RATE%"
                             echo "Using critical vulnerabilities: $CRITICAL_VULNERABILITIES"

@@ -347,7 +347,6 @@ ${local.asg_delegate_yaml}            spec:
 
                           Artifact:
                             AMI Name: <+pipeline.variables.ami_name>
-                            AMI ID:   <+artifact.metadata.ami>
 
                           Validate the new version on the Stage environment:
                             Stage URL: <+serviceVariables.stageUrl>
@@ -475,7 +474,6 @@ ${local.asg_delegate_yaml}            spec:
 
                           Artifact:
                             AMI Name:  <+pipeline.variables.ami_name>
-                            AMI ID:    <+artifact.metadata.ami>
                             Canary ASG: ${var.asg_prod_asg_name}__Canary
 
                           Validation target:

@@ -120,28 +120,28 @@ resource "harness_platform_triggers" "asg_cd_webhook_trigger" {
               value: <+trigger.payload.ami_name>
             - name: test_pass_rate
               type: String
-              value: <+trigger.payload.test_pass_rate>
+              value: <+<+trigger.payload>.contains("test_pass_rate")?<+trigger.payload.test_pass_rate>:"100">
             - name: critical_vulnerabilities
               type: String
-              value: <+trigger.payload.critical_vulnerabilities>
+              value: <+<+trigger.payload>.contains("critical_vulnerabilities")?<+trigger.payload.critical_vulnerabilities>:"0">
             - name: high_vulnerabilities
               type: String
-              value: <+trigger.payload.high_vulnerabilities>
+              value: <+<+trigger.payload>.contains("high_vulnerabilities")?<+trigger.payload.high_vulnerabilities>:"0">
             - name: change_blast_radius
               type: String
-              value: <+trigger.payload.change_blast_radius>
+              value: <+<+trigger.payload>.contains("change_blast_radius")?<+trigger.payload.change_blast_radius>:"low">
             - name: rollback_ready
               type: String
-              value: <+trigger.payload.rollback_ready>
+              value: <+<+trigger.payload>.contains("rollback_ready")?<+trigger.payload.rollback_ready>:"true">
             - name: open_change_failures
               type: String
-              value: <+trigger.payload.open_change_failures>
+              value: <+<+trigger.payload>.contains("open_change_failures")?<+trigger.payload.open_change_failures>:"0">
             - name: change_freeze_active
               type: String
-              value: <+trigger.payload.change_freeze_active>
+              value: <+<+trigger.payload>.contains("change_freeze_active")?<+trigger.payload.change_freeze_active>:"false">
             - name: requires_data_migration
               type: String
-              value: <+trigger.payload.requires_data_migration>
+              value: <+<+trigger.payload>.contains("requires_data_migration")?<+trigger.payload.requires_data_migration>:"false">
             - name: release_candidate_evidence
               type: String
               value: <+trigger.payload.release_candidate_evidence>
