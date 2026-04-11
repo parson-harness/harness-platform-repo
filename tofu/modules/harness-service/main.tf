@@ -64,7 +64,7 @@ locals {
   effective_asg_startup_store_type = var.asg_startup_script_use_file_store ? "Harness" : (var.asg_startup_script_use_git ? "Github" : (var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github"))
   asg_manifest_repo_spec = var.manifest_store_type == "HarnessCode" ? {
     repoName = local.effective_repo_name
-  } : {
+    } : {
     connectorRef = var.git_connector_ref
     repoName     = local.effective_repo_name
   }
@@ -103,25 +103,26 @@ locals {
     var.asg_startup_script_use_git ? {
       connectorRef = var.asg_startup_script_git_connector_ref
       repoName     = local.effective_asg_startup_repo_name
-    } : (
+      } : (
       var.manifest_store_type == "HarnessCode" ? {
         repoName = local.effective_asg_startup_repo_name
-      } : {
+        } : {
         connectorRef = var.git_connector_ref
         repoName     = local.effective_asg_startup_repo_name
       }
     )
   )
-  asg_startup_script_base_spec = var.asg_startup_script_use_file_store ? {
-    files = ["/${local.asg_file_store_folder_name}/${harness_platform_file_store_file.asg_startup_script[0].name}"]
-  } : {
-    gitFetchType = "Branch"
-    branch       = var.git_branch
-    paths        = [var.asg_startup_script_path]
+  asg_startup_script_base_spec = {
+    files        = var.asg_startup_script_use_file_store ? ["/${local.asg_file_store_folder_name}/${harness_platform_file_store_file.asg_startup_script[0].name}"] : null
+    gitFetchType = var.asg_startup_script_use_file_store ? null : "Branch"
+    branch       = var.asg_startup_script_use_file_store ? null : var.git_branch
+    paths        = var.asg_startup_script_use_file_store ? null : [var.asg_startup_script_path]
   }
   asg_startup_script_store = {
     type = local.effective_asg_startup_store_type
-    spec = merge(local.asg_startup_script_base_spec, local.asg_startup_script_repo_spec)
+    spec = {
+      for k, v in merge(local.asg_startup_script_base_spec, local.asg_startup_script_repo_spec) : k => v if v != null
+    }
   }
 
   # Manifest store spec - different for HarnessCode vs external Git
