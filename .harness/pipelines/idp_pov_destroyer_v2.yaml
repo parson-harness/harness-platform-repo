@@ -577,63 +577,34 @@ pipeline:
                           OWNER="<+pipeline.variables.owner>"
                           TARGET="<+pipeline.variables.deployment_target>"
                           NAME_PREFIX="harness-demo-${OWNER}"
-                          
-                          # Verify AWS credentials are working
-                          echo "Verifying AWS credentials..."
-                          aws sts get-caller-identity || { echo "ERROR: AWS credentials not configured"; exit 1; }
-                          echo ""
-                          
-                          # Delete IRSA Role
-                          ROLE_NAME="harness-demo-${OWNER}-delegate-irsa-role"
-                          echo "=== IAM IRSA Role: ${ROLE_NAME} ==="
-                          
-                          # Check if role exists first
-                          if aws iam get-role --role-name "${ROLE_NAME}" 2>/dev/null >/dev/null; then
-                            echo "Role found, deleting..."
-                            
-                            # First delete inline policies
-                            POLICIES=$(aws iam list-role-policies --role-name "${ROLE_NAME}" --query 'PolicyNames[]' --output text 2>/dev/null || true)
-                            if [ -n "$POLICIES" ] && [ "$POLICIES" != "None" ]; then
-                              echo "Deleting inline policies..."
-                              for POLICY in $POLICIES; do
-                                echo -n "  Policy ${POLICY}: "
-                                aws iam delete-role-policy --role-name "${ROLE_NAME}" --policy-name "$POLICY" && echo "deleted" || echo "failed"
-                              done
-                            fi
-                            
-                            # Delete attached policies
-                            ATTACHED=$(aws iam list-attached-role-policies --role-name "${ROLE_NAME}" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null || true)
-                            if [ -n "$ATTACHED" ] && [ "$ATTACHED" != "None" ]; then
-                              echo "Detaching managed policies..."
-                              for ARN in $ATTACHED; do
-                                echo -n "  Policy ${ARN}: "
-                                aws iam detach-role-policy --role-name "${ROLE_NAME}" --policy-arn "$ARN" && echo "detached" || echo "failed"
-                              done
-                            fi
-                            
-                            # Delete the role
-                            echo -n "Role ${ROLE_NAME}: "
-                            aws iam delete-role --role-name "${ROLE_NAME}" && echo "deleted" || echo "failed"
-                          else
-                            echo "Role ${ROLE_NAME}: not found (ok)"
-                          fi
-                          
-                          echo ""
-                          if [ "$TARGET" = "asg" ]; then
-                            echo "=== ASG AWS Resources ==="
+                          ASG_PREFIX="${NAME_PREFIX}-asg"
+                          ASG_ALB_NAME="${ASG_PREFIX}-alb"
 
-                            ASG_PREFIX="${NAME_PREFIX}-asg"
-                            ASGS=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[?starts_with(AutoScalingGroupName, '${ASG_PREFIX}')].AutoScalingGroupName" --output text 2>/dev/null || true)
-                            if [ -n "$ASGS" ] && [ "$ASGS" != "None" ]; then
-                              for ASG in $ASGS; do
-                                echo "ASG ${ASG}: deleting"
-                                aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" --min-size 0 --max-size 0 --desired-capacity 0 2>/dev/null || true
-                                aws autoscaling delete-auto-scaling-group --auto-scaling-group-name "$ASG" --force-delete 2>/dev/null || true
-                              done
-                            else
-                              echo "No ASGs found with prefix ${ASG_PREFIX}"
-                            fi
+                          wait_for_asg_cleanup() {
+                            for _ in $(seq 1 30); do
+                              REMAINING_ASGS=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[?starts_with(AutoScalingGroupName, '${ASG_PREFIX}')].AutoScalingGroupName" --output text 2>/dev/null || true)
+                              if [ -z "$REMAINING_ASGS" ] || [ "$REMAINING_ASGS" = "None" ]; then
+                                return 0
+                              fi
+                              echo "Waiting for ASGs to delete: $REMAINING_ASGS"
+                              sleep 10
+                            done
+                            return 0
+                          }
 
+                          wait_for_alb_cleanup() {
+                            for _ in $(seq 1 30); do
+                              REMAINING_ALB=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?LoadBalancerName=='${ASG_ALB_NAME}'].LoadBalancerArn" --output text 2>/dev/null || true)
+                              if [ -z "$REMAINING_ALB" ] || [ "$REMAINING_ALB" = "None" ]; then
+                                return 0
+                              fi
+                              echo "Waiting for ALB ${ASG_ALB_NAME} to delete"
+                              sleep 10
+                            done
+                            return 0
+                          }
+
+                          delete_launch_templates() {
                             LTS=$(aws ec2 describe-launch-templates --query "LaunchTemplates[?starts_with(LaunchTemplateName, '${ASG_PREFIX}')].LaunchTemplateId" --output text 2>/dev/null || true)
                             if [ -n "$LTS" ] && [ "$LTS" != "None" ]; then
                               for LT_ID in $LTS; do
@@ -644,15 +615,22 @@ pipeline:
                             else
                               echo "No Launch Templates found with prefix ${ASG_PREFIX}"
                             fi
+                          }
 
-                            ALB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?LoadBalancerName=='${ASG_PREFIX}-alb'].LoadBalancerArn" --output text 2>/dev/null || true)
-                            if [ -n "$ALB_ARN" ] && [ "$ALB_ARN" != "None" ]; then
-                              echo "ALB ${ASG_PREFIX}-alb: deleting"
-                              aws elbv2 delete-load-balancer --load-balancer-arn "$ALB_ARN" 2>/dev/null || true
-                            else
-                              echo "ALB ${ASG_PREFIX}-alb: not found (ok)"
-                            fi
+                          wait_for_launch_template_cleanup() {
+                            for _ in $(seq 1 30); do
+                              REMAINING_LTS=$(aws ec2 describe-launch-templates --query "LaunchTemplates[?starts_with(LaunchTemplateName, '${ASG_PREFIX}')].LaunchTemplateName" --output text 2>/dev/null || true)
+                              if [ -z "$REMAINING_LTS" ] || [ "$REMAINING_LTS" = "None" ]; then
+                                return 0
+                              fi
+                              echo "Retrying launch template cleanup: $REMAINING_LTS"
+                              delete_launch_templates
+                              sleep 10
+                            done
+                            return 0
+                          }
 
+                          delete_target_groups() {
                             TG_PREFIX="${NAME_PREFIX}-as"
                             TGS=$(aws elbv2 describe-target-groups --query "TargetGroups[?starts_with(TargetGroupName, '${TG_PREFIX}')].TargetGroupArn" --output text 2>/dev/null || true)
                             if [ -n "$TGS" ] && [ "$TGS" != "None" ]; then
@@ -664,6 +642,92 @@ pipeline:
                             else
                               echo "No Target Groups found with prefix ${TG_PREFIX}"
                             fi
+                          }
+
+                          wait_for_target_group_cleanup() {
+                            TG_PREFIX="${NAME_PREFIX}-as"
+                            for _ in $(seq 1 30); do
+                              REMAINING_TGS=$(aws elbv2 describe-target-groups --query "TargetGroups[?starts_with(TargetGroupName, '${TG_PREFIX}')].TargetGroupName" --output text 2>/dev/null || true)
+                              if [ -z "$REMAINING_TGS" ] || [ "$REMAINING_TGS" = "None" ]; then
+                                return 0
+                              fi
+                              echo "Retrying target group cleanup: $REMAINING_TGS"
+                              delete_target_groups
+                              sleep 10
+                            done
+                            return 0
+                          }
+
+                          cleanup_vpc_dependencies() {
+                            VPC_ID="$1"
+                            for _ in $(seq 1 30); do
+                              CURRENT_VPC=$(aws ec2 describe-vpcs --vpc-ids "$VPC_ID" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || true)
+                              if [ -z "$CURRENT_VPC" ] || [ "$CURRENT_VPC" = "None" ]; then
+                                return 0
+                              fi
+
+                              ENIS=$(aws ec2 describe-network-interfaces --filters "Name=vpc-id,Values=${VPC_ID}" --query 'NetworkInterfaces[].NetworkInterfaceId' --output text 2>/dev/null || true)
+                              if [ -n "$ENIS" ] && [ "$ENIS" != "None" ]; then
+                                echo "Waiting for VPC ENIs to detach: $ENIS"
+                                sleep 10
+                                continue
+                              fi
+
+                              for SG in $(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=${VPC_ID}" --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text 2>/dev/null || true); do
+                                aws ec2 delete-security-group --group-id "$SG" 2>/dev/null || true
+                              done
+                              for SUBNET in $(aws ec2 describe-subnets --filters "Name=vpc-id,Values=${VPC_ID}" --query 'Subnets[].SubnetId' --output text 2>/dev/null || true); do
+                                aws ec2 delete-subnet --subnet-id "$SUBNET" 2>/dev/null || true
+                              done
+                              for RT in $(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=${VPC_ID}" --query 'RouteTables[?Associations[?Main!=`true`]].RouteTableId' --output text 2>/dev/null || true); do
+                                for ASSOC in $(aws ec2 describe-route-tables --route-table-ids "$RT" --query 'RouteTables[0].Associations[?Main!=`true`].RouteTableAssociationId' --output text 2>/dev/null || true); do
+                                  aws ec2 disassociate-route-table --association-id "$ASSOC" 2>/dev/null || true
+                                done
+                                aws ec2 delete-route-table --route-table-id "$RT" 2>/dev/null || true
+                              done
+                              for IGW in $(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=${VPC_ID}" --query 'InternetGateways[].InternetGatewayId' --output text 2>/dev/null || true); do
+                                aws ec2 detach-internet-gateway --internet-gateway-id "$IGW" --vpc-id "$VPC_ID" 2>/dev/null || true
+                                aws ec2 delete-internet-gateway --internet-gateway-id "$IGW" 2>/dev/null || true
+                              done
+                              aws ec2 delete-vpc --vpc-id "$VPC_ID" 2>/dev/null || true
+                              sleep 10
+                            done
+                            return 0
+                          }
+
+                          # Verify AWS credentials are working
+                          echo "Verifying AWS credentials..."
+                          aws sts get-caller-identity || { echo "ERROR: AWS credentials not configured"; exit 1; }
+                          echo ""
+                          if [ "$TARGET" = "asg" ]; then
+                            echo "=== ASG AWS Resources ==="
+
+                            ASGS=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[?starts_with(AutoScalingGroupName, '${ASG_PREFIX}')].AutoScalingGroupName" --output text 2>/dev/null || true)
+                            if [ -n "$ASGS" ] && [ "$ASGS" != "None" ]; then
+                              for ASG in $ASGS; do
+                                echo "ASG ${ASG}: deleting"
+                                aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" --min-size 0 --max-size 0 --desired-capacity 0 2>/dev/null || true
+                                aws autoscaling delete-auto-scaling-group --auto-scaling-group-name "$ASG" --force-delete 2>/dev/null || true
+                              done
+                              wait_for_asg_cleanup
+                            else
+                              echo "No ASGs found with prefix ${ASG_PREFIX}"
+                            fi
+
+                            delete_launch_templates
+                            wait_for_launch_template_cleanup
+
+                            ALB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?LoadBalancerName=='${ASG_ALB_NAME}'].LoadBalancerArn" --output text 2>/dev/null || true)
+                            if [ -n "$ALB_ARN" ] && [ "$ALB_ARN" != "None" ]; then
+                              echo "ALB ${ASG_ALB_NAME}: deleting"
+                              aws elbv2 delete-load-balancer --load-balancer-arn "$ALB_ARN" 2>/dev/null || true
+                              wait_for_alb_cleanup
+                            else
+                              echo "ALB ${ASG_ALB_NAME}: not found (ok)"
+                            fi
+
+                            delete_target_groups
+                            wait_for_target_group_cleanup
 
                             PROFILE_NAME="${ASG_PREFIX}-instance-profile"
                             ROLE_NAME_APP="${ASG_PREFIX}-instance-role"
@@ -729,23 +793,7 @@ pipeline:
 
                             VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${ASG_PREFIX}-vpc" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || true)
                             if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
-                              for SG in $(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=${VPC_ID}" --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text 2>/dev/null || true); do
-                                aws ec2 delete-security-group --group-id "$SG" 2>/dev/null || true
-                              done
-                              for SUBNET in $(aws ec2 describe-subnets --filters "Name=vpc-id,Values=${VPC_ID}" --query 'Subnets[].SubnetId' --output text 2>/dev/null || true); do
-                                aws ec2 delete-subnet --subnet-id "$SUBNET" 2>/dev/null || true
-                              done
-                              for RT in $(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=${VPC_ID}" --query 'RouteTables[?Associations[?Main!=`true`]].RouteTableId' --output text 2>/dev/null || true); do
-                                for ASSOC in $(aws ec2 describe-route-tables --route-table-ids "$RT" --query 'RouteTables[0].Associations[?Main!=`true`].RouteTableAssociationId' --output text 2>/dev/null || true); do
-                                  aws ec2 disassociate-route-table --association-id "$ASSOC" 2>/dev/null || true
-                                done
-                                aws ec2 delete-route-table --route-table-id "$RT" 2>/dev/null || true
-                              done
-                              for IGW in $(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=${VPC_ID}" --query 'InternetGateways[].InternetGatewayId' --output text 2>/dev/null || true); do
-                                aws ec2 detach-internet-gateway --internet-gateway-id "$IGW" --vpc-id "$VPC_ID" 2>/dev/null || true
-                                aws ec2 delete-internet-gateway --internet-gateway-id "$IGW" 2>/dev/null || true
-                              done
-                              aws ec2 delete-vpc --vpc-id "$VPC_ID" 2>/dev/null || true
+                              cleanup_vpc_dependencies "$VPC_ID"
                             else
                               echo "VPC ${ASG_PREFIX}-vpc: not found (ok)"
                             fi
