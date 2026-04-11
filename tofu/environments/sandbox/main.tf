@@ -602,7 +602,7 @@ module "harness_service_asg" {
 
   # Startup script in repo (Harness renders expressions at deploy time)
   asg_startup_script_path            = "asg/user-data.sh"
-  asg_startup_script_use_file_store  = true
+  asg_startup_script_use_file_store  = var.asg_startup_script_use_file_store
   asg_startup_script_local_file_path = "${path.root}/../../../asg/user-data.sh"
   manifest_store_type                = var.import_to_harness_code ? "HarnessCode" : "Github"
   git_connector_ref = var.import_to_harness_code ? "" : (

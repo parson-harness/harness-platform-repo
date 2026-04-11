@@ -145,6 +145,12 @@ template:
         status: manual
         locked: false
         type: String
+      - key: asg_startup_script_use_file_store
+        value: "true"
+        value_type: string
+        status: manual
+        locked: false
+        type: String
       - key: create_asg_strategy_pipeline
         value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>
         value_type: string

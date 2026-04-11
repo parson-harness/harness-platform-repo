@@ -558,6 +558,18 @@ variable "asg_desired_capacity" {
   default     = 0
 }
 
+variable "asg_startup_script_use_file_store" {
+  description = "Use Harness File Store for the ASG startup script by default. Set to false when Harness Code fully supports ASG startup scripts."
+  type        = bool
+  default     = true
+}
+
+variable "asg_min_size" {
+  description = "Minimum ASG instance count"
+  type        = number
+  default     = 0
+}
+
 variable "asg_max_size" {
   description = "Maximum instances per deployed ASG"
   type        = number

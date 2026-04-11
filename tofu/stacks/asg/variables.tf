@@ -72,6 +72,12 @@ variable "asg_canary_instance_count" {
   default     = 1
 }
 
+variable "asg_startup_script_use_file_store" {
+  description = "Use Harness File Store for the ASG startup script by default. Set to false when Harness Code fully supports ASG startup scripts."
+  type        = bool
+  default     = true
+}
+
 ################################################################################
 # DNS and SSL Configuration
 ################################################################################

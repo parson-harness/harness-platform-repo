@@ -138,6 +138,11 @@ pipeline:
       description: Advanced override when use_profile_defaults is false. Create the ASG CI pipeline.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
+    - name: asg_startup_script_use_file_store
+      type: String
+      description: Use Harness File Store for the ASG startup script by default. Set false only when Harness Code fully supports ASG startup scripts.
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
     - name: acm_cert_arn
       type: String
       description: ACM certificate ARN for HTTPS ingress
@@ -857,6 +862,11 @@ pipeline:
                             "value": "1",
                             "value_type": "string"
                           },
+                          "asg_startup_script_use_file_store": {
+                            "key": "asg_startup_script_use_file_store",
+                            "value": "<+pipeline.variables.asg_startup_script_use_file_store>",
+                            "value_type": "string"
+                          },
                           "create_asg_strategy_pipeline": {
                             "key": "create_asg_strategy_pipeline",
                             "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>",
@@ -1125,6 +1135,7 @@ pipeline:
                           WORKSPACE_TEMPLATE_ID=$([ "<+pipeline.variables.deployment_target>" = "asg" ] && echo "Sandbox_Provisioner_ASG" || echo "POV_Provisioner")
                           RESOLVED_PROFILE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
                           RESOLVED_USE_HARNESS_CODE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>"
+                          ASG_STARTUP_SCRIPT_USE_FILE_STORE="<+pipeline.variables.asg_startup_script_use_file_store>"
                           CREATE_HARNESS_ORG="<+pipeline.variables.create_harness_org>"
                           CREATE_HARNESS_PROJECT="<+pipeline.variables.create_harness_project>"
                           ARTIFACT_REGISTRY_TYPE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>"
@@ -1242,6 +1253,7 @@ pipeline:
                             update_tf_var "asg_desired_capacity" "1" "string"
                             update_tf_var "asg_max_size" "4" "string"
                             update_tf_var "asg_canary_instance_count" "1" "string"
+                            update_tf_var "asg_startup_script_use_file_store" "$ASG_STARTUP_SCRIPT_USE_FILE_STORE" "string"
                             update_tf_var "create_asg_strategy_pipeline" "$CREATE_ASG_STRATEGY_PIPELINE" "string"
                             update_tf_var "create_asg_ci_pipeline" "$CREATE_ASG_CI_PIPELINE" "string"
                             update_tf_var "enable_change_governance" "$CREATE_OPA_POLICIES" "string"
