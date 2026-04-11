@@ -211,6 +211,24 @@ variable "asg_startup_script_path" {
   default     = "asg/user-data.sh"
 }
 
+variable "asg_startup_script_use_git" {
+  description = "Use GitHub as the startup script source even when other ASG manifests use Harness Code"
+  type        = bool
+  default     = false
+}
+
+variable "asg_startup_script_git_connector_ref" {
+  description = "GitHub connector reference for the ASG startup script when asg_startup_script_use_git=true"
+  type        = string
+  default     = ""
+}
+
+variable "asg_startup_script_git_repo_name" {
+  description = "GitHub repo name for the ASG startup script when asg_startup_script_use_git=true"
+  type        = string
+  default     = ""
+}
+
 variable "asg_launch_template_path" {
   description = "Path to the EC2 Launch Template JSON manifest in the git repository (required by Harness ASG)"
   type        = string

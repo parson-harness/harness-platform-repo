@@ -608,6 +608,9 @@ module "harness_service_asg" {
   )
   git_repo_name          = var.import_to_harness_code ? "" : element(split("/", var.source_github_repo), length(split("/", var.source_github_repo)) - 1)
   harness_code_repo_name = var.import_to_harness_code ? "${var.owner}-demo-app" : ""
+  asg_startup_script_use_git          = (var.create_connectors && var.github_token_ref != "") || var.github_connector_ref != ""
+  asg_startup_script_git_connector_ref = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+  asg_startup_script_git_repo_name     = element(split("/", var.source_github_repo), length(split("/", var.source_github_repo)) - 1)
   git_branch             = var.service_git_branch
 
   tags = ["tofu-managed", var.owner, "asg"]
