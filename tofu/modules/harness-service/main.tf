@@ -48,6 +48,7 @@ resource "harness_platform_file_store_file" "asg_startup_script" {
 locals {
   # Tags formatted for YAML
   tags_yaml = join("\n", [for tag in var.tags : "    ${split(":", tag)[0]}: \"${try(split(":", tag)[1], "")}\""])
+  tags_map  = { for tag in var.tags : split(":", tag)[0] => try(split(":", tag)[1], "") }
 
   # Service variables formatted for YAML
   service_vars_yaml = length(var.service_variables) == 0 ? "      variables: []" : join("\n", concat(
@@ -61,22 +62,67 @@ locals {
   effective_repo_name              = var.manifest_store_type == "HarnessCode" ? var.harness_code_repo_name : var.git_repo_name
   effective_asg_startup_repo_name  = var.asg_startup_script_use_git ? var.asg_startup_script_git_repo_name : local.effective_repo_name
   effective_asg_startup_store_type = var.asg_startup_script_use_file_store ? "Harness" : (var.asg_startup_script_use_git ? "Github" : (var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github"))
-  asg_startup_script_store_spec = var.asg_startup_script_use_file_store ? chomp(<<-EOT
-            files:
-              - /${local.asg_file_store_folder_name}/${harness_platform_file_store_file.asg_startup_script[0].name}
-EOT
-    ) : (var.asg_startup_script_use_git ? chomp(<<-EOT
-            connectorRef: ${var.asg_startup_script_git_connector_ref}
-            repoName: ${local.effective_asg_startup_repo_name}
-EOT
-      ) : (var.manifest_store_type == "HarnessCode" ? chomp(<<-EOT
-            repoName: ${local.effective_asg_startup_repo_name}
-EOT
-        ) : chomp(<<-EOT
-            connectorRef: ${var.git_connector_ref}
-            repoName: ${local.effective_asg_startup_repo_name}
-EOT
-  )))
+  asg_manifest_repo_spec = var.manifest_store_type == "HarnessCode" ? {
+    repoName = local.effective_repo_name
+  } : {
+    connectorRef = var.git_connector_ref
+    repoName     = local.effective_repo_name
+  }
+  asg_launch_template_store = {
+    type = var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github"
+    spec = merge({
+      gitFetchType = "Branch"
+      branch       = var.git_branch
+      paths        = [var.asg_launch_template_path]
+    }, local.asg_manifest_repo_spec)
+  }
+  asg_config_store = {
+    type = var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github"
+    spec = merge({
+      gitFetchType = "Branch"
+      branch       = var.git_branch
+      paths        = [var.asg_config_path]
+    }, local.asg_manifest_repo_spec)
+  }
+  asg_artifact_source = {
+    identifier = "primary"
+    type       = "AmazonMachineImage"
+    spec = {
+      connectorRef = var.artifact_connector_ref
+      region       = var.aws_region
+      filters = [
+        {
+          name  = "tag:Application"
+          value = "harness-demo-app-${var.asg_ami_owner_tag}"
+        }
+      ]
+      version = "<+pipeline.variables.ami_name>"
+    }
+  }
+  asg_startup_script_repo_spec = var.asg_startup_script_use_file_store ? {} : (
+    var.asg_startup_script_use_git ? {
+      connectorRef = var.asg_startup_script_git_connector_ref
+      repoName     = local.effective_asg_startup_repo_name
+    } : (
+      var.manifest_store_type == "HarnessCode" ? {
+        repoName = local.effective_asg_startup_repo_name
+      } : {
+        connectorRef = var.git_connector_ref
+        repoName     = local.effective_asg_startup_repo_name
+      }
+    )
+  )
+  asg_startup_script_base_spec = var.asg_startup_script_use_file_store ? {
+    files = ["/${local.asg_file_store_folder_name}/${harness_platform_file_store_file.asg_startup_script[0].name}"]
+  } : {
+    gitFetchType = "Branch"
+    branch       = var.git_branch
+    paths        = [var.asg_startup_script_path]
+  }
+  asg_startup_script_store = {
+    type = local.effective_asg_startup_store_type
+    spec = merge(local.asg_startup_script_base_spec, local.asg_startup_script_repo_spec)
+  }
 
   # Manifest store spec - different for HarnessCode vs external Git
   manifest_store_harness_code = chomp(<<-EOT
@@ -149,77 +195,49 @@ EOT
   # image_tag = full AMI name (e.g., harness-demo-app-owner-13) from CI Packer build.
   # AsgLaunchTemplate + AsgConfiguration manifests are REQUIRED by Harness for all ASG strategies.
   # startupScript provides the user-data that runs on each new instance at startup.
-  asg_service_yaml = <<-EOT
-service:
-  name: ${var.service_name}
-  identifier: ${var.service_id}
-  description: ${var.service_description}
-  tags:
-${local.tags_yaml}
-  serviceDefinition:
-    type: Asg
-    spec:
-      manifests:
-        - manifest:
-            identifier: launchTemplate
-            type: AsgLaunchTemplate
-            spec:
-              store:
-                type: ${var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github"}
-                spec:
-                  gitFetchType: Branch
-                  branch: ${var.git_branch}
-                  paths:
-                    - ${var.asg_launch_template_path}
-%{if var.manifest_store_type == "HarnessCode"~}
-                  repoName: ${local.effective_repo_name}
-%{else~}
-                  connectorRef: ${var.git_connector_ref}
-                  repoName: ${local.effective_repo_name}
-%{endif~}
-        - manifest:
-            identifier: asgConfig
-            type: AsgConfiguration
-            spec:
-              store:
-                type: ${var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github"}
-                spec:
-                  gitFetchType: Branch
-                  branch: ${var.git_branch}
-                  paths:
-                    - ${var.asg_config_path}
-%{if var.manifest_store_type == "HarnessCode"~}
-                  repoName: ${local.effective_repo_name}
-%{else~}
-                  connectorRef: ${var.git_connector_ref}
-                  repoName: ${local.effective_repo_name}
-%{endif~}
-      artifacts:
-        primary:
-          primaryArtifactRef: primary
-          sources:
-            - identifier: primary
-              type: AmazonMachineImage
-              spec:
-                connectorRef: ${var.artifact_connector_ref}
-                region: ${var.aws_region}
-                filters:
-                  - name: tag:Application
-                    value: harness-demo-app-${var.asg_ami_owner_tag}
-                version: <+pipeline.variables.ami_name>
-      startupScript:
-        store:
-          type: ${local.effective_asg_startup_store_type}
-          spec:
-%{if !var.asg_startup_script_use_file_store~}
-            gitFetchType: Branch
-            branch: ${var.git_branch}
-            paths:
-              - ${var.asg_startup_script_path}
-%{endif~}
-${local.asg_startup_script_store_spec}
-${local.service_vars_yaml}
-EOT
+  asg_service_yaml = yamlencode({
+    service = {
+      name        = var.service_name
+      identifier  = var.service_id
+      description = var.service_description
+      tags        = local.tags_map
+      serviceDefinition = {
+        type = "Asg"
+        spec = {
+          manifests = [
+            {
+              manifest = {
+                identifier = "launchTemplate"
+                type       = "AsgLaunchTemplate"
+                spec = {
+                  store = local.asg_launch_template_store
+                }
+              }
+            },
+            {
+              manifest = {
+                identifier = "asgConfig"
+                type       = "AsgConfiguration"
+                spec = {
+                  store = local.asg_config_store
+                }
+              }
+            }
+          ]
+          artifacts = {
+            primary = {
+              primaryArtifactRef = "primary"
+              sources            = [local.asg_artifact_source]
+            }
+          }
+          startupScript = {
+            store = local.asg_startup_script_store
+          }
+          variables = var.service_variables
+        }
+      }
+    }
+  })
 
   # ECR service YAML
   ecr_service_yaml = <<-EOT
