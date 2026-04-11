@@ -3,20 +3,26 @@ package io.harness.demo.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Data
 @Configuration
 @ConfigurationProperties(prefix = "app")
 public class AppConfig {
+    private static final Pattern MAIN_BUILD_VERSION_PATTERN = Pattern.compile("^harness-demo-app-[^-]+-(\\d+)$");
     
     private String appName = "My Application";
     private String version = "1.0.0";
     private String environment = "development";
     private String deploymentVariant = "";
     private String deploymentTrack = "";
+    private String deploymentStrategy = "";
     private String customerName = "Harness Customer";
     private String customerLogo = "";
     private String deploymentTarget = "kubernetes";
+    private String publicUrl = "";
+    private String stageUrl = "";
     private String podName = "local";
     private String namespace = "default";
     private String region = "us-east-1";
@@ -40,6 +46,17 @@ public class AppConfig {
             return deploymentTrack;
         }
         return "stable";
+    }
+
+    public String getDisplayVersion() {
+        if (version == null || version.isBlank()) {
+            return "1.0.0";
+        }
+        Matcher matcher = MAIN_BUILD_VERSION_PATTERN.matcher(version.trim());
+        if (matcher.matches()) {
+            return "1.0." + matcher.group(1);
+        }
+        return version.trim();
     }
     
     public String getVariantColor() {

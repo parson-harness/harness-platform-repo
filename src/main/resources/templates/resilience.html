@@ -40,10 +40,10 @@
         <span class="inline-flex items-center space-x-3">
             <span class="flex items-center">
                 <span class="w-2 h-2 bg-white rounded-full mr-2 animate-pulse"></span>
-                <span th:text="${config.deploymentVariant.toUpperCase()}">STABLE</span>
+                <span th:text="${config.effectiveVariant.toUpperCase()}">STABLE</span>
             </span>
             <span class="opacity-60">|</span>
-            <span th:text="${config.version}">v1.0.0</span>
+            <span th:text="${config.displayVersion}">1.0.0</span>
             <span class="opacity-60">|</span>
             <span th:text="${config.namespace}">harness-demo</span>
         </span>
@@ -226,7 +226,7 @@
     <!-- Footer -->
     <footer class="py-8 border-t border-white/10">
         <div class="max-w-7xl mx-auto px-6 text-center text-gray-500 text-sm">
-            <span th:text="${config.version}">v1.0.0</span> &middot;
+            <span th:text="${config.displayVersion}">1.0.0</span> &middot;
             <span th:text="${config.environment}">production</span>
         </div>
     </footer>

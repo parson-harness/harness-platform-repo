@@ -29,15 +29,19 @@ public class ApiController {
         chaosService.maybeInjectChaos();
         
         Map<String, Object> info = new HashMap<>();
-        info.put("version", appConfig.getVersion());
+        info.put("version", appConfig.getDisplayVersion());
+        info.put("rawVersion", appConfig.getVersion());
         info.put("environment", appConfig.getEnvironment());
         info.put("deploymentVariant", appConfig.getEffectiveVariant());
         info.put("deploymentTrack", appConfig.getDeploymentTrack());
+        info.put("deploymentStrategy", appConfig.getDeploymentStrategy());
         info.put("variantColor", appConfig.getVariantColor());
         info.put("hostname", getHostname());
         info.put("podName", appConfig.getPodName());
         info.put("namespace", appConfig.getNamespace());
         info.put("region", appConfig.getRegion());
+        info.put("publicUrl", appConfig.getPublicUrl());
+        info.put("stageUrl", appConfig.getStageUrl());
         info.put("timestamp", Instant.now().toString());
         info.put("javaVersion", System.getProperty("java.version"));
         
@@ -50,8 +54,9 @@ public class ApiController {
         
         Map<String, Object> health = new HashMap<>();
         health.put("status", "UP");
-        health.put("version", appConfig.getVersion());
-        health.put("deploymentVariant", appConfig.getDeploymentVariant());
+        health.put("version", appConfig.getDisplayVersion());
+        health.put("rawVersion", appConfig.getVersion());
+        health.put("deploymentVariant", appConfig.getEffectiveVariant());
         health.put("timestamp", Instant.now().toString());
         
         return ResponseEntity.ok(health);
@@ -62,8 +67,9 @@ public class ApiController {
         metricsService.incrementApiCalls("version");
         
         Map<String, String> version = new HashMap<>();
-        version.put("version", appConfig.getVersion());
-        version.put("variant", appConfig.getDeploymentVariant());
+        version.put("version", appConfig.getDisplayVersion());
+        version.put("rawVersion", appConfig.getVersion());
+        version.put("variant", appConfig.getEffectiveVariant());
         version.put("color", appConfig.getVariantColor());
         
         return ResponseEntity.ok(version);
@@ -78,7 +84,7 @@ public class ApiController {
         Map<String, Object> response = new HashMap<>();
         response.put("status", "processed");
         response.put("processedBy", getHostname());
-        response.put("variant", appConfig.getDeploymentVariant());
+        response.put("variant", appConfig.getEffectiveVariant());
         response.put("timestamp", Instant.now().toString());
         response.put("inputReceived", payload != null);
         
@@ -107,7 +113,7 @@ public class ApiController {
         response.put("requestedDurationMs", durationMs);
         response.put("actualDurationMs", actualDuration);
         response.put("processedBy", getHostname());
-        response.put("variant", appConfig.getDeploymentVariant());
+        response.put("variant", appConfig.getEffectiveVariant());
         
         return ResponseEntity.ok(response);
     }
@@ -156,7 +162,7 @@ public class ApiController {
         response.put("latencyMs", latencyMs);
         response.put("errorRate", errorRate);
         response.put("durationSeconds", durationSeconds);
-        response.put("variant", appConfig.getDeploymentVariant());
+        response.put("variant", appConfig.getEffectiveVariant());
         response.put("message", "Chaos injection enabled - CV should detect degraded metrics");
         
         return ResponseEntity.ok(response);
@@ -169,7 +175,7 @@ public class ApiController {
         
         Map<String, Object> response = new HashMap<>();
         response.put("status", "chaos_disabled");
-        response.put("variant", appConfig.getDeploymentVariant());
+        response.put("variant", appConfig.getEffectiveVariant());
         response.put("message", "Chaos injection disabled - metrics should return to normal");
         
         return ResponseEntity.ok(response);
@@ -182,7 +188,7 @@ public class ApiController {
         response.put("latencyMs", chaosService.getCurrentLatency());
         response.put("errorRate", chaosService.getCurrentErrorRate());
         response.put("remainingSeconds", chaosService.getRemainingSeconds());
-        response.put("variant", appConfig.getDeploymentVariant());
+        response.put("variant", appConfig.getEffectiveVariant());
         
         return ResponseEntity.ok(response);
     }

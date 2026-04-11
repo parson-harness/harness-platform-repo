@@ -89,7 +89,7 @@ output "app_url" {
 
 output "stage_url" {
   description = "Stage app URL (HTTP/8080) - for B/G validation before swap"
-  value       = "http://${aws_lb.main.dns_name}:${var.stage_listener_port}"
+  value       = var.create_dns_record ? "http://${var.owner}-asg.${var.route53_zone_name}:${var.stage_listener_port}" : "http://${aws_lb.main.dns_name}:${var.stage_listener_port}"
 }
 
 output "prod_listener_rule_arn" {

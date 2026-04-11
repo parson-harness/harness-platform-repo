@@ -11,9 +11,12 @@ app:
   environment: ${APP_ENVIRONMENT:development}
   deployment-variant: ${DEPLOYMENT_VARIANT:}
   deployment-track: ${DEPLOYMENT_TRACK:}
+  deployment-strategy: ${DEPLOYMENT_STRATEGY:}
   customer-name: ${CUSTOMER_NAME:Customer}
   customer-logo: ${CUSTOMER_LOGO:}
   deployment-target: ${DEPLOYMENT_TARGET:kubernetes}
+  public-url: ${PUBLIC_URL:}
+  stage-url: ${STAGE_URL:}
   pod-name: ${HOSTNAME:local}
   namespace: ${NAMESPACE:default}
   region: ${REGION:us-east-1}

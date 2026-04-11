@@ -43,7 +43,7 @@
                 <span th:text="${config.effectiveVariant.toUpperCase()}">STABLE</span>
             </span>
             <span class="opacity-60">|</span>
-            <span th:text="${config.version}">v1.0.0</span>
+            <span th:text="${config.displayVersion}">1.0.0</span>
             <span class="opacity-60">|</span>
             <span th:text="${config.namespace}">harness-demo</span>
         </span>
@@ -87,12 +87,24 @@
                     <div class="text-6xl font-black mb-4 uppercase"
                          th:classappend="${config.effectiveVariant == 'canary'} ? 'text-yellow-400' : (${config.effectiveVariant == 'stable'} ? 'text-purple-400' : 'gradient-text')"
                          th:text="${config.effectiveVariant}">STABLE</div>
+                    <div class="text-lg text-white/80 mb-4" th:text="${config.deploymentTarget == 'asg' and (config.effectiveVariant == 'blue' or config.effectiveVariant == 'green')} ? 'This request landed on the ' + config.effectiveVariant + ' fleet' : (${config.effectiveVariant == 'canary'} ? 'This request landed on canary traffic' : 'This request landed on the live release')">This request landed on the live release</div>
                     <div class="flex justify-center items-center space-x-4">
-                        <span class="variant-badge px-4 py-2 rounded-full font-semibold" th:text="${config.version}">v1.0.0</span>
+                        <span class="variant-badge px-4 py-2 rounded-full font-semibold" th:text="${config.displayVersion}">1.0.0</span>
                         <span class="px-4 py-2 bg-white/10 rounded-full" th:text="${config.environment}">production</span>
                         <span class="px-4 py-2 bg-white/10 rounded-full" th:text="${config.deploymentTarget}">kubernetes</span>
                     </div>
                 </div>
+            </div>
+
+            <div class="grid md:grid-cols-2 gap-4 mb-12">
+                <a th:if="${config.publicUrl != null and !config.publicUrl.isEmpty()}" th:href="${config.publicUrl}" target="_blank" rel="noopener noreferrer" class="bg-white/5 rounded-xl p-5 border border-white/10 hover:border-harness-cyan/50 transition block">
+                    <div class="text-sm text-gray-400 uppercase tracking-wider mb-2">Production URL</div>
+                    <div class="font-mono text-sm break-all" th:text="${config.publicUrl}">https://toddasg-asg.harness-demo.dev</div>
+                </a>
+                <a th:if="${config.stageUrl != null and !config.stageUrl.isEmpty() and config.deploymentStrategy == 'blue-green'}" th:href="${config.stageUrl}" target="_blank" rel="noopener noreferrer" class="bg-white/5 rounded-xl p-5 border border-white/10 hover:border-harness-cyan/50 transition block">
+                    <div class="text-sm text-gray-400 uppercase tracking-wider mb-2">Stage URL</div>
+                    <div class="font-mono text-sm break-all" th:text="${config.stageUrl}">http://toddasg-asg.harness-demo.dev:8080</div>
+                </a>
             </div>
 
             <!-- Deployment Strategies -->
@@ -170,7 +182,7 @@
                     </div>
                     <div class="flex justify-between py-3 border-b border-white/10">
                         <span class="text-gray-400">Version</span>
-                        <span class="font-mono" th:text="${config.version}">1.0.0</span>
+                        <span class="font-mono" th:text="${config.displayVersion}">1.0.0</span>
                     </div>
                     <div class="flex justify-between py-3 border-b border-white/10">
                         <span class="text-gray-400">Pod/Instance</span>
@@ -196,6 +208,10 @@
                         <span class="text-gray-400">Target</span>
                         <span class="font-mono" th:text="${config.deploymentTarget}">kubernetes</span>
                     </div>
+                    <div class="flex justify-between py-3 border-b border-white/10">
+                        <span class="text-gray-400">Strategy</span>
+                        <span class="font-mono" th:text="${config.deploymentStrategy != null and !config.deploymentStrategy.isEmpty() ? config.deploymentStrategy : 'n/a'}">blue-green</span>
+                    </div>
                 </div>
             </div>
 
@@ -207,13 +223,16 @@
                 </h3>
                 <pre class="text-green-400 text-sm overflow-x-auto"><code># Application
 APP_NAME="<span th:text="${config.appName}">My Application</span>"
-APP_VERSION=<span th:text="${config.version}">1.0.0</span>
+APP_VERSION=<span th:text="${config.displayVersion}">1.0.0</span>
 APP_ENVIRONMENT=<span th:text="${config.environment}">production</span>
 
 # Deployment
 DEPLOYMENT_VARIANT=<span th:text="${config.effectiveVariant}">blue</span>
 VARIANT_COLOR=<span th:text="${config.variantColor}">#3B82F6</span>
 DEPLOYMENT_TARGET=<span th:text="${config.deploymentTarget}">kubernetes</span>
+DEPLOYMENT_STRATEGY=<span th:text="${config.deploymentStrategy}">blue-green</span>
+PUBLIC_URL=<span th:text="${config.publicUrl}">https://toddasg-asg.harness-demo.dev</span>
+STAGE_URL=<span th:text="${config.stageUrl}">http://toddasg-asg.harness-demo.dev:8080</span>
 
 # Branding
 CUSTOMER_LOGO="<span th:text="${config.customerLogo}">https://example.com/logo.png</span>"
@@ -228,7 +247,7 @@ REGION=<span th:text="${config.region}">us-east-1</span></code></pre>
     <!-- Footer -->
     <footer class="py-8 border-t border-white/10">
         <div class="max-w-7xl mx-auto px-6 text-center text-gray-500 text-sm">
-            <span th:text="${config.version}">v1.0.0</span> &middot;
+            <span th:text="${config.displayVersion}">1.0.0</span> &middot;
             <span th:text="${config.environment}">production</span>
         </div>
     </footer>
