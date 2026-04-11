@@ -301,17 +301,18 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
 
       delete_launch_templates_by_prefix() {
         LAUNCH_TEMPLATE_XML=$(ec2_post "Action=DescribeLaunchTemplates&Version=2016-11-15" 2>&1)
-        for LAUNCH_TEMPLATE_ID in $(echo "$${LAUNCH_TEMPLATE_XML}" | awk -v prefix="$${ASG_PREFIX}" 'BEGIN{RS="<member>"} /<launchTemplateId>/ && /<launchTemplateName>/ { id=$0; sub(/.*<launchTemplateId>/, "", id); sub(/<.*/, "", id); name=$0; sub(/.*<launchTemplateName>/, "", name); sub(/<.*/, "", name); if (index(name, prefix) == 1) print id }'); do
+        for LAUNCH_TEMPLATE_ID in $(echo "$${LAUNCH_TEMPLATE_XML}" | awk -v prefix="$${ASG_PREFIX}" 'BEGIN{RS="<item>"} /<launchTemplateId>/ && /<launchTemplateName>/ { id=$0; sub(/.*<launchTemplateId>/, "", id); sub(/<.*/, "", id); name=$0; sub(/.*<launchTemplateName>/, "", name); sub(/<.*/, "", name); if (index(name, prefix) == 1) print id }'); do
           ec2_post "Action=DeleteLaunchTemplate&LaunchTemplateId=$${LAUNCH_TEMPLATE_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
         done
       }
 
       wait_for_launch_template_cleanup() {
         for _ in $(seq 1 30); do
-          REMAINING_LAUNCH_TEMPLATES=$(ec2_post "Action=DescribeLaunchTemplates&Version=2016-11-15" 2>&1 | awk -v prefix="$${ASG_PREFIX}" 'BEGIN{RS="<member>"} /<launchTemplateName>/ { name=$0; sub(/.*<launchTemplateName>/, "", name); sub(/<.*/, "", name); if (index(name, prefix) == 1) print name }')
+          REMAINING_LAUNCH_TEMPLATES=$(ec2_post "Action=DescribeLaunchTemplates&Version=2016-11-15" 2>&1 | awk -v prefix="$${ASG_PREFIX}" 'BEGIN{RS="<item>"} /<launchTemplateName>/ { name=$0; sub(/.*<launchTemplateName>/, "", name); sub(/<.*/, "", name); if (index(name, prefix) == 1) print name }')
           if [ -z "$${REMAINING_LAUNCH_TEMPLATES}" ]; then
             return 0
           fi
+          echo "Retrying launch template cleanup: $${REMAINING_LAUNCH_TEMPLATES}"
           delete_launch_templates_by_prefix
           sleep 10
         done
@@ -333,6 +334,7 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
 
           ENI_XML=$(ec2_post "Action=DescribeNetworkInterfaces&Filter.1.Name=vpc-id&Filter.1.Value.1=$${TARGET_VPC_ID}&Version=2016-11-15" 2>&1)
           if echo "$${ENI_XML}" | grep -q '<networkInterfaceId>'; then
+            echo "Waiting for VPC ENIs to detach in $${TARGET_VPC_ID}"
             sleep 10
             continue
           fi
