@@ -191,6 +191,7 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
       LAUNCH_TEMPLATE_NAME="${local.name_prefix}-asg-lt"
       INSTANCE_PROFILE_NAME="${local.name_prefix}-asg-instance-profile"
       INSTANCE_ROLE_NAME="${local.name_prefix}-asg-instance-role"
+      VPC_NAME="${local.name_prefix}-asg-vpc"
 
       STATE_CONTENT=""
       if [ -f "$${STATE_FILE}" ]; then
@@ -298,6 +299,74 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
         fi
       }
 
+      delete_launch_templates_by_prefix() {
+        LAUNCH_TEMPLATE_XML=$(ec2_post "Action=DescribeLaunchTemplates&Version=2016-11-15" 2>&1)
+        for LAUNCH_TEMPLATE_ID in $(echo "$${LAUNCH_TEMPLATE_XML}" | awk -v prefix="$${ASG_PREFIX}" 'BEGIN{RS="<member>"} /<launchTemplateId>/ && /<launchTemplateName>/ { id=$0; sub(/.*<launchTemplateId>/, "", id); sub(/<.*/, "", id); name=$0; sub(/.*<launchTemplateName>/, "", name); sub(/<.*/, "", name); if (index(name, prefix) == 1) print id }'); do
+          ec2_post "Action=DeleteLaunchTemplate&LaunchTemplateId=$${LAUNCH_TEMPLATE_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
+        done
+      }
+
+      wait_for_launch_template_cleanup() {
+        for _ in $(seq 1 30); do
+          REMAINING_LAUNCH_TEMPLATES=$(ec2_post "Action=DescribeLaunchTemplates&Version=2016-11-15" 2>&1 | awk -v prefix="$${ASG_PREFIX}" 'BEGIN{RS="<member>"} /<launchTemplateName>/ { name=$0; sub(/.*<launchTemplateName>/, "", name); sub(/<.*/, "", name); if (index(name, prefix) == 1) print name }')
+          if [ -z "$${REMAINING_LAUNCH_TEMPLATES}" ]; then
+            return 0
+          fi
+          delete_launch_templates_by_prefix
+          sleep 10
+        done
+        return 0
+      }
+
+      get_vpc_id_by_name() {
+        VPC_XML=$(ec2_post "Action=DescribeVpcs&Filter.1.Name=tag:Name&Filter.1.Value.1=$${VPC_NAME}&Version=2016-11-15" 2>&1)
+        echo "$${VPC_XML}" | grep -o '<vpcId>[^<]*</vpcId>' | sed 's/<[^>]*>//g' | head -1
+      }
+
+      cleanup_vpc_dependencies() {
+        TARGET_VPC_ID="$1"
+        for _ in $(seq 1 30); do
+          CURRENT_VPC=$(ec2_post "Action=DescribeVpcs&Filter.1.Name=vpc-id&Filter.1.Value.1=$${TARGET_VPC_ID}&Version=2016-11-15" 2>&1 | grep -o '<vpcId>[^<]*</vpcId>' | sed 's/<[^>]*>//g' | head -1)
+          if [ -z "$${CURRENT_VPC}" ]; then
+            return 0
+          fi
+
+          ENI_XML=$(ec2_post "Action=DescribeNetworkInterfaces&Filter.1.Name=vpc-id&Filter.1.Value.1=$${TARGET_VPC_ID}&Version=2016-11-15" 2>&1)
+          if echo "$${ENI_XML}" | grep -q '<networkInterfaceId>'; then
+            sleep 10
+            continue
+          fi
+
+          SECURITY_GROUP_XML=$(ec2_post "Action=DescribeSecurityGroups&Filter.1.Name=vpc-id&Filter.1.Value.1=$${TARGET_VPC_ID}&Version=2016-11-15" 2>&1)
+          for GROUP_ID in $(echo "$${SECURITY_GROUP_XML}" | awk 'BEGIN{RS="<item>"} /<groupId>/ && /<groupName>/ { id=$0; sub(/.*<groupId>/, "", id); sub(/<.*/, "", id); name=$0; sub(/.*<groupName>/, "", name); sub(/<.*/, "", name); if (name != "default") print id }'); do
+            ec2_post "Action=DeleteSecurityGroup&GroupId=$${GROUP_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
+          done
+
+          SUBNET_XML=$(ec2_post "Action=DescribeSubnets&Filter.1.Name=vpc-id&Filter.1.Value.1=$${TARGET_VPC_ID}&Version=2016-11-15" 2>&1)
+          for SUBNET_ID in $(echo "$${SUBNET_XML}" | grep -o '<subnetId>[^<]*</subnetId>' | sed 's/<[^>]*>//g'); do
+            ec2_post "Action=DeleteSubnet&SubnetId=$${SUBNET_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
+          done
+
+          ROUTE_TABLE_XML=$(ec2_post "Action=DescribeRouteTables&Filter.1.Name=vpc-id&Filter.1.Value.1=$${TARGET_VPC_ID}&Version=2016-11-15" 2>&1)
+          for ASSOCIATION_ID in $(echo "$${ROUTE_TABLE_XML}" | awk 'BEGIN{RS="<item>"} /<routeTableAssociationId>/ && $0 !~ /<main>true<\/main>/ { id=$0; sub(/.*<routeTableAssociationId>/, "", id); sub(/<.*/, "", id); print id }'); do
+            ec2_post "Action=DisassociateRouteTable&AssociationId=$${ASSOCIATION_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
+          done
+          for ROUTE_TABLE_ID in $(echo "$${ROUTE_TABLE_XML}" | awk 'BEGIN{RS="<item>"} /<routeTableId>/ && $0 !~ /<main>true<\/main>/ { id=$0; sub(/.*<routeTableId>/, "", id); sub(/<.*/, "", id); print id }'); do
+            ec2_post "Action=DeleteRouteTable&RouteTableId=$${ROUTE_TABLE_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
+          done
+
+          INTERNET_GATEWAY_XML=$(ec2_post "Action=DescribeInternetGateways&Filter.1.Name=attachment.vpc-id&Filter.1.Value.1=$${TARGET_VPC_ID}&Version=2016-11-15" 2>&1)
+          for INTERNET_GATEWAY_ID in $(echo "$${INTERNET_GATEWAY_XML}" | grep -o '<internetGatewayId>[^<]*</internetGatewayId>' | sed 's/<[^>]*>//g'); do
+            ec2_post "Action=DetachInternetGateway&InternetGatewayId=$${INTERNET_GATEWAY_ID}&VpcId=$${TARGET_VPC_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
+            ec2_post "Action=DeleteInternetGateway&InternetGatewayId=$${INTERNET_GATEWAY_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
+          done
+
+          ec2_post "Action=DeleteVpc&VpcId=$${TARGET_VPC_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
+          sleep 10
+        done
+        return 0
+      }
+
       if ! state_tracks_resource "module.asg" "aws_autoscaling_group" "base"; then
         ASG_XML=$(autoscaling_post "Action=DescribeAutoScalingGroups&Version=2011-01-01" 2>&1)
         for ASG_NAME in $(echo "$${ASG_XML}" | grep -o '<AutoScalingGroupName>[^<]*</AutoScalingGroupName>' | sed 's/<[^>]*>//g'); do
@@ -312,10 +381,7 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
       fi
 
       if ! state_tracks_resource "module.asg" "aws_launch_template" "main"; then
-        LAUNCH_TEMPLATE_XML=$(ec2_post "Action=DescribeLaunchTemplates&Version=2016-11-15" 2>&1)
-        for LAUNCH_TEMPLATE_ID in $(echo "$${LAUNCH_TEMPLATE_XML}" | awk -v prefix="$${ASG_PREFIX}" 'BEGIN{RS="<member>"} /<launchTemplateId>/ && /<launchTemplateName>/ { id=$0; sub(/.*<launchTemplateId>/, "", id); sub(/<.*/, "", id); name=$0; sub(/.*<launchTemplateName>/, "", name); sub(/<.*/, "", name); if (index(name, prefix) == 1) print id }'); do
-          ec2_post "Action=DeleteLaunchTemplate&LaunchTemplateId=$${LAUNCH_TEMPLATE_ID}&Version=2016-11-15" >/dev/null 2>&1 || true
-        done
+        wait_for_launch_template_cleanup
       fi
 
       if ! state_tracks_resource "module.asg" "aws_lb" "main"; then
@@ -358,6 +424,13 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
           done
 
           iam_post "Action=DeleteRole&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+        fi
+      fi
+
+      if ! state_tracks_resource "module.asg" "aws_vpc" "main"; then
+        VPC_ID=$(get_vpc_id_by_name)
+        if [ -n "$${VPC_ID}" ]; then
+          cleanup_vpc_dependencies "$${VPC_ID}"
         fi
       fi
 
