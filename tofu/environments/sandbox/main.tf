@@ -601,17 +601,19 @@ module "harness_service_asg" {
   asg_ami_owner_tag      = var.owner
 
   # Startup script in repo (Harness renders expressions at deploy time)
-  asg_startup_script_path = "asg/user-data.sh"
-  manifest_store_type     = var.import_to_harness_code ? "HarnessCode" : "Github"
+  asg_startup_script_path            = "asg/user-data.sh"
+  asg_startup_script_use_file_store  = true
+  asg_startup_script_local_file_path = "${path.root}/../../../asg/user-data.sh"
+  manifest_store_type                = var.import_to_harness_code ? "HarnessCode" : "Github"
   git_connector_ref = var.import_to_harness_code ? "" : (
     var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   )
-  git_repo_name          = var.import_to_harness_code ? "" : element(split("/", var.source_github_repo), length(split("/", var.source_github_repo)) - 1)
-  harness_code_repo_name = var.import_to_harness_code ? "${var.owner}-demo-app" : ""
-  asg_startup_script_use_git          = (var.create_connectors && var.github_token_ref != "") || var.github_connector_ref != ""
+  git_repo_name                        = var.import_to_harness_code ? "" : element(split("/", var.source_github_repo), length(split("/", var.source_github_repo)) - 1)
+  harness_code_repo_name               = var.import_to_harness_code ? "${var.owner}-demo-app" : ""
+  asg_startup_script_use_git           = (var.create_connectors && var.github_token_ref != "") || var.github_connector_ref != ""
   asg_startup_script_git_connector_ref = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   asg_startup_script_git_repo_name     = element(split("/", var.source_github_repo), length(split("/", var.source_github_repo)) - 1)
-  git_branch             = var.service_git_branch
+  git_branch                           = var.service_git_branch
 
   tags = ["tofu-managed", var.owner, "asg"]
 
@@ -993,20 +995,20 @@ module "harness_pipelines_dev" {
   strategy_pipeline_name        = "${title(var.owner)} Application Delivery"
   strategy_pipeline_description = "Unified deployment pipeline with runtime strategy selection for customer demos"
 
-  create_standard_ci_gradle      = var.create_standard_ci_gradle
-  standard_ci_gradle_id          = "${var.owner}_standard_ci_gradle"
-  standard_ci_gradle_name        = "${title(var.owner)} Standard CI - Gradle"
-  standard_ci_gradle_description = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
+  create_standard_ci_gradle        = var.create_standard_ci_gradle
+  standard_ci_gradle_id            = "${var.owner}_standard_ci_gradle"
+  standard_ci_gradle_name          = "${title(var.owner)} Standard CI - Gradle"
+  standard_ci_gradle_description   = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
   standard_ci_gradle_test_packages = "io.harness.demo"
 
-  create_ci_pipeline = false
-  create_canary_pipeline = false
+  create_ci_pipeline         = false
+  create_canary_pipeline     = false
   create_blue_green_pipeline = false
-  git_connector_ref       = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
-  git_repo_name           = var.github_repo_name
-  har_registry_ref        = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""
-  har_upstream_proxy_ref  = var.artifact_registry_type == "har" && var.create_dockerhub_upstream ? "${var.owner}-dockerhub-proxy" : ""
-  har_image_name          = "${var.owner}demoapp"
+  git_connector_ref          = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+  git_repo_name              = var.github_repo_name
+  har_registry_ref           = var.artifact_registry_type == "har" ? "har-${var.owner}" : ""
+  har_upstream_proxy_ref     = var.artifact_registry_type == "har" && var.create_dockerhub_upstream ? "${var.owner}-dockerhub-proxy" : ""
+  har_image_name             = "${var.owner}demoapp"
 
   # Harness Code Repository (replaces GitHub as CI source when enabled)
   use_harness_code       = var.import_to_harness_code

@@ -13,6 +13,36 @@ resource "harness_platform_service" "main" {
   yaml = var.deployment_type == "Asg" ? local.asg_service_yaml : (
     var.artifact_registry_type == "har" ? local.har_service_yaml : local.ecr_service_yaml
   )
+
+  depends_on = [
+    harness_platform_file_store_folder.asg_startup_script,
+    harness_platform_file_store_file.asg_startup_script
+  ]
+}
+
+resource "harness_platform_file_store_folder" "asg_startup_script" {
+  count = var.deployment_type == "Asg" && var.asg_startup_script_use_file_store ? 1 : 0
+
+  identifier        = local.asg_file_store_folder_identifier
+  name              = local.asg_file_store_folder_name
+  description       = "ASG service files"
+  org_id            = var.org_id
+  project_id        = var.project_id
+  parent_identifier = "Root"
+}
+
+resource "harness_platform_file_store_file" "asg_startup_script" {
+  count = var.deployment_type == "Asg" && var.asg_startup_script_use_file_store ? 1 : 0
+
+  identifier        = replace(replace(basename(var.asg_startup_script_path), ".", "_"), "-", "_")
+  name              = basename(var.asg_startup_script_path)
+  description       = "ASG startup script"
+  org_id            = var.org_id
+  project_id        = var.project_id
+  parent_identifier = harness_platform_file_store_folder.asg_startup_script[0].identifier
+  file_content_path = var.asg_startup_script_local_file_path
+  mime_type         = "text/x-shellscript"
+  file_usage        = "SCRIPT"
 }
 
 locals {
@@ -26,21 +56,27 @@ locals {
   ))
 
   # Determine repo name based on store type
-  effective_repo_name = var.manifest_store_type == "HarnessCode" ? var.harness_code_repo_name : var.git_repo_name
-  effective_asg_startup_repo_name = var.asg_startup_script_use_git ? var.asg_startup_script_git_repo_name : local.effective_repo_name
-  effective_asg_startup_store_type = var.asg_startup_script_use_git ? "Github" : (var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github")
-  asg_startup_script_store_spec = var.asg_startup_script_use_git ? chomp(<<-EOT
+  asg_file_store_folder_identifier = substr(replace("${var.service_id}_asg", "-", "_"), 0, 128)
+  asg_file_store_folder_name       = local.asg_file_store_folder_identifier
+  effective_repo_name              = var.manifest_store_type == "HarnessCode" ? var.harness_code_repo_name : var.git_repo_name
+  effective_asg_startup_repo_name  = var.asg_startup_script_use_git ? var.asg_startup_script_git_repo_name : local.effective_repo_name
+  effective_asg_startup_store_type = var.asg_startup_script_use_file_store ? "Harness" : (var.asg_startup_script_use_git ? "Github" : (var.manifest_store_type == "HarnessCode" ? "HarnessCode" : "Github"))
+  asg_startup_script_store_spec = var.asg_startup_script_use_file_store ? chomp(<<-EOT
+            files:
+              - /${local.asg_file_store_folder_name}/${harness_platform_file_store_file.asg_startup_script[0].name}
+EOT
+    ) : (var.asg_startup_script_use_git ? chomp(<<-EOT
             connectorRef: ${var.asg_startup_script_git_connector_ref}
             repoName: ${local.effective_asg_startup_repo_name}
 EOT
-  ) : (var.manifest_store_type == "HarnessCode" ? chomp(<<-EOT
+      ) : (var.manifest_store_type == "HarnessCode" ? chomp(<<-EOT
             repoName: ${local.effective_asg_startup_repo_name}
 EOT
-  ) : chomp(<<-EOT
+        ) : chomp(<<-EOT
             connectorRef: ${var.git_connector_ref}
             repoName: ${local.effective_asg_startup_repo_name}
 EOT
-  ))
+  )))
 
   # Manifest store spec - different for HarnessCode vs external Git
   manifest_store_harness_code = chomp(<<-EOT
@@ -175,10 +211,12 @@ ${local.tags_yaml}
         store:
           type: ${local.effective_asg_startup_store_type}
           spec:
+%{if !var.asg_startup_script_use_file_store~}
             gitFetchType: Branch
             branch: ${var.git_branch}
             paths:
               - ${var.asg_startup_script_path}
+%{endif~}
 ${local.asg_startup_script_store_spec}
 ${local.service_vars_yaml}
 EOT

@@ -211,6 +211,18 @@ variable "asg_startup_script_path" {
   default     = "asg/user-data.sh"
 }
 
+variable "asg_startup_script_use_file_store" {
+  description = "Use Harness File Store as the ASG startup script source"
+  type        = bool
+  default     = false
+}
+
+variable "asg_startup_script_local_file_path" {
+  description = "Local path to the ASG startup script content used to provision Harness File Store"
+  type        = string
+  default     = ""
+}
+
 variable "asg_startup_script_use_git" {
   description = "Use GitHub as the startup script source even when other ASG manifests use Harness Code"
   type        = bool

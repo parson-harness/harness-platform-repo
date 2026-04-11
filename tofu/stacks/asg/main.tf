@@ -610,17 +610,19 @@ module "harness_service_asg" {
   asg_ami_owner_tag      = var.owner
 
   # Startup script in repo
-  asg_startup_script_path = "asg/user-data.sh"
-  manifest_store_type     = var.use_harness_code ? "HarnessCode" : "Github"
+  asg_startup_script_path            = "asg/user-data.sh"
+  asg_startup_script_use_file_store  = true
+  asg_startup_script_local_file_path = "${path.root}/../../../asg/user-data.sh"
+  manifest_store_type                = var.use_harness_code ? "HarnessCode" : "Github"
   git_connector_ref = var.use_harness_code ? "" : (
     var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   )
-  git_repo_name          = var.use_harness_code ? "" : var.github_repo_name
-  harness_code_repo_name = var.use_harness_code ? "${var.owner}-demo-app" : ""
-  asg_startup_script_use_git          = var.github_token_ref != "" || var.github_connector_ref != ""
+  git_repo_name                        = var.use_harness_code ? "" : var.github_repo_name
+  harness_code_repo_name               = var.use_harness_code ? "${var.owner}-demo-app" : ""
+  asg_startup_script_use_git           = var.github_token_ref != "" || var.github_connector_ref != ""
   asg_startup_script_git_connector_ref = var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   asg_startup_script_git_repo_name     = var.github_repo_name
-  git_branch             = var.git_branch
+  git_branch                           = var.git_branch
 
   tags = ["tofu-managed", var.owner, "asg"]
 
