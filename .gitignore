@@ -58,3 +58,5 @@ tofu/bootstrap/temp_dockercfg
 
 # Java build output
 bin/
+build/
+*.class
