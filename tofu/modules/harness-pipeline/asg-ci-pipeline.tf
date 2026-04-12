@@ -299,11 +299,12 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                           echo "Commit: <+codebase.commitSha>"
                           echo "========================================"
 
+                          EXEC_SHORT=$(echo "<+pipeline.executionId>" | tr -cd 'a-zA-Z0-9' | cut -c1-8)
                           if [ "<+codebase.branch>" = "main" ]; then
-                            IMAGE_TAG="<+pipeline.sequenceId>"
+                            IMAGE_TAG="<+pipeline.sequenceId>-$${EXEC_SHORT}"
                           else
                             BRANCH_SAFE=$(echo "<+codebase.branch>" | sed 's/[^a-zA-Z0-9]/-/g')
-                            IMAGE_TAG="$${BRANCH_SAFE}-<+pipeline.sequenceId>"
+                            IMAGE_TAG="$${BRANCH_SAFE}-<+pipeline.sequenceId>-$${EXEC_SHORT}"
                           fi
                           AMI_NAME="harness-demo-app-${var.asg_packer_owner}-$${IMAGE_TAG}"
                           echo "AMI Version Tag: $IMAGE_TAG"

@@ -579,6 +579,7 @@ pipeline:
                           NAME_PREFIX="harness-demo-${OWNER}"
                           ASG_PREFIX="${NAME_PREFIX}-asg"
                           ASG_ALB_NAME="${ASG_PREFIX}-alb"
+                          AMI_PREFIX="harness-demo-app-${OWNER}"
 
                           wait_for_asg_cleanup() {
                             for _ in $(seq 1 30); do
@@ -653,6 +654,42 @@ pipeline:
                               fi
                               echo "Retrying target group cleanup: $REMAINING_TGS"
                               delete_target_groups
+                              sleep 10
+                            done
+                            return 0
+                          }
+
+                          delete_amis_and_snapshots() {
+                            AMI_IDS=$(aws ec2 describe-images --owners self --query "Images[?starts_with(Name, '${AMI_PREFIX}-')].ImageId" --output text 2>/dev/null || true)
+                            if [ -z "$AMI_IDS" ] || [ "$AMI_IDS" = "None" ]; then
+                              echo "No AMIs found with prefix ${AMI_PREFIX}"
+                              return 0
+                            fi
+
+                            for AMI_ID in $AMI_IDS; do
+                              AMI_NAME=$(aws ec2 describe-images --image-ids "$AMI_ID" --query 'Images[0].Name' --output text 2>/dev/null || true)
+                              SNAPSHOT_IDS=$(aws ec2 describe-images --image-ids "$AMI_ID" --query 'Images[0].BlockDeviceMappings[?Ebs.SnapshotId!=null].Ebs.SnapshotId' --output text 2>/dev/null || true)
+
+                              echo "AMI ${AMI_NAME:-$AMI_ID}: deregistering"
+                              aws ec2 deregister-image --image-id "$AMI_ID" 2>/dev/null || true
+
+                              if [ -n "$SNAPSHOT_IDS" ] && [ "$SNAPSHOT_IDS" != "None" ]; then
+                                for SNAPSHOT_ID in $SNAPSHOT_IDS; do
+                                  echo "Snapshot ${SNAPSHOT_ID}: deleting"
+                                  aws ec2 delete-snapshot --snapshot-id "$SNAPSHOT_ID" 2>/dev/null || true
+                                done
+                              fi
+                            done
+                          }
+
+                          wait_for_ami_cleanup() {
+                            for _ in $(seq 1 30); do
+                              REMAINING_AMIS=$(aws ec2 describe-images --owners self --query "Images[?starts_with(Name, '${AMI_PREFIX}-')].ImageId" --output text 2>/dev/null || true)
+                              if [ -z "$REMAINING_AMIS" ] || [ "$REMAINING_AMIS" = "None" ]; then
+                                return 0
+                              fi
+                              echo "Waiting for AMIs to deregister: $REMAINING_AMIS"
+                              delete_amis_and_snapshots
                               sleep 10
                             done
                             return 0
@@ -790,6 +827,9 @@ pipeline:
                             else
                               echo "Packer IAM User ${PACKER_USER}: not found (ok)"
                             fi
+
+                            delete_amis_and_snapshots
+                            wait_for_ami_cleanup
 
                             VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=${ASG_PREFIX}-vpc" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || true)
                             if [ -n "$VPC_ID" ] && [ "$VPC_ID" != "None" ]; then
