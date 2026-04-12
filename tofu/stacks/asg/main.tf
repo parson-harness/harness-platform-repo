@@ -187,6 +187,7 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
       ALB_NAME="${local.asg_alb_name}"
       PROD_TG_NAME="${local.asg_prod_tg_name}"
       STAGE_TG_NAME="${local.asg_stage_tg_name}"
+      AMI_PREFIX="harness-demo-app-${var.owner}"
       BASE_ASG_NAME="${local.name_prefix}-asg-base"
       LAUNCH_TEMPLATE_NAME="${local.name_prefix}-asg-lt"
       INSTANCE_PROFILE_NAME="${local.name_prefix}-asg-instance-profile"
@@ -319,6 +320,39 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
         return 0
       }
 
+      delete_amis_and_snapshots() {
+        AMI_IDS=$(aws ec2 describe-images --owners self --query "Images[?starts_with(Name, '${AMI_PREFIX}-')].ImageId" --output text 2>/dev/null || true)
+        if [ -z "$${AMI_IDS}" ] || [ "$${AMI_IDS}" = "None" ]; then
+          return 0
+        fi
+
+        for AMI_ID in $${AMI_IDS}; do
+          AMI_NAME=$(aws ec2 describe-images --image-ids "$${AMI_ID}" --query 'Images[0].Name' --output text 2>/dev/null || true)
+          SNAPSHOT_IDS=$(aws ec2 describe-images --image-ids "$${AMI_ID}" --query 'Images[0].BlockDeviceMappings[?Ebs.SnapshotId!=null].Ebs.SnapshotId' --output text 2>/dev/null || true)
+          echo "AMI $${AMI_NAME:-$${AMI_ID}}: deregistering"
+          aws ec2 deregister-image --image-id "$${AMI_ID}" 2>/dev/null || true
+          if [ -n "$${SNAPSHOT_IDS}" ] && [ "$${SNAPSHOT_IDS}" != "None" ]; then
+            for SNAPSHOT_ID in $${SNAPSHOT_IDS}; do
+              echo "Snapshot $${SNAPSHOT_ID}: deleting"
+              aws ec2 delete-snapshot --snapshot-id "$${SNAPSHOT_ID}" 2>/dev/null || true
+            done
+          fi
+        done
+      }
+
+      wait_for_ami_cleanup() {
+        for _ in $(seq 1 30); do
+          REMAINING_AMIS=$(aws ec2 describe-images --owners self --query "Images[?starts_with(Name, '${AMI_PREFIX}-')].ImageId" --output text 2>/dev/null || true)
+          if [ -z "$${REMAINING_AMIS}" ] || [ "$${REMAINING_AMIS}" = "None" ]; then
+            return 0
+          fi
+          echo "Waiting for AMIs to deregister: $${REMAINING_AMIS}"
+          delete_amis_and_snapshots
+          sleep 10
+        done
+        return 0
+      }
+
       get_vpc_id_by_name() {
         VPC_XML=$(ec2_post "Action=DescribeVpcs&Filter.1.Name=tag:Name&Filter.1.Value.1=$${VPC_NAME}&Version=2016-11-15" 2>&1)
         echo "$${VPC_XML}" | grep -o '<vpcId>[^<]*</vpcId>' | sed 's/<[^>]*>//g' | head -1
@@ -427,6 +461,11 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
 
           iam_post "Action=DeleteRole&RoleName=$${INSTANCE_ROLE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
         fi
+      fi
+
+      if ! state_tracks_resource "module.asg" "aws_ami" "main"; then
+        delete_amis_and_snapshots
+        wait_for_ami_cleanup
       fi
 
       if ! state_tracks_resource "module.asg" "aws_vpc" "main"; then
