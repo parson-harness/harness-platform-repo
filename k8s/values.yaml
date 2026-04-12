@@ -21,7 +21,7 @@ appName: "Harness Demo Application"
 appVersion: <+artifact.tag>
 customerName: "Harness Customer"
 customerLogo: "https://developer.harness.io/img/logo_harness.svg"
-deploymentStrategy: "bluegreen"
+deploymentStrategy: <+pipeline.variables.deployment_strategy>
 servicePort: 80
 serviceType: ClusterIP
 

@@ -8,6 +8,7 @@ spring:
 app:
   app-name: ${APP_NAME:My Application}
   version: ${APP_VERSION:1.0.0}
+  build-id: ${BUILD_ID:}
   environment: ${APP_ENVIRONMENT:development}
   deployment-variant: ${DEPLOYMENT_VARIANT:}
   deployment-track: ${DEPLOYMENT_TRACK:}

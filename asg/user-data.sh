@@ -70,6 +70,7 @@ DEPLOYMENT_TRACK=${DEPLOYMENT_TRACK}
 PUBLIC_URL=<+serviceVariables.appUrl>
 STAGE_URL=<+serviceVariables.stageUrl>
 DEPLOYED_AMI=<+artifact.metadata.ami>
+BUILD_ID=<+pipeline.executionId>
 ENVEOF
 
 chown harness-app:harness-app /etc/harness-demo-app.env

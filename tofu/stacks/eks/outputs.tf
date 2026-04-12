@@ -32,6 +32,11 @@ output "app_url" {
   value       = "https://${var.owner}.harness-demo.dev"
 }
 
+output "stage_url" {
+  description = "Stage application URL"
+  value       = "https://${var.owner}-stage.harness-demo.dev"
+}
+
 output "delegate_name" {
   description = "Delegate name"
   value       = var.create_delegate ? "delegate-${var.owner}" : null

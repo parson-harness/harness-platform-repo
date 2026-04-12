@@ -10,10 +10,12 @@ import java.util.regex.Pattern;
 @Configuration
 @ConfigurationProperties(prefix = "app")
 public class AppConfig {
-    private static final Pattern MAIN_BUILD_VERSION_PATTERN = Pattern.compile("^harness-demo-app-[^-]+-(\\d+)$");
+    private static final Pattern SEMVER_PATTERN = Pattern.compile("^\\d+\\.\\d+\\.\\d+$");
+    private static final Pattern ASG_BUILD_VERSION_PATTERN = Pattern.compile("^(?:.*-)?(\\d+)(?:-[A-Za-z0-9]+)?$");
     
     private String appName = "My Application";
     private String version = "1.0.0";
+    private String buildId = "";
     private String environment = "development";
     private String deploymentVariant = "";
     private String deploymentTrack = "";
@@ -52,11 +54,15 @@ public class AppConfig {
         if (version == null || version.isBlank()) {
             return "1.0.0";
         }
-        Matcher matcher = MAIN_BUILD_VERSION_PATTERN.matcher(version.trim());
+        String trimmed = version.trim();
+        if (SEMVER_PATTERN.matcher(trimmed).matches()) {
+            return trimmed;
+        }
+        Matcher matcher = ASG_BUILD_VERSION_PATTERN.matcher(trimmed);
         if (matcher.matches()) {
             return "1.0." + matcher.group(1);
         }
-        return version.trim();
+        return trimmed;
     }
     
     public String getVariantColor() {
