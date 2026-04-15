@@ -429,10 +429,16 @@ pipeline:
 
                           ORPHANED_VPCS=""
 
-                          VPCS_XML=$(ec2_post "Action=DescribeVpcs&Filter.1.Name=tag:Project&Filter.1.Value.1=harness-demo&Filter.2.Name=tag:Stack&Filter.2.Value.1=asg&Filter.3.Name=tag:ManagedBy&Filter.3.Value.1=tofu&Filter.4.Name=tag:Owner&Filter.4.Value.1=${OWNER_FILTER}&Version=2016-11-15")
+                          VPCS_XML=$(ec2_post "Action=DescribeVpcs&Filter.1.Name=tag:Project&Filter.1.Value.1=harness-demo&Filter.2.Name=tag:Stack&Filter.2.Value.1=asg&Filter.3.Name=tag:ManagedBy&Filter.3.Value.1=tofu&Version=2016-11-15")
 
-                          while IFS='|' read -r VPC_ID OWNER NAME_TAG; do
-                            if [ -z "$VPC_ID" ] || [ -z "$OWNER" ]; then
+                          while IFS='|' read -r VPC_ID NAME_TAG; do
+                            if [ -z "$VPC_ID" ] || [ -z "$NAME_TAG" ]; then
+                              continue
+                            fi
+
+                            OWNER=$(printf "%s" "$NAME_TAG" | sed -n 's/^harness-demo-\(.*\)-asg-vpc$/\1/p')
+                            if [ -z "$OWNER" ]; then
+                              echo "VPC ${VPC_ID} (${NAME_TAG}): unable to derive owner from name"
                               continue
                             fi
 
@@ -447,10 +453,9 @@ pipeline:
                             printf "%s" "$VPCS_XML" | awk -v RS="<item>" '
                               /<vpcId>/ {
                                 id=$0; sub(/.*<vpcId>/, "", id); sub(/<.*/, "", id)
-                                owner=""; name=""
-                                if (match($0, /<key>Owner<\/key>[[:space:]]*<value>([^<]*)<\/value>/, o)) owner=o[1]
+                                name=""
                                 if (match($0, /<key>Name<\/key>[[:space:]]*<value>([^<]*)<\/value>/, n)) name=n[1]
-                                if (id != "") print id "|" owner "|" name
+                                if (id != "" && name != "") print id "|" name
                               }
                             '
                           )
