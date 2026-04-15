@@ -72,6 +72,129 @@ pipeline:
                           PROJECT_ID="<+project.identifier>"
                           API_KEY="${HARNESS_API_KEY}"
                           ENDPOINT="https://app.harness.io"
+
+                          cleanup_vpc_dependencies() {
+                            TARGET_VPC_ID="$1"
+                            for _ in $(seq 1 30); do
+                              CURRENT_VPC=$(aws ec2 describe-vpcs --vpc-ids "$TARGET_VPC_ID" --query 'Vpcs[0].VpcId' --output text 2>/dev/null || true)
+                              if [ -z "$CURRENT_VPC" ] || [ "$CURRENT_VPC" = "None" ]; then
+                                return 0
+                              fi
+
+                              ENIS=$(aws ec2 describe-network-interfaces --filters "Name=vpc-id,Values=${TARGET_VPC_ID}" --query 'NetworkInterfaces[].NetworkInterfaceId' --output text 2>/dev/null || true)
+                              if [ -n "$ENIS" ] && [ "$ENIS" != "None" ]; then
+                                echo "Waiting for VPC ENIs to detach: $ENIS"
+                                sleep 10
+                                continue
+                              fi
+
+                              for SG in $(aws ec2 describe-security-groups --filters "Name=vpc-id,Values=${TARGET_VPC_ID}" --query 'SecurityGroups[?GroupName!=`default`].GroupId' --output text 2>/dev/null || true); do
+                                aws ec2 delete-security-group --group-id "$SG" 2>/dev/null || true
+                              done
+                              for SUBNET in $(aws ec2 describe-subnets --filters "Name=vpc-id,Values=${TARGET_VPC_ID}" --query 'Subnets[].SubnetId' --output text 2>/dev/null || true); do
+                                aws ec2 delete-subnet --subnet-id "$SUBNET" 2>/dev/null || true
+                              done
+                              for RT in $(aws ec2 describe-route-tables --filters "Name=vpc-id,Values=${TARGET_VPC_ID}" --query 'RouteTables[?Associations[?Main!=`true`]].RouteTableId' --output text 2>/dev/null || true); do
+                                for ASSOC in $(aws ec2 describe-route-tables --route-table-ids "$RT" --query 'RouteTables[0].Associations[?Main!=`true`].RouteTableAssociationId' --output text 2>/dev/null || true); do
+                                  aws ec2 disassociate-route-table --association-id "$ASSOC" 2>/dev/null || true
+                                done
+                                aws ec2 delete-route-table --route-table-id "$RT" 2>/dev/null || true
+                              done
+                              for IGW in $(aws ec2 describe-internet-gateways --filters "Name=attachment.vpc-id,Values=${TARGET_VPC_ID}" --query 'InternetGateways[].InternetGatewayId' --output text 2>/dev/null || true); do
+                                aws ec2 detach-internet-gateway --internet-gateway-id "$IGW" --vpc-id "$TARGET_VPC_ID" 2>/dev/null || true
+                                aws ec2 delete-internet-gateway --internet-gateway-id "$IGW" 2>/dev/null || true
+                              done
+                              aws ec2 delete-vpc --vpc-id "$TARGET_VPC_ID" 2>/dev/null || true
+                              sleep 10
+                            done
+                            return 0
+                          }
+
+                          cleanup_orphaned_asg_resources() {
+                            local VPC_ID="$1"
+                            local OWNER="$2"
+                            local NAME_TAG="$3"
+                            local NAME_PREFIX="harness-demo-${OWNER}"
+                            local ASG_PREFIX="${NAME_PREFIX}-asg"
+                            local ASG_ALB_NAME="${ASG_PREFIX}-alb"
+                            local AMI_PREFIX="harness-demo-app-${OWNER}"
+                            local INSTANCE_PROFILE_NAME="${ASG_PREFIX}-instance-profile"
+                            local INSTANCE_ROLE_NAME="${ASG_PREFIX}-instance-role"
+
+                            echo "Directly cleaning orphaned ASG resources for ${OWNER} (${NAME_TAG})"
+
+                            ASGS=$(aws autoscaling describe-auto-scaling-groups --query "AutoScalingGroups[?starts_with(AutoScalingGroupName, '${ASG_PREFIX}')].AutoScalingGroupName" --output text 2>/dev/null || true)
+                            if [ -n "$ASGS" ] && [ "$ASGS" != "None" ]; then
+                              for ASG in $ASGS; do
+                                echo "ASG ${ASG}: deleting"
+                                aws autoscaling update-auto-scaling-group --auto-scaling-group-name "$ASG" --min-size 0 --max-size 0 --desired-capacity 0 2>/dev/null || true
+                                aws autoscaling delete-auto-scaling-group --auto-scaling-group-name "$ASG" --force-delete 2>/dev/null || true
+                              done
+                            fi
+
+                            LTS=$(aws ec2 describe-launch-templates --query "LaunchTemplates[?starts_with(LaunchTemplateName, '${ASG_PREFIX}')].LaunchTemplateId" --output text 2>/dev/null || true)
+                            if [ -n "$LTS" ] && [ "$LTS" != "None" ]; then
+                              for LT_ID in $LTS; do
+                                LT_NAME=$(aws ec2 describe-launch-templates --launch-template-ids "$LT_ID" --query 'LaunchTemplates[0].LaunchTemplateName' --output text 2>/dev/null || true)
+                                echo "Launch Template ${LT_NAME:-$LT_ID}: deleting"
+                                aws ec2 delete-launch-template --launch-template-id "$LT_ID" 2>/dev/null || true
+                              done
+                            fi
+
+                            ALB_ARN=$(aws elbv2 describe-load-balancers --query "LoadBalancers[?LoadBalancerName=='${ASG_ALB_NAME}'].LoadBalancerArn" --output text 2>/dev/null || true)
+                            if [ -n "$ALB_ARN" ] && [ "$ALB_ARN" != "None" ]; then
+                              echo "ALB ${ASG_ALB_NAME}: deleting"
+                              aws elbv2 delete-load-balancer --load-balancer-arn "$ALB_ARN" 2>/dev/null || true
+                            fi
+
+                            TGS=$(aws elbv2 describe-target-groups --query "TargetGroups[?starts_with(TargetGroupName, '${NAME_PREFIX}-as')].TargetGroupArn" --output text 2>/dev/null || true)
+                            if [ -n "$TGS" ] && [ "$TGS" != "None" ]; then
+                              for TG_ARN in $TGS; do
+                                TG_NAME=$(aws elbv2 describe-target-groups --target-group-arns "$TG_ARN" --query 'TargetGroups[0].TargetGroupName' --output text 2>/dev/null || true)
+                                echo "Target Group ${TG_NAME:-$TG_ARN}: deleting"
+                                aws elbv2 delete-target-group --target-group-arn "$TG_ARN" 2>/dev/null || true
+                              done
+                            fi
+
+                            INSTANCE_PROFILE_XML=$(aws iam get-instance-profile --instance-profile-name "$INSTANCE_PROFILE_NAME" 2>&1 || true)
+                            if echo "$INSTANCE_PROFILE_XML" | grep -q "<InstanceProfileName>${INSTANCE_PROFILE_NAME}</InstanceProfileName>"; then
+                              for ROLE_NAME in $(echo "$INSTANCE_PROFILE_XML" | grep -o '<RoleName>[^<]*</RoleName>' | sed 's/<[^>]*>//g'); do
+                                aws iam remove-role-from-instance-profile --instance-profile-name "$INSTANCE_PROFILE_NAME" --role-name "$ROLE_NAME" 2>/dev/null || true
+                              done
+                              aws iam delete-instance-profile --instance-profile-name "$INSTANCE_PROFILE_NAME" 2>/dev/null || true
+                            fi
+
+                            INSTANCE_ROLE_XML=$(aws iam get-role --role-name "$INSTANCE_ROLE_NAME" 2>&1 || true)
+                            if echo "$INSTANCE_ROLE_XML" | grep -q "<RoleName>${INSTANCE_ROLE_NAME}</RoleName>"; then
+                              ATTACHED_XML=$(aws iam list-attached-role-policies --role-name "$INSTANCE_ROLE_NAME" 2>&1 || true)
+                              for ARN in $(echo "$ATTACHED_XML" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
+                                aws iam detach-role-policy --role-name "$INSTANCE_ROLE_NAME" --policy-arn "$ARN" 2>/dev/null || true
+                              done
+                              INLINE_XML=$(aws iam list-role-policies --role-name "$INSTANCE_ROLE_NAME" 2>&1 || true)
+                              for POLICY in $(echo "$INLINE_XML" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
+                                aws iam delete-role-policy --role-name "$INSTANCE_ROLE_NAME" --policy-name "$POLICY" 2>/dev/null || true
+                              done
+                              aws iam delete-role --role-name "$INSTANCE_ROLE_NAME" 2>/dev/null || true
+                            fi
+
+                            AMI_IDS=$(aws ec2 describe-images --owners self --query "Images[?starts_with(Name, '${AMI_PREFIX}-')].ImageId" --output text 2>/dev/null || true)
+                            if [ -n "$AMI_IDS" ] && [ "$AMI_IDS" != "None" ]; then
+                              for AMI_ID in $AMI_IDS; do
+                                SNAPSHOT_IDS=$(aws ec2 describe-images --image-ids "$AMI_ID" --query 'Images[0].BlockDeviceMappings[?Ebs.SnapshotId!=null].Ebs.SnapshotId' --output text 2>/dev/null || true)
+                                AMI_NAME=$(aws ec2 describe-images --image-ids "$AMI_ID" --query 'Images[0].Name' --output text 2>/dev/null || true)
+                                echo "AMI ${AMI_NAME:-$AMI_ID}: deregistering"
+                                aws ec2 deregister-image --image-id "$AMI_ID" 2>/dev/null || true
+                                if [ -n "$SNAPSHOT_IDS" ] && [ "$SNAPSHOT_IDS" != "None" ]; then
+                                  for SNAPSHOT_ID in $SNAPSHOT_IDS; do
+                                    echo "Snapshot ${SNAPSHOT_ID}: deleting"
+                                    aws ec2 delete-snapshot --snapshot-id "$SNAPSHOT_ID" 2>/dev/null || true
+                                  done
+                                fi
+                              done
+                            fi
+
+                            cleanup_vpc_dependencies "$VPC_ID"
+                          }
                           OWNER_FILTER="${OWNER_FILTER}"
                           PROFILE_FILTER="${PROFILE_FILTER}"
                           TARGET_FILTER="${TARGET_FILTER}"
@@ -472,37 +595,19 @@ pipeline:
                           ORPHANED_VPCS=$(cat /tmp/orphaned_asg_vpcs.txt 2>/dev/null || true)
                           echo -e "$ORPHANED_VPCS" | while IFS='|' read -r VPC_ID OWNER NAME_TAG; do
                             if [ -n "$VPC_ID" ]; then
-                              echo "Cleaning orphaned ASG VPC ${VPC_ID} for owner ${OWNER} (${NAME_TAG})"
-
-                              RESPONSE=$(curl -s -X POST \
-                                "${ENDPOINT}/pipeline/api/pipeline/execute/idp_pov_destroyer_v2?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \
-                                -H "x-api-key: ${API_KEY}" \
-                                -H "Content-Type: application/json" \
-                                -d "{
-                                  \"owner\": \"${OWNER}\",
-                                  \"deployment_target\": \"asg\",
-                                  \"harness_account_id\": \"${ACCOUNT_ID}\",
-                                  \"harness_endpoint\": \"${ENDPOINT}\",
-                                  \"provisioner_api_key\": \"${API_KEY}\",
-                                  \"target_api_key\": \"${API_KEY}\",
-                                  \"harness_org_id\": \"${ORG_ID}\",
-                                  \"harness_project_id\": \"${PROJECT_ID}\",
-                                  \"eks_cluster_name\": \"harness-eks-parson\",
-                                  \"skip_terraform_destroy\": \"true\",
-                                  \"auto_approve\": \"true\"
-                                }")
-
-                              EXEC_ID=$(echo "$RESPONSE" | jq -r '.data.planExecution.uuid // "unknown"')
-                              echo "  → Triggered orphan VPC cleanup execution: $EXEC_ID"
+                              cleanup_orphaned_asg_resources "$VPC_ID" "$OWNER" "$NAME_TAG"
+                              echo "  → Direct orphan VPC cleanup complete"
                               echo ""
                             fi
                           done
-
-                          echo "All destroy pipelines triggered."
+                          echo "All cleanup actions completed."
                     environmentVariables:
                       - name: HARNESS_API_KEY
                         type: String
                         value: <+pipeline.variables.harness_api_key>
+                      - name: AWS_DEFAULT_REGION
+                        type: String
+                        value: us-east-1
                   timeout: 15m
               - step:
                   type: ShellScript
@@ -518,7 +623,8 @@ pipeline:
                           echo "=== TTL Cleanup Complete ==="
                           echo ""
                           echo "Destroy pipelines have been triggered for all expired sandboxes."
-                          echo "Check individual pipeline executions for status."
+                          echo "Orphaned ASG VPCs were cleaned directly in this janitor run."
+                          echo "Check individual destroyer executions for expired workspaces if needed."
                           echo ""
                           echo "To prevent a sandbox from being cleaned up:"
                           echo "  1. Go to the IACM workspace"
