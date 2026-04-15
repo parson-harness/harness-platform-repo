@@ -3,50 +3,47 @@ pipeline:
   identifier: sandbox_ttl_cleanup
   projectIdentifier: parson
   orgIdentifier: sandbox
-  description: "Scheduled audit and cleanup of template-linked POV sandboxes based on IACM workspace TTL settings"
+  description: Scheduled audit and cleanup of template-linked POV sandboxes based on IACM workspace TTL settings
   tags:
     automation: "true"
     cleanup: "true"
     ttl: "true"
-  
   variables:
     - name: dry_run
       type: String
-      description: "If true, only report expired sandboxes without destroying them"
+      description: If true, only report expired sandboxes without destroying them
       required: false
       value: <+input>.default(false).allowedValues(true,false)
     - name: owner_filter
       type: String
-      description: "Optional owner filter. Leave blank to evaluate all managed POV workspaces"
+      description: Optional owner filter. Leave blank to evaluate all managed POV workspaces
       required: false
       value: <+input>
     - name: sandbox_profile_filter
       type: String
-      description: "Optional profile filter for cleanup targeting"
+      description: Optional profile filter for cleanup targeting
       required: false
       value: <+input>.default(all).allowedValues(all,se-demo,se-pov-sandbox,se-pov-ref-arch,se-workshop,manual)
     - name: deployment_target_filter
       type: String
-      description: "Optional deployment target filter for cleanup targeting"
+      description: Optional deployment target filter for cleanup targeting
       required: false
       value: <+input>.default(all).allowedValues(all,eks,asg)
     - name: template_id
       type: String
-      description: "Optional template-family scope. all targets all managed POV workspaces, POV_Provisioner scopes to EKS-linked workspaces, and Sandbox_Provisioner_ASG scopes to ASG-linked workspaces."
+      description: Optional template-family scope. all targets all managed POV workspaces, POV_Provisioner scopes to EKS-linked workspaces, and Sandbox_Provisioner_ASG scopes to ASG-linked workspaces.
       required: false
       value: <+input>.default(all).allowedValues(all,POV_Provisioner,Sandbox_Provisioner_ASG)
-    
     - name: harness_api_key
       type: Secret
-      description: "Harness Platform API Key for IACM operations"
+      description: Harness Platform API Key for IACM operations
       required: false
       value: acct-automation-svc-acct
-
   stages:
     - stage:
         name: Identify Expired Sandboxes
         identifier: identify_expired
-        description: "Query IACM workspaces and identify those past TTL"
+        description: Query IACM workspaces and identify those past TTL
         type: Custom
         spec:
           execution:
@@ -64,12 +61,12 @@ pipeline:
                         script: |
                           #!/bin/bash
                           set -e
-                          
+
                           echo "=== Sandbox TTL Cleanup ==="
                           echo "Dry Run: ${DRY_RUN}"
                           echo "Current Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
                           echo ""
-                          
+
                           ACCOUNT_ID="<+account.identifier>"
                           ORG_ID="<+org.identifier>"
                           PROJECT_ID="<+project.identifier>"
@@ -91,7 +88,7 @@ pipeline:
                               TEMPLATE_TARGET_FILTER="all"
                               ;;
                           esac
-                          
+
                           # List all IACM workspaces in the project
                           echo "Fetching IACM workspaces..."
                           WORKSPACES=$(curl -s -X GET \
@@ -99,14 +96,14 @@ pipeline:
                             -H "x-api-key: ${API_KEY}" \
                             -H "Harness-Account: ${ACCOUNT_ID}" \
                             -H "Content-Type: application/json")
-                          
+
                           # Parse workspaces and check TTL
                           EXPIRED_WORKSPACES=""
                           PROTECTED_WORKSPACES=""
                           ACTIVE_WORKSPACES=""
-                          
+
                           CURRENT_EPOCH=$(date +%s)
-                          
+
                           # Extract workspace identifiers that match SE sandbox pattern
                           for WS_ID in $(echo "$WORKSPACES" | jq -r '.content[]?.identifier // empty' | grep -E '_sandbox$|_pov$' || true); do
                             echo "Checking workspace: $WS_ID"
@@ -196,14 +193,14 @@ pipeline:
                               echo "  → No created_at timestamp, skipping"
                             fi
                           done
-                          
+
                           echo ""
                           echo "=== Summary ==="
                           echo "Protected (TTL=0): $(echo -e "$PROTECTED_WORKSPACES" | grep -c '|' || echo 0)"
                           echo "Active: $(echo -e "$ACTIVE_WORKSPACES" | grep -c '|' || echo 0)"
                           echo "Expired: $(echo -e "$EXPIRED_WORKSPACES" | grep -c '|' || echo 0)"
                           echo ""
-                          
+
                           # Output for next steps
                           printf "%b" "$EXPIRED_WORKSPACES" > /tmp/expired_workspaces.txt
                     environmentVariables:
@@ -230,7 +227,6 @@ pipeline:
                         type: String
                         value: EXPIRED_WORKSPACES
                   timeout: 10m
-
               - step:
                   type: ShellScript
                   name: Detect Orphaned ASG VPCs
@@ -335,7 +331,6 @@ pipeline:
                         type: String
                         value: us-east-1
                   timeout: 10m
-
               - step:
                   type: ShellScript
                   name: Report Expired Sandboxes
@@ -348,10 +343,10 @@ pipeline:
                       spec:
                         script: |
                           #!/bin/bash
-                          
+
                           echo "=== Expired Sandboxes Report ==="
                           echo ""
-                          
+
                           if [ -f /tmp/expired_workspaces.txt ]; then
                             EXPIRED=$(cat /tmp/expired_workspaces.txt)
                             ORPHANED_VPCS=$(cat /tmp/orphaned_asg_vpcs.txt 2>/dev/null || true)
@@ -403,11 +398,12 @@ pipeline:
                         type: String
                         value: DESTROY_COUNT
                   timeout: 5m
-
+        delegateSelectors:
+          - parson-eks-delegate
     - stage:
         name: Destroy Expired Sandboxes
         identifier: destroy_expired
-        description: "Trigger destroy for each expired sandbox"
+        description: Trigger destroy for each expired sandbox
         type: Custom
         when:
           pipelineStatus: Success
@@ -428,23 +424,23 @@ pipeline:
                         script: |
                           #!/bin/bash
                           set -e
-                          
+
                           echo "=== Triggering Destroy for Expired Sandboxes ==="
                           echo ""
-                          
+
                           ACCOUNT_ID="<+account.identifier>"
                           ORG_ID="<+org.identifier>"
                           PROJECT_ID="<+project.identifier>"
                           API_KEY="${HARNESS_API_KEY}"
                           ENDPOINT="https://app.harness.io"
-                          
+
                           if [ ! -f /tmp/expired_workspaces.txt ]; then
                             echo "No expired workspaces file found"
                             exit 0
                           fi
-                          
+
                           EXPIRED=$(cat /tmp/expired_workspaces.txt)
-                          
+
                           echo -e "$EXPIRED" | while IFS='|' read -r WS_ID OWNER PROFILE TARGET TEMPLATE_ID TARGET_ACCOUNT_ID EKS_CLUSTER_NAME DAYS; do
                             if [ -n "$WS_ID" ]; then
                               echo "Destroying workspace: $WS_ID (owner: $OWNER, profile: $PROFILE, target: $TARGET, template: $TEMPLATE_ID)"
@@ -501,14 +497,13 @@ pipeline:
                               echo ""
                             fi
                           done
-                          
+
                           echo "All destroy pipelines triggered."
                     environmentVariables:
                       - name: HARNESS_API_KEY
                         type: String
                         value: <+pipeline.variables.harness_api_key>
                   timeout: 15m
-
               - step:
                   type: ShellScript
                   name: Cleanup Summary
@@ -530,3 +525,5 @@ pipeline:
                           echo "  2. Set ttl_days = 0 in terraform variables"
                           echo "  3. Run a plan/apply to update the workspace"
                   timeout: 1m
+        delegateSelectors:
+          - parson-eks-delegate
