@@ -376,6 +376,16 @@ pipeline:
                           TARGET_FILTER="${TARGET_FILTER}"
                           TEMPLATE_SCOPE="${TEMPLATE_SCOPE}"
 
+                          AWS_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+                          IAM_AUTH_USER="${AWS_ACCESS_KEY_ID:-}:${AWS_SECRET_ACCESS_KEY:-}"
+
+                          ec2_post() {
+                            curl -s --aws-sigv4 "aws:amz:${AWS_REGION}:ec2" \
+                              --user "${IAM_AUTH_USER}" \
+                              -H "x-amz-security-token: ${AWS_SESSION_TOKEN:-}" \
+                              -d "$1" "https://ec2.${AWS_REGION}.amazonaws.com/"
+                          }
+
                           if [ "$TARGET_FILTER" != "all" ] && [ "$TARGET_FILTER" != "asg" ]; then
                             echo "Skipping orphaned ASG VPC scan because deployment_target_filter=${TARGET_FILTER}"
                             : > /tmp/orphaned_asg_vpcs.txt
@@ -395,7 +405,12 @@ pipeline:
                           fi
 
                           echo "=== Orphaned ASG VPC Audit ==="
-                          aws sts get-caller-identity >/dev/null
+
+                          if [ -z "$OWNER_FILTER" ] || [ "$OWNER_FILTER" = "all" ]; then
+                            echo "Skipping orphaned ASG VPC scan because owner_filter must be set for direct AWS cleanup"
+                            : > /tmp/orphaned_asg_vpcs.txt
+                            exit 0
+                          fi
 
                           WORKSPACES=$(curl -s -X GET \
                             "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces?accountIdentifier=${ACCOUNT_ID}" \
@@ -407,27 +422,32 @@ pipeline:
                           printf "%s" "$WORKSPACES" > "$WORKSPACE_JSON"
 
                           ORPHANED_VPCS=""
-                          VPCS_JSON=$(aws ec2 describe-vpcs \
-                            --filters "Name=tag:Project,Values=harness-demo" "Name=tag:Stack,Values=asg" "Name=tag:ManagedBy,Values=tofu" \
-                            --output json)
+
+                          VPCS_XML=$(ec2_post "Action=DescribeVpcs&Filter.1.Name=tag:Project&Filter.1.Value.1=harness-demo&Filter.2.Name=tag:Stack&Filter.2.Value.1=asg&Filter.3.Name=tag:ManagedBy&Filter.3.Value.1=tofu&Filter.4.Name=tag:Owner&Filter.4.Value.1=${OWNER_FILTER}&Version=2016-11-15")
 
                           while IFS='|' read -r VPC_ID OWNER NAME_TAG; do
                             if [ -z "$VPC_ID" ] || [ -z "$OWNER" ]; then
                               continue
                             fi
 
-                            if [ -n "$OWNER_FILTER" ] && [ "$OWNER_FILTER" != "$OWNER" ]; then
-                              continue
-                            fi
-
-                            if jq -e --arg ws1 "${OWNER}_pov" --arg ws2 "${OWNER}_sandbox" '.content[]? | select(.identifier == $ws1 or .identifier == $ws2)' "$WORKSPACE_JSON" >/dev/null 2>&1; then
+                            if echo "$WORKSPACE_JSON" | grep -q "\"identifier\":\"${OWNER}_pov\"\|\"identifier\":\"${OWNER}_sandbox\""; then
                               echo "VPC ${VPC_ID} (${NAME_TAG}): owner ${OWNER} still has an active workspace"
                               continue
                             fi
 
                             echo "VPC ${VPC_ID} (${NAME_TAG}): orphaned owner ${OWNER}"
                             ORPHANED_VPCS="${ORPHANED_VPCS}${VPC_ID}|${OWNER}|${NAME_TAG}\n"
-                          done < <(printf "%s" "$VPCS_JSON" | jq -r '.Vpcs[]? | [ .VpcId, ((.Tags // []) | map(select(.Key == "Owner") | .Value) | first // ""), ((.Tags // []) | map(select(.Key == "Name") | .Value) | first // "") ] | @tsv' | tr '\t' '|')
+                          done < <(
+                            printf "%s" "$VPCS_XML" | awk -v RS="<item>" '
+                              /<vpcId>/ {
+                                id=$0; sub(/.*<vpcId>/, "", id); sub(/<.*/, "", id)
+                                owner=""; name=""
+                                if (match($0, /<key>Owner<\/key>[[:space:]]*<value>([^<]*)<\/value>/, o)) owner=o[1]
+                                if (match($0, /<key>Name<\/key>[[:space:]]*<value>([^<]*)<\/value>/, n)) name=n[1]
+                                if (id != "") print id "|" owner "|" name
+                              }
+                            '
+                          )
 
                           printf "%b" "$ORPHANED_VPCS" > /tmp/orphaned_asg_vpcs.txt
                           ORPHAN_COUNT=$(echo -e "$ORPHANED_VPCS" | grep -c '|' || true)
