@@ -228,7 +228,7 @@ pipeline:
                           CURRENT_EPOCH=$(date +%s)
 
                           # Extract workspace identifiers that match SE sandbox pattern
-                          for WS_ID in $(echo "$WORKSPACES" | jq -r '.content[]?.identifier // empty' | grep -E '_sandbox$|_pov$' || true); do
+                          for WS_ID in $(printf "%s" "$WORKSPACES" | grep -o '"identifier":"[^"]*"' | sed 's/.*"identifier":"//; s/"$//' | grep -E '_sandbox$|_pov$' || true); do
                             echo "Checking workspace: $WS_ID"
                             
                             # Get workspace details including tfvars
@@ -239,14 +239,20 @@ pipeline:
                               -H "Content-Type: application/json")
                             
                             # Extract TTL and created_at from terraform_variable_files or environment_variables
-                            TTL_DAYS=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "ttl_days") | .value // "45"' 2>/dev/null || echo "45")
-                            CREATED_AT=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "created_at") | .value // empty' 2>/dev/null || echo "")
-                            OWNER=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "owner") | .value // empty' 2>/dev/null || echo "unknown")
-                            PROFILE=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "sandbox_profile") | .value // "unknown"' 2>/dev/null || echo "unknown")
-                            TARGET=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "deployment_target") | .value // "unknown"' 2>/dev/null || echo "unknown")
-                            WORKSPACE_TEMPLATE_ID=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "workspace_template_id") | .value // empty' 2>/dev/null || echo "")
-                            TARGET_ACCOUNT_ID=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "harness_account_id") | .value // empty' 2>/dev/null || echo "")
-                            EKS_CLUSTER_NAME=$(echo "$WS_DETAILS" | jq -r '.terraform_variable[]? | select(.key == "eks_cluster_name") | .value // "harness-eks-parson"' 2>/dev/null || echo "harness-eks-parson")
+                            TTL_DAYS=$(printf "%s" "$WS_DETAILS" | sed -n 's/.*"key":"ttl_days"[^}]*"value":"\([^"]*\)".*/\1/p' | head -1)
+                            CREATED_AT=$(printf "%s" "$WS_DETAILS" | sed -n 's/.*"key":"created_at"[^}]*"value":"\([^"]*\)".*/\1/p' | head -1)
+                            OWNER=$(printf "%s" "$WS_DETAILS" | sed -n 's/.*"key":"owner"[^}]*"value":"\([^"]*\)".*/\1/p' | head -1)
+                            PROFILE=$(printf "%s" "$WS_DETAILS" | sed -n 's/.*"key":"sandbox_profile"[^}]*"value":"\([^"]*\)".*/\1/p' | head -1)
+                            TARGET=$(printf "%s" "$WS_DETAILS" | sed -n 's/.*"key":"deployment_target"[^}]*"value":"\([^"]*\)".*/\1/p' | head -1)
+                            WORKSPACE_TEMPLATE_ID=$(printf "%s" "$WS_DETAILS" | sed -n 's/.*"key":"workspace_template_id"[^}]*"value":"\([^"]*\)".*/\1/p' | head -1)
+                            TARGET_ACCOUNT_ID=$(printf "%s" "$WS_DETAILS" | sed -n 's/.*"key":"harness_account_id"[^}]*"value":"\([^"]*\)".*/\1/p' | head -1)
+                            EKS_CLUSTER_NAME=$(printf "%s" "$WS_DETAILS" | sed -n 's/.*"key":"eks_cluster_name"[^}]*"value":"\([^"]*\)".*/\1/p' | head -1)
+
+                            TTL_DAYS=${TTL_DAYS:-45}
+                            OWNER=${OWNER:-unknown}
+                            PROFILE=${PROFILE:-unknown}
+                            TARGET=${TARGET:-unknown}
+                            EKS_CLUSTER_NAME=${EKS_CLUSTER_NAME:-harness-eks-parson}
 
                             if [ -z "$WORKSPACE_TEMPLATE_ID" ] || [ "$WORKSPACE_TEMPLATE_ID" = "null" ]; then
                               case "$TARGET" in
@@ -264,7 +270,7 @@ pipeline:
                             
                             # If no created_at, use workspace created timestamp
                             if [ -z "$CREATED_AT" ]; then
-                              CREATED_AT=$(echo "$WS_DETAILS" | jq -r '.created // empty' 2>/dev/null || echo "")
+                              CREATED_AT=$(printf "%s" "$WS_DETAILS" | sed -n 's/.*"created":"\([^"]*\)".*/\1/p' | head -1)
                             fi
 
                             if [ -n "$OWNER_FILTER" ] && [ "$OWNER_FILTER" != "$OWNER" ]; then
@@ -499,7 +505,8 @@ pipeline:
 
                             if [ "$EXPIRED_COUNT" = "0" ] && [ "$ORPHAN_VPC_COUNT" = "0" ]; then
                               echo "✓ No expired sandboxes or orphaned ASG VPCs found!"
-                              echo "DESTROY_COUNT=0" >> $HARNESS_OUTPUT_FILE
+                              OUTPUT_FILE="${HARNESS_OUTPUT_FILE:-/tmp/harness_output.out}"
+                              printf 'DESTROY_COUNT=0\n' >> "$OUTPUT_FILE"
                               exit 0
                             fi
                             
@@ -531,10 +538,12 @@ pipeline:
 
                             TOTAL_COUNT=$((EXPIRED_COUNT + ORPHAN_VPC_COUNT))
                             echo "Total cleanup actions to trigger: $TOTAL_COUNT"
-                            echo "DESTROY_COUNT=$TOTAL_COUNT" >> $HARNESS_OUTPUT_FILE
+                            OUTPUT_FILE="${HARNESS_OUTPUT_FILE:-/tmp/harness_output.out}"
+                            printf 'DESTROY_COUNT=%s\n' "$TOTAL_COUNT" >> "$OUTPUT_FILE"
                           else
                             echo "No workspace data found"
-                            echo "DESTROY_COUNT=0" >> $HARNESS_OUTPUT_FILE
+                            OUTPUT_FILE="${HARNESS_OUTPUT_FILE:-/tmp/harness_output.out}"
+                            printf 'DESTROY_COUNT=0\n' >> "$OUTPUT_FILE"
                           fi
                     outputVariables:
                       - name: DESTROY_COUNT
@@ -606,7 +615,8 @@ pipeline:
                                   \"auto_approve\": \"true\"
                                 }")
                               
-                              EXEC_ID=$(echo "$RESPONSE" | jq -r '.data.planExecution.uuid // "unknown"')
+                              EXEC_ID=$(printf "%s" "$RESPONSE" | grep -o '"uuid":"[^"]*"' | head -1 | sed 's/.*"uuid":"//; s/"$//')
+                              EXEC_ID=${EXEC_ID:-unknown}
                               echo "  → Triggered execution: $EXEC_ID"
                               echo ""
                             fi
