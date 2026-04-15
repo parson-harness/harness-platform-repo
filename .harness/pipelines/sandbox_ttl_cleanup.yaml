@@ -429,7 +429,7 @@ pipeline:
 
                           ORPHANED_VPCS=""
 
-                          VPCS_XML=$(ec2_post "Action=DescribeVpcs&Filter.1.Name=tag:Project&Filter.1.Value.1=harness-demo&Filter.2.Name=tag:Stack&Filter.2.Value.1=asg&Filter.3.Name=tag:ManagedBy&Filter.3.Value.1=tofu&Version=2016-11-15")
+                          VPCS_XML=$(ec2_post "Action=DescribeVpcs&Version=2016-11-15")
 
                           while IFS='|' read -r VPC_ID NAME_TAG; do
                             if [ -z "$VPC_ID" ] || [ -z "$NAME_TAG" ]; then
