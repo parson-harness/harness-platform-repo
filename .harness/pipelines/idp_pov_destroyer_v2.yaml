@@ -23,6 +23,16 @@ pipeline:
       description: Owner name (identifies the workspace to destroy)
       required: true
       value: <+input>
+    - name: workspace_id
+      type: String
+      description: Stable workspace identifier for tag-aware sandbox cleanup
+      required: false
+      value: <+input>
+    - name: workspace_template_id
+      type: String
+      description: Workspace template identifier for tag-aware sandbox cleanup
+      required: false
+      value: <+input>
     - name: deployment_target
       type: String
       description: Deployment target stack to destroy. Use eks for shared-cluster sandboxes and asg for fully self-contained POV environments.

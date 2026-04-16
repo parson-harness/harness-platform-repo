@@ -5,10 +5,18 @@
 resource "kubernetes_namespace" "app" {
   metadata {
     name = local.k8s_namespace
-    labels = {
-      "app.kubernetes.io/managed-by" = "tofu"
-      "harness.io/owner"             = var.owner
-    }
+    labels = merge(
+      {
+        "app.kubernetes.io/managed-by" = "tofu"
+        "harness.io/owner"             = var.owner
+      },
+      var.workspace_id != "" ? {
+        "harness.io/workspace-id" = var.workspace_id
+      } : {},
+      var.workspace_template_id != "" ? {
+        "harness.io/workspace-template-id" = var.workspace_template_id
+      } : {}
+    )
   }
 }
 
@@ -35,11 +43,19 @@ resource "kubernetes_secret" "har_pull_secret" {
   metadata {
     name      = "${var.owner}demoapp-dockercfg"
     namespace = local.k8s_namespace
-    labels = {
-      "app.kubernetes.io/managed-by" = "tofu"
-      "harness.io/component"         = "har-pull-secret"
-      "owner"                        = var.owner
-    }
+    labels = merge(
+      {
+        "app.kubernetes.io/managed-by" = "tofu"
+        "harness.io/component"         = "har-pull-secret"
+        "owner"                        = var.owner
+      },
+      var.workspace_id != "" ? {
+        "harness.io/workspace-id" = var.workspace_id
+      } : {},
+      var.workspace_template_id != "" ? {
+        "harness.io/workspace-template-id" = var.workspace_template_id
+      } : {}
+    )
   }
 
   type = "kubernetes.io/dockercfg"
@@ -85,7 +101,7 @@ module "harness_service" {
   ecr_image_path         = var.artifact_registry_type == "ecr" ? local.ecr_image_path : ""
   aws_region             = var.aws_region
 
-  tags = ["tofu-managed", var.owner, "eks"]
+  tags = local.common_tag_values
 
   service_variables = [
     {
@@ -129,7 +145,7 @@ module "harness_environment_dev" {
   k8s_connector_ref         = local.k8s_connector_id
   k8s_namespace             = local.k8s_namespace
 
-  tags = ["tofu-managed", var.owner, "eks"]
+  tags = local.common_tag_values
 
   depends_on = [module.harness_connectors]
 }
@@ -168,7 +184,7 @@ module "harness_pipelines" {
   harness_api_key        = var.harness_api_key
 
   delegate_selector        = local.delegate_selector
-  pipeline_tags            = ["tofu-managed:true", "owner:${var.owner}", "deployment-target:eks", "managed-by:provisioner"]
+  pipeline_tags            = concat(["tofu-managed:true", "owner:${var.owner}", "deployment-target:eks", "managed-by:provisioner"], local.common_tag_values)
   enable_change_governance = var.enable_change_governance
 
   # Standard CI Gradle pipeline (with security scanning and supply chain)

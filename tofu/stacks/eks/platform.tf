@@ -30,6 +30,12 @@ locals {
   has_code_source            = var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != ""
   pipeline_git_connector_ref = var.github_token_ref != "" ? local.github_connector_id : var.github_connector_ref
 
+  common_tag_values = concat(
+    ["tofu-managed", var.owner, "eks"],
+    var.workspace_id != "" ? ["workspace-id:${var.workspace_id}"] : [],
+    var.workspace_template_id != "" ? ["workspace-template-id:${var.workspace_template_id}"] : []
+  )
+
   common_tags = {
     Project     = "harness-demo"
     Environment = var.environment
@@ -37,6 +43,16 @@ locals {
     Owner       = var.owner
     Stack       = "eks"
   }
+
+  common_tags_with_workspace = merge(
+    local.common_tags,
+    var.workspace_id != "" ? {
+      WorkspaceId = var.workspace_id
+    } : {},
+    var.workspace_template_id != "" ? {
+      WorkspaceTemplateId = var.workspace_template_id
+    } : {}
+  )
 }
 
 ################################################################################
@@ -58,7 +74,7 @@ module "harness_org_project" {
   project_name        = var.new_harness_project_name != "" ? var.new_harness_project_name : "${title(var.owner)} Demo"
   project_description = "Demo project for ${var.owner}"
 
-  tags = ["tofu-managed", var.owner, "eks"]
+  tags = local.common_tag_values
 }
 
 locals {
@@ -116,7 +132,7 @@ module "harness_connectors" {
   aws_connector_id          = local.aws_connector_id
   aws_connector_name        = local.aws_connector_name
   aws_connector_description = "AWS connector for ${local.owner_title} EKS stack"
-  connector_tags            = ["tofu-managed:true", "owner:${var.owner}", "stack:eks"]
+  connector_tags            = concat(["tofu-managed:true", "owner:${var.owner}", "stack:eks"], local.common_tag_values)
   aws_auth_type             = var.aws_auth_type
   aws_region                = var.aws_region
 

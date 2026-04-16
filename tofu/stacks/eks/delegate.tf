@@ -23,7 +23,7 @@ module "irsa_delegate_role" {
   # Use existing role if it already exists outside of Terraform state
   import_existing_role = var.import_existing_irsa_role
 
-  tags = local.common_tags
+  tags = local.common_tags_with_workspace
 }
 
 ################################################################################

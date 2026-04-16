@@ -608,6 +608,8 @@ pipeline:
                                 -H "Content-Type: application/json" \
                                 -d "{
                                   \"owner\": \"${OWNER}\",
+                                  \"workspace_id\": \"${WS_ID}\",
+                                  \"workspace_template_id\": \"${TEMPLATE_ID}\",
                                   \"deployment_target\": \"${TARGET}\",
                                   \"harness_account_id\": \"${TARGET_ACCOUNT_ID:-$ACCOUNT_ID}\",
                                   \"harness_endpoint\": \"${ENDPOINT}\",
