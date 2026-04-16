@@ -331,7 +331,7 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
       }
 
       delete_amis_and_snapshots() {
-        AMI_IDS=$(aws ec2 describe-images --owners self --query "Images[?starts_with(Name, '${AMI_PREFIX}-')].ImageId" --output text 2>/dev/null || true)
+        AMI_IDS=$(aws ec2 describe-images --owners self --query "Images[?starts_with(Name, '$${AMI_PREFIX}-')].ImageId" --output text 2>/dev/null || true)
         if [ -z "$${AMI_IDS}" ] || [ "$${AMI_IDS}" = "None" ]; then
           return 0
         fi
@@ -352,7 +352,7 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
 
       wait_for_ami_cleanup() {
         for _ in $(seq 1 30); do
-          REMAINING_AMIS=$(aws ec2 describe-images --owners self --query "Images[?starts_with(Name, '${AMI_PREFIX}-')].ImageId" --output text 2>/dev/null || true)
+          REMAINING_AMIS=$(aws ec2 describe-images --owners self --query "Images[?starts_with(Name, '$${AMI_PREFIX}-')].ImageId" --output text 2>/dev/null || true)
           if [ -z "$${REMAINING_AMIS}" ] || [ "$${REMAINING_AMIS}" = "None" ]; then
             return 0
           fi
