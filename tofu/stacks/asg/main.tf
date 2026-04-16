@@ -106,6 +106,16 @@ locals {
     Stack       = "asg"
   }
 
+  common_tags_with_workspace = merge(
+    local.common_tags,
+    var.workspace_id != "" ? {
+      WorkspaceId = var.workspace_id
+    } : {},
+    var.workspace_template_id != "" ? {
+      WorkspaceTemplateId = var.workspace_template_id
+    } : {}
+  )
+
   asg_alb_name_source      = "${local.name_prefix}-asg-alb"
   asg_prod_tg_name_source  = "${local.name_prefix}-asg-prod-tg"
   asg_stage_tg_name_source = "${local.name_prefix}-asg-stage-tg"
@@ -497,7 +507,7 @@ module "asg" {
   route53_zone_name = var.route53_zone_name
   acm_cert_arn      = var.acm_cert_arn
 
-  tags = local.common_tags
+  tags = local.common_tags_with_workspace
 
   depends_on = [terraform_data.cleanup_existing_asg_named_resources]
 }
@@ -566,7 +576,7 @@ resource "terraform_data" "cleanup_existing_packer_ci_user" {
 
 resource "aws_iam_user" "packer_ci" {
   name = "harness-packer-ci-${var.owner}"
-  tags = local.common_tags
+  tags = local.common_tags_with_workspace
 
   depends_on = [terraform_data.cleanup_existing_packer_ci_user]
 }
@@ -962,7 +972,7 @@ module "irsa_delegate_role" {
   enable_asg_permissions    = true
   enable_lambda_permissions = false
 
-  tags = local.common_tags
+  tags = local.common_tags_with_workspace
 }
 
 ################################################################################
