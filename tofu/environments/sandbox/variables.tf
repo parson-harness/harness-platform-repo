@@ -600,6 +600,17 @@ variable "asg_create_dns_record" {
   default     = false
 }
 
+variable "asg_ci_auth_mode" {
+  description = "Authentication mode for ASG CI Packer builds: access_key or oidc"
+  type        = string
+  default     = "access_key"
+
+  validation {
+    condition     = contains(["access_key", "oidc"], var.asg_ci_auth_mode)
+    error_message = "asg_ci_auth_mode must be either access_key or oidc"
+  }
+}
+
 variable "asg_packer_aws_oidc_role_arn" {
   description = "Optional AWS IAM role ARN for Harness Cloud CI to assume via OIDC when building ASG AMIs"
   type        = string

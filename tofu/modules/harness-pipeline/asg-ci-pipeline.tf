@@ -312,6 +312,7 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                         outputVariables:
                           - name: IMAGE_TAG
                           - name: AMI_NAME
+%{if var.asg_ci_auth_mode == "oidc"~}
                   - step:
                       type: Plugin
                       name: Assume AWS Role with OIDC
@@ -320,8 +321,9 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                         image: plugins/aws-oidc
                         settings:
                           iamRoleArn: ${var.asg_aws_oidc_role_arn}
-                          roleSessionName: ${var.asg_ci_pipeline_id}
+                          role_session_name: ${var.asg_ci_pipeline_id}
                           duration: 3600
+%{endif~}
                   - step:
                       type: Run
                       name: Build AMI with Packer
@@ -397,9 +399,14 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                           APP_VERSION: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
                           AMI_NAME: <+execution.steps.build_info.output.outputVariables.AMI_NAME>
                           OWNER: ${var.asg_packer_owner}
-                          AWS_ACCESS_KEY_ID: <+execution.steps.assume_role_with_oidc.output.outputVariables.AWS_ACCESS_KEY_ID>
-                          AWS_SECRET_ACCESS_KEY: <+execution.steps.assume_role_with_oidc.output.outputVariables.AWS_SECRET_ACCESS_KEY>
-                          AWS_SESSION_TOKEN: <+execution.steps.assume_role_with_oidc.output.outputVariables.AWS_SESSION_TOKEN>
+%{if var.asg_ci_auth_mode == "oidc"~}
+                          AWS_ACCESS_KEY_ID: <+steps.assume_role_with_oidc.output.outputVariables.AWS_ACCESS_KEY_ID>
+                          AWS_SECRET_ACCESS_KEY: <+steps.assume_role_with_oidc.output.outputVariables.AWS_SECRET_ACCESS_KEY>
+                          AWS_SESSION_TOKEN: <+steps.assume_role_with_oidc.output.outputVariables.AWS_SESSION_TOKEN>
+%{else~}
+                          AWS_ACCESS_KEY_ID: <+secrets.getValue("${var.asg_aws_access_key_secret}")>
+                          AWS_SECRET_ACCESS_KEY: <+secrets.getValue("${var.asg_aws_secret_key_secret}")>
+%{endif~}
                           AWS_DEFAULT_REGION: ${var.asg_packer_region}
                         outputVariables:
                           - name: AMI_ID

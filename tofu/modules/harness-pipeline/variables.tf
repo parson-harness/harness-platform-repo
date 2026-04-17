@@ -339,8 +339,31 @@ variable "asg_packer_region" {
   default     = "us-east-1"
 }
 
+variable "asg_ci_auth_mode" {
+  description = "Authentication mode for ASG CI Packer builds: access_key or oidc"
+  type        = string
+  default     = "access_key"
+
+  validation {
+    condition     = contains(["access_key", "oidc"], var.asg_ci_auth_mode)
+    error_message = "asg_ci_auth_mode must be either access_key or oidc"
+  }
+}
+
 variable "asg_aws_oidc_role_arn" {
   description = "AWS IAM role ARN assumed by the ASG CI pipeline via Harness OIDC for ephemeral Packer build credentials"
+  type        = string
+  default     = ""
+}
+
+variable "asg_aws_access_key_secret" {
+  description = "Name of the Harness secret holding AWS_ACCESS_KEY_ID for ASG Packer builds when using access_key auth"
+  type        = string
+  default     = ""
+}
+
+variable "asg_aws_secret_key_secret" {
+  description = "Name of the Harness secret holding AWS_SECRET_ACCESS_KEY for ASG Packer builds when using access_key auth"
   type        = string
   default     = ""
 }

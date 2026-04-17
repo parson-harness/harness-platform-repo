@@ -100,6 +100,8 @@ locals {
   har_upstream_proxy_id = "${var.owner}-dockerhub-proxy"
   har_image_name        = "${var.owner}demoapp"
   packer_ci_role_name   = "harness-packer-ci-${var.owner}"
+  packer_ci_access_key_secret_identifier = "${var.owner}_aws_access_key_id"
+  packer_ci_secret_key_secret_identifier = "${var.owner}_aws_secret_access_key"
   harness_oidc_provider_url = "app.harness.io/ng/api/oidc/account/${var.harness_account_id}"
   harness_oidc_provider_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.harness_oidc_provider_url}"
   asg_file_store_folder_identifier = substr(replace("${var.owner}_demo_app_asg_asg", "-", "_"), 0, 128)
@@ -550,79 +552,93 @@ module "asg" {
 # IAM User + Harness Secrets for Packer CI Builds
 ################################################################################
 
-resource "terraform_data" "cleanup_existing_packer_ci_user" {
-  provisioner "local-exec" {
-    interpreter = ["/bin/sh", "-c"]
-    command     = <<-EOT
-      set +e
-      USER_NAME="harness-packer-ci-${var.owner}"
-      ROLE_NAME="harness-packer-ci-${var.owner}"
-      IAM_ACCESS_KEY_ID="$${AWS_ACCESS_KEY_ID}"
-      IAM_SECRET_ACCESS_KEY="$${AWS_SECRET_ACCESS_KEY}"
-      IAM_AUTH_USER="$${IAM_ACCESS_KEY_ID}:$${IAM_SECRET_ACCESS_KEY}"
+resource "aws_iam_user" "packer_ci" {
+  count = var.asg_ci_auth_mode == "access_key" ? 1 : 0
+  name  = local.packer_ci_role_name
+  tags  = local.common_tags_with_workspace
 
-      iam_get() {
-        curl -s --aws-sigv4 "aws:amz:us-east-1:iam" \
-          --user "$${IAM_AUTH_USER}" \
-          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
-          "https://iam.amazonaws.com/$1"
+  depends_on = [terraform_data.cleanup_existing_packer_ci_user]
+}
+
+resource "aws_iam_user_policy" "packer_ci" {
+  count = var.asg_ci_auth_mode == "access_key" ? 1 : 0
+  name  = "harness-packer-ci-policy"
+  user  = aws_iam_user.packer_ci[0].name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "PackerAMIBuild"
+        Effect = "Allow"
+        Action = [
+          "ec2:RunInstances",
+          "ec2:StopInstances",
+          "ec2:TerminateInstances",
+          "ec2:CreateImage",
+          "ec2:CreateTags",
+          "ec2:DeleteTags",
+          "ec2:ModifyImageAttribute",
+          "ec2:DescribeImages",
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceStatus",
+          "ec2:DescribeRegions",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeVpcs",
+          "ec2:DescribeVolumes",
+          "ec2:CreateSecurityGroup",
+          "ec2:DeleteSecurityGroup",
+          "ec2:AuthorizeSecurityGroupIngress",
+          "ec2:RevokeSecurityGroupIngress",
+          "ec2:CreateKeyPair",
+          "ec2:DeleteKeyPair",
+          "ec2:DescribeKeyPairs"
+        ]
+        Resource = "*"
       }
-      iam_post() {
-        curl -s --aws-sigv4 "aws:amz:us-east-1:iam" \
-          --user "$${IAM_AUTH_USER}" \
-          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
-          -d "$1" "https://iam.amazonaws.com/"
-      }
+    ]
+  })
+}
 
-      RESPONSE=$(iam_get "?Action=GetUser&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
-      if echo "$${RESPONSE}" | grep -q "<UserName>"; then
-        ACCESS_KEYS_XML=$(iam_get "?Action=ListAccessKeys&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
-        for KEY_ID in $(echo "$${ACCESS_KEYS_XML}" | grep -o '<AccessKeyId>[^<]*</AccessKeyId>' | sed 's/<[^>]*>//g'); do
-          iam_post "Action=DeleteAccessKey&UserName=$${USER_NAME}&AccessKeyId=$${KEY_ID}&Version=2010-05-08" >/dev/null 2>&1 || true
-        done
+resource "aws_iam_access_key" "packer_ci" {
+  count = var.asg_ci_auth_mode == "access_key" ? 1 : 0
+  user  = aws_iam_user.packer_ci[0].name
+}
 
-        POLICIES_XML=$(iam_get "?Action=ListUserPolicies&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
-        for POLICY in $(echo "$${POLICIES_XML}" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
-          iam_post "Action=DeleteUserPolicy&UserName=$${USER_NAME}&PolicyName=$${POLICY}&Version=2010-05-08" >/dev/null 2>&1 || true
-        done
+resource "harness_platform_secret_text" "packer_aws_access_key" {
+  count = var.asg_ci_auth_mode == "access_key" ? 1 : 0
 
-        ATTACHED_XML=$(iam_get "?Action=ListAttachedUserPolicies&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
-        for ARN in $(echo "$${ATTACHED_XML}" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
-          iam_post "Action=DetachUserPolicy&UserName=$${USER_NAME}&PolicyArn=$${ARN}&Version=2010-05-08" >/dev/null 2>&1 || true
-        done
+  identifier = local.packer_ci_access_key_secret_identifier
+  name       = "AWS-Access-Key-ID-Packer"
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
 
-        GROUPS_XML=$(iam_get "?Action=ListGroupsForUser&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
-        for GROUP in $(echo "$${GROUPS_XML}" | grep -o '<GroupName>[^<]*</GroupName>' | sed 's/<[^>]*>//g'); do
-          iam_post "Action=RemoveUserFromGroup&UserName=$${USER_NAME}&GroupName=$${GROUP}&Version=2010-05-08" >/dev/null 2>&1 || true
-        done
+  secret_manager_identifier = "harnessSecretManager"
+  value_type                = "Inline"
+  value                     = aws_iam_access_key.packer_ci[0].id
 
-        iam_post "Action=DeleteLoginProfile&UserName=$${USER_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
-        iam_post "Action=DeleteUser&UserName=$${USER_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
-      fi
+  depends_on = [aws_iam_access_key.packer_ci]
+}
 
-      ROLE_RESPONSE=$(iam_get "?Action=GetRole&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
-      if echo "$${ROLE_RESPONSE}" | grep -q "<RoleName>"; then
-        ROLE_POLICIES_XML=$(iam_get "?Action=ListRolePolicies&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
-        for POLICY in $(echo "$${ROLE_POLICIES_XML}" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
-          iam_post "Action=DeleteRolePolicy&RoleName=$${ROLE_NAME}&PolicyName=$${POLICY}&Version=2010-05-08" >/dev/null 2>&1 || true
-        done
+resource "harness_platform_secret_text" "packer_aws_secret_key" {
+  count = var.asg_ci_auth_mode == "access_key" ? 1 : 0
 
-        ROLE_ATTACHED_XML=$(iam_get "?Action=ListAttachedRolePolicies&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
-        for ARN in $(echo "$${ROLE_ATTACHED_XML}" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
-          iam_post "Action=DetachRolePolicy&RoleName=$${ROLE_NAME}&PolicyArn=$${ARN}&Version=2010-05-08" >/dev/null 2>&1 || true
-        done
+  identifier = local.packer_ci_secret_key_secret_identifier
+  name       = "AWS-Secret-Access-Key-Packer"
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
 
-        iam_post "Action=DeleteRole&RoleName=$${ROLE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
-      fi
+  secret_manager_identifier = "harnessSecretManager"
+  value_type                = "Inline"
+  value                     = aws_iam_access_key.packer_ci[0].secret
 
-      exit 0
-    EOT
-  }
+  depends_on = [aws_iam_access_key.packer_ci]
 }
 
 resource "aws_iam_role" "packer_ci" {
-  name = local.packer_ci_role_name
-  tags = local.common_tags_with_workspace
+  count = var.asg_ci_auth_mode == "oidc" ? 1 : 0
+  name  = local.packer_ci_role_name
+  tags  = local.common_tags_with_workspace
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -646,8 +662,9 @@ resource "aws_iam_role" "packer_ci" {
 }
 
 resource "aws_iam_role_policy" "packer_ci" {
-  name = "harness-packer-ci-policy"
-  role = aws_iam_role.packer_ci.name
+  count = var.asg_ci_auth_mode == "oidc" ? 1 : 0
+  name  = "harness-packer-ci-policy"
+  role  = aws_iam_role.packer_ci[0].name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -909,9 +926,12 @@ module "harness_pipelines_asg" {
   harness_api_key                  = var.harness_api_key
   standard_ci_gradle_test_packages = var.standard_ci_gradle_test_packages
 
+  asg_ci_auth_mode          = var.asg_ci_auth_mode
   asg_packer_owner          = var.owner
   asg_packer_region         = var.aws_region
-  asg_aws_oidc_role_arn     = aws_iam_role.packer_ci.arn
+  asg_aws_access_key_secret = local.packer_ci_access_key_secret_identifier
+  asg_aws_secret_key_secret = local.packer_ci_secret_key_secret_identifier
+  asg_aws_oidc_role_arn     = var.asg_ci_auth_mode == "oidc" ? aws_iam_role.packer_ci[0].arn : ""
 
   enable_change_governance = var.enable_change_governance
   delegate_selector        = local.delegate_selector

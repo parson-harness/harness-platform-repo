@@ -157,7 +157,9 @@ locals {
   packer_ci_role_name                 = "harness-packer-ci-${var.owner}"
   harness_oidc_provider_url           = "app.harness.io/ng/api/oidc/account/${var.harness_account_id}"
   harness_oidc_provider_arn           = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.harness_oidc_provider_url}"
-  resolved_asg_packer_aws_oidc_role_arn = var.asg_packer_aws_oidc_role_arn != "" ? var.asg_packer_aws_oidc_role_arn : aws_iam_role.packer_ci[0].arn
+  packer_ci_access_key_secret_identifier = "${var.owner}_aws_access_key_id"
+  packer_ci_secret_key_secret_identifier = "${var.owner}_aws_secret_access_key"
+  resolved_asg_packer_aws_oidc_role_arn = var.asg_packer_aws_oidc_role_arn != "" ? var.asg_packer_aws_oidc_role_arn : (var.asg_ci_auth_mode == "oidc" ? aws_iam_role.packer_ci[0].arn : "")
 }
 
 ################################################################################
@@ -352,7 +354,7 @@ resource "terraform_data" "cleanup_existing_packer_ci_user" {
 }
 
 resource "aws_iam_role" "packer_ci" {
-  count = local.enable_asg ? 1 : 0
+  count = local.enable_asg && var.asg_ci_auth_mode == "oidc" ? 1 : 0
   name  = local.packer_ci_role_name
   tags  = local.common_tags
 
@@ -378,7 +380,7 @@ resource "aws_iam_role" "packer_ci" {
 }
 
 resource "aws_iam_role_policy" "packer_ci" {
-  count = local.enable_asg ? 1 : 0
+  count = local.enable_asg && var.asg_ci_auth_mode == "oidc" ? 1 : 0
   name  = "harness-packer-ci-policy"
   role  = aws_iam_role.packer_ci[0].name
   policy = jsonencode({
@@ -415,6 +417,89 @@ resource "aws_iam_role_policy" "packer_ci" {
       }
     ]
   })
+}
+
+resource "aws_iam_user" "packer_ci" {
+  count = local.enable_asg && var.asg_ci_auth_mode == "access_key" ? 1 : 0
+  name  = local.packer_ci_role_name
+  tags  = local.common_tags
+
+  depends_on = [terraform_data.cleanup_existing_packer_ci_user]
+}
+
+resource "aws_iam_user_policy" "packer_ci" {
+  count = local.enable_asg && var.asg_ci_auth_mode == "access_key" ? 1 : 0
+  name  = "harness-packer-ci-policy"
+  user  = aws_iam_user.packer_ci[0].name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "PackerAMIBuild"
+        Effect = "Allow"
+        Action = [
+          "ec2:RunInstances",
+          "ec2:StopInstances",
+          "ec2:TerminateInstances",
+          "ec2:CreateImage",
+          "ec2:CreateTags",
+          "ec2:DeleteTags",
+          "ec2:ModifyImageAttribute",
+          "ec2:DescribeImages",
+          "ec2:DescribeInstances",
+          "ec2:DescribeInstanceStatus",
+          "ec2:DescribeRegions",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeVpcs",
+          "ec2:DescribeVolumes",
+          "ec2:CreateSecurityGroup",
+          "ec2:DeleteSecurityGroup",
+          "ec2:AuthorizeSecurityGroupIngress",
+          "ec2:RevokeSecurityGroupIngress",
+          "ec2:CreateKeyPair",
+          "ec2:DeleteKeyPair",
+          "ec2:DescribeKeyPairs"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_access_key" "packer_ci" {
+  count = local.enable_asg && var.asg_ci_auth_mode == "access_key" ? 1 : 0
+  user  = aws_iam_user.packer_ci[0].name
+}
+
+resource "harness_platform_secret_text" "packer_aws_access_key" {
+  count = local.enable_asg && var.asg_ci_auth_mode == "access_key" ? 1 : 0
+
+  identifier = local.packer_ci_access_key_secret_identifier
+  name       = "AWS-Access-Key-ID-Packer"
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
+
+  secret_manager_identifier = "harnessSecretManager"
+  value_type                = "Inline"
+  value                     = aws_iam_access_key.packer_ci[0].id
+
+  depends_on = [aws_iam_access_key.packer_ci]
+}
+
+resource "harness_platform_secret_text" "packer_aws_secret_key" {
+  count = local.enable_asg && var.asg_ci_auth_mode == "access_key" ? 1 : 0
+
+  identifier = local.packer_ci_secret_key_secret_identifier
+  name       = "AWS-Secret-Access-Key-Packer"
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
+
+  secret_manager_identifier = "harnessSecretManager"
+  value_type                = "Inline"
+  value                     = aws_iam_access_key.packer_ci[0].secret
+
+  depends_on = [aws_iam_access_key.packer_ci]
 }
 
 ################################################################################
@@ -971,8 +1056,11 @@ module "harness_pipelines_asg" {
   harness_project_id          = local.resolved_project_id
   harness_api_key             = var.harness_api_key
 
+  asg_ci_auth_mode          = var.asg_ci_auth_mode
   asg_packer_owner          = var.owner
   asg_packer_region         = "us-east-1"
+  asg_aws_access_key_secret = local.packer_ci_access_key_secret_identifier
+  asg_aws_secret_key_secret = local.packer_ci_secret_key_secret_identifier
   asg_aws_oidc_role_arn     = local.resolved_asg_packer_aws_oidc_role_arn
 
   delegate_selector = "delegate-${var.owner}"

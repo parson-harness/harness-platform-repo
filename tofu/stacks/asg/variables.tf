@@ -295,6 +295,17 @@ variable "create_asg_ci_pipeline" {
   default     = true
 }
 
+variable "asg_ci_auth_mode" {
+  description = "Authentication mode for ASG CI Packer builds: access_key or oidc"
+  type        = string
+  default     = "access_key"
+
+  validation {
+    condition     = contains(["access_key", "oidc"], var.asg_ci_auth_mode)
+    error_message = "asg_ci_auth_mode must be either access_key or oidc"
+  }
+}
+
 variable "enable_change_governance" {
   description = "Enable policy-driven change governance gates in generated ASG deployment pipelines"
   type        = bool
