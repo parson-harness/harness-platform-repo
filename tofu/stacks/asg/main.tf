@@ -102,6 +102,7 @@ locals {
   packer_ci_role_name   = "harness-packer-ci-${var.owner}"
   harness_oidc_provider_url = "app.harness.io/ng/api/oidc/account/${var.harness_account_id}"
   harness_oidc_provider_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.harness_oidc_provider_url}"
+  asg_file_store_folder_identifier = substr(replace("${var.owner}_demo_app_asg_asg", "-", "_"), 0, 128)
 
   common_tags = {
     Project     = "harness-demo"
@@ -193,6 +194,9 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/sh", "-c"]
+    environment = {
+      HARNESS_API_KEY = var.harness_api_key
+    }
     command     = <<-EOT
       set +e
       AWS_REGION="${var.aws_region}"
@@ -208,6 +212,11 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
       INSTANCE_PROFILE_NAME="${local.name_prefix}-asg-instance-profile"
       INSTANCE_ROLE_NAME="${local.name_prefix}-asg-instance-role"
       VPC_NAME="${local.name_prefix}-asg-vpc"
+      PLATFORM_ENDPOINT="${var.harness_endpoint}"
+      PLATFORM_ENDPOINT="$${PLATFORM_ENDPOINT%/gratis}"
+      ORG_ID="${local.resolved_org_id}"
+      PROJECT_ID="${local.resolved_project_id}"
+      ASG_FILE_STORE_FOLDER_IDENTIFIER="${local.asg_file_store_folder_identifier}"
 
       STATE_CONTENT=""
       if [ -f "$${STATE_FILE}" ]; then
@@ -225,6 +234,22 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
         fi
 
         echo "$${STATE_CONTENT}" | grep -Fq "$${RESOURCE_FRAGMENT}"
+      }
+
+      delete_harness_file_store_folder() {
+        RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$${PLATFORM_ENDPOINT}/ng/api/file-store/$${ASG_FILE_STORE_FOLDER_IDENTIFIER}?accountIdentifier=${var.harness_account_id}&orgIdentifier=$${ORG_ID}&projectIdentifier=$${PROJECT_ID}&forceDelete=true" \
+          -H "x-api-key: $${HARNESS_API_KEY}" \
+          -H "Content-Type: application/json" 2>/dev/null)
+        HTTP_CODE=$(echo "$${RESP}" | tail -n1)
+        case "$${HTTP_CODE}" in
+          200|204|404)
+            return 0
+            ;;
+          *)
+            echo "Harness File Store cleanup returned HTTP $${HTTP_CODE} for $${ASG_FILE_STORE_FOLDER_IDENTIFIER}"
+            return 0
+            ;;
+        esac
       }
 
       iam_get() {
@@ -488,6 +513,10 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
         if [ -n "$${VPC_ID}" ]; then
           cleanup_vpc_dependencies "$${VPC_ID}"
         fi
+      fi
+
+      if ! state_tracks_resource "module.harness_service_asg" "harness_platform_file_store_folder" "asg_startup_script"; then
+        delete_harness_file_store_folder
       fi
 
       exit 0
@@ -788,7 +817,7 @@ module "harness_service_asg" {
     }
   ]
 
-  depends_on = [module.harness_connectors, module.asg, module.harness_code_repo]
+  depends_on = [module.harness_connectors, module.asg, module.harness_code_repo, terraform_data.cleanup_existing_asg_named_resources]
 }
 
 ################################################################################
