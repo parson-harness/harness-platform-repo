@@ -3,6 +3,14 @@ package io.harness.demo.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,6 +39,8 @@ public class AppConfig {
     private boolean chaosEnabled = true;
     private int chaosLatencyMs = 0;
     private double chaosErrorRate = 0.0;
+    private transient volatile boolean asgDeploymentTrackResolved = false;
+    private transient String inferredAsgDeploymentTrack = "";
     
     /**
      * Returns the effective deployment variant for display.
@@ -44,10 +54,21 @@ public class AppConfig {
             return deploymentVariant;
         }
         // Otherwise use track (canary deployment)
+        String effectiveTrack = getDeploymentTrack();
+        if (effectiveTrack != null && !effectiveTrack.isEmpty()) {
+            return effectiveTrack;
+        }
+        return "stable";
+    }
+
+    public String getDeploymentTrack() {
         if (deploymentTrack != null && !deploymentTrack.isEmpty()) {
             return deploymentTrack;
         }
-        return "stable";
+        if (!"asg".equalsIgnoreCase(deploymentTarget)) {
+            return deploymentTrack;
+        }
+        return resolveAsgDeploymentTrack();
     }
 
     public String getDisplayVersion() {
@@ -81,5 +102,108 @@ public class AppConfig {
             default:
                 return "#8B5CF6"; // Purple for stable
         }
+    }
+
+    private String resolveAsgDeploymentTrack() {
+        if (asgDeploymentTrackResolved) {
+            return inferredAsgDeploymentTrack;
+        }
+        synchronized (this) {
+            if (asgDeploymentTrackResolved) {
+                return inferredAsgDeploymentTrack;
+            }
+            inferredAsgDeploymentTrack = inferDeploymentTrackFromAsgName(resolveAutoScalingGroupName());
+            asgDeploymentTrackResolved = true;
+            return inferredAsgDeploymentTrack;
+        }
+    }
+
+    protected String inferDeploymentTrackFromAsgName(String autoScalingGroupName) {
+        if (autoScalingGroupName == null || autoScalingGroupName.isBlank()) {
+            return "";
+        }
+        return autoScalingGroupName.endsWith("__Canary") ? "canary" : "stable";
+    }
+
+    protected String resolveAutoScalingGroupName() {
+        String metadataToken = fetchMetadataToken();
+        String instanceId = readMetadata("/latest/meta-data/instance-id", metadataToken);
+        String metadataRegion = readMetadata("/latest/meta-data/placement/region", metadataToken);
+        String resolvedRegion = metadataRegion != null && !metadataRegion.isBlank() ? metadataRegion.trim() : region;
+        if (instanceId == null || instanceId.isBlank() || resolvedRegion == null || resolvedRegion.isBlank()) {
+            return "";
+        }
+
+        try {
+            Process process = new ProcessBuilder(
+                "aws",
+                "autoscaling",
+                "describe-auto-scaling-instances",
+                "--instance-ids",
+                instanceId.trim(),
+                "--region",
+                resolvedRegion,
+                "--query",
+                "AutoScalingInstances[0].AutoScalingGroupName",
+                "--output",
+                "text"
+            ).start();
+
+            if (!process.waitFor(3, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return "";
+            }
+
+            if (process.exitValue() != 0) {
+                return "";
+            }
+
+            String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8).trim();
+            if (output.isEmpty() || "None".equalsIgnoreCase(output) || "null".equalsIgnoreCase(output)) {
+                return "";
+            }
+            return output;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private String fetchMetadataToken() {
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://169.254.169.254/latest/api/token"))
+                .timeout(Duration.ofSeconds(2))
+                .header("X-aws-ec2-metadata-token-ttl-seconds", "21600")
+                .method("PUT", HttpRequest.BodyPublishers.noBody())
+                .build();
+            HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                return response.body();
+            }
+        } catch (Exception e) {
+            return "";
+        }
+        return "";
+    }
+
+    private String readMetadata(String path, String metadataToken) {
+        try {
+            HttpRequest.Builder builder = HttpRequest.newBuilder()
+                .uri(URI.create("http://169.254.169.254" + path))
+                .timeout(Duration.ofSeconds(2))
+                .GET();
+
+            if (metadataToken != null && !metadataToken.isBlank()) {
+                builder.header("X-aws-ec2-metadata-token", metadataToken);
+            }
+
+            HttpResponse<String> response = HttpClient.newHttpClient().send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                return response.body();
+            }
+        } catch (Exception e) {
+            return "";
+        }
+        return "";
     }
 }

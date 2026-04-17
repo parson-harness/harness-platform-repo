@@ -16,6 +16,11 @@
 ################################################################################
 set -euo pipefail
 
+LOG_FILE="/var/log/harness-demo-user-data.log"
+STATUS_FILE="/var/lib/harness-demo/user-data-status"
+mkdir -p /var/lib/harness-demo
+exec > >(tee -a "$LOG_FILE" | logger -t harness-demo-user-data -s 2>/dev/console) 2>&1
+
 DEPLOYMENT_VARIANT=""
 DEPLOYMENT_TRACK="stable"
 METADATA_TOKEN="$(curl -sS -m 2 -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" || true)"
@@ -74,5 +79,22 @@ BUILD_ID=<+pipeline.executionId>
 ENVEOF
 
 chown harness-app:harness-app /etc/harness-demo-app.env
+
+cat > "$STATUS_FILE" <<STATUSEOF
+instance_id=${INSTANCE_ID}
+region=${REGION}
+asg_name=${ASG_NAME:-}
+bg_version=${BG_VERSION:-}
+deployment_variant=${DEPLOYMENT_VARIANT}
+deployment_track=${DEPLOYMENT_TRACK}
+app_version=<+pipeline.variables.ami_name>
+environment=<+env.name>
+deployment_strategy=<+pipeline.variables.deployment_strategy>
+deployed_ami=<+artifact.metadata.ami>
+execution_id=<+pipeline.executionId>
+env_file_size=$(wc -c < /etc/harness-demo-app.env | tr -d ' ')
+STATUSEOF
+
+chmod 644 "$STATUS_FILE"
 
 systemctl restart harness-demo-app

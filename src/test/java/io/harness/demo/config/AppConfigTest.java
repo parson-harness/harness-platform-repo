@@ -117,6 +117,42 @@ class AppConfigTest {
             appConfig.setDeploymentTrack("stable");
             assertEquals("stable", appConfig.getEffectiveVariant());
         }
+
+        @Test
+        @DisplayName("Should infer canary for ASG instances when deployment track env is empty")
+        void getEffectiveVariant_shouldInferCanaryForAsgWhenTrackEmpty() {
+            TestableAppConfig testableAppConfig = new TestableAppConfig("harness-demo-toddasg-asg__Canary");
+            testableAppConfig.setDeploymentTarget("asg");
+            testableAppConfig.setDeploymentVariant("");
+            testableAppConfig.setDeploymentTrack("");
+
+            assertEquals("canary", testableAppConfig.getDeploymentTrack());
+            assertEquals("canary", testableAppConfig.getEffectiveVariant());
+        }
+
+        @Test
+        @DisplayName("Should infer stable for non-canary ASG instances when deployment track env is empty")
+        void getEffectiveVariant_shouldInferStableForAsgWhenTrackEmpty() {
+            TestableAppConfig testableAppConfig = new TestableAppConfig("harness-demo-toddasg-asg");
+            testableAppConfig.setDeploymentTarget("asg");
+            testableAppConfig.setDeploymentVariant("");
+            testableAppConfig.setDeploymentTrack("");
+
+            assertEquals("stable", testableAppConfig.getDeploymentTrack());
+            assertEquals("stable", testableAppConfig.getEffectiveVariant());
+        }
+
+        @Test
+        @DisplayName("Should not infer ASG track when deployment target is not ASG")
+        void getEffectiveVariant_shouldNotInferAsgTrackForNonAsgTarget() {
+            TestableAppConfig testableAppConfig = new TestableAppConfig("harness-demo-toddasg-asg__Canary");
+            testableAppConfig.setDeploymentTarget("kubernetes");
+            testableAppConfig.setDeploymentVariant("");
+            testableAppConfig.setDeploymentTrack("");
+
+            assertEquals("", testableAppConfig.getDeploymentTrack());
+            assertEquals("stable", testableAppConfig.getEffectiveVariant());
+        }
     }
 
     @Nested
@@ -233,6 +269,19 @@ class AppConfigTest {
         void shouldSetCustomerLogo() {
             appConfig.setCustomerLogo("https://example.com/logo.png");
             assertEquals("https://example.com/logo.png", appConfig.getCustomerLogo());
+        }
+    }
+
+    private static final class TestableAppConfig extends AppConfig {
+        private final String autoScalingGroupName;
+
+        private TestableAppConfig(String autoScalingGroupName) {
+            this.autoScalingGroupName = autoScalingGroupName;
+        }
+
+        @Override
+        protected String resolveAutoScalingGroupName() {
+            return autoScalingGroupName;
         }
     }
 }

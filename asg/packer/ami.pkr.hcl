@@ -103,7 +103,7 @@ build {
 
   provisioner "shell" {
     inline = [
-      "sudo tee /etc/systemd/system/harness-demo-app.service > /dev/null <<'SYSTEMD'\n[Unit]\nDescription=Harness Demo App\nAfter=network.target\n\n[Service]\nType=simple\nUser=harness-app\nEnvironmentFile=/etc/harness-demo-app.env\nWorkingDirectory=/opt/app\nExecStart=/usr/bin/java -jar /opt/app/app.jar --server.port=8080\nRestart=always\nRestartSec=10\nStandardOutput=journal\nStandardError=journal\n\n[Install]\nWantedBy=multi-user.target\nSYSTEMD",
+      "sudo tee /etc/systemd/system/harness-demo-app.service > /dev/null <<'SYSTEMD'\n[Unit]\nDescription=Harness Demo App\nAfter=network.target\nStartLimitIntervalSec=0\n\n[Service]\nType=simple\nUser=harness-app\nEnvironmentFile=/etc/harness-demo-app.env\nWorkingDirectory=/opt/app\nExecStartPre=/bin/sh -c 'test -s /etc/harness-demo-app.env'\nExecStart=/usr/bin/java -jar /opt/app/app.jar --server.port=8080\nRestart=always\nRestartSec=10\nStandardOutput=journal\nStandardError=journal\n\n[Install]\nWantedBy=multi-user.target\nSYSTEMD",
       "sudo systemctl daemon-reload",
       "sudo systemctl enable harness-demo-app"
     ]
