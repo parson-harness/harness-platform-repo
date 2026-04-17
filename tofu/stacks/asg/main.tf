@@ -548,6 +548,76 @@ module "asg" {
   depends_on = [terraform_data.cleanup_existing_asg_named_resources]
 }
 
+resource "terraform_data" "cleanup_existing_packer_ci_user" {
+  provisioner "local-exec" {
+    interpreter = ["/bin/sh", "-c"]
+    command     = <<-EOT
+      set +e
+      USER_NAME="harness-packer-ci-${var.owner}"
+      ROLE_NAME="harness-packer-ci-${var.owner}"
+      IAM_ACCESS_KEY_ID="$${AWS_ACCESS_KEY_ID}"
+      IAM_SECRET_ACCESS_KEY="$${AWS_SECRET_ACCESS_KEY}"
+      IAM_AUTH_USER="$${IAM_ACCESS_KEY_ID}:$${IAM_SECRET_ACCESS_KEY}"
+
+      iam_get() {
+        curl -s --aws-sigv4 "aws:amz:us-east-1:iam" \
+          --user "$${IAM_AUTH_USER}" \
+          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
+          "https://iam.amazonaws.com/$1"
+      }
+      iam_post() {
+        curl -s --aws-sigv4 "aws:amz:us-east-1:iam" \
+          --user "$${IAM_AUTH_USER}" \
+          -H "x-amz-security-token: $${AWS_SESSION_TOKEN}" \
+          -d "$1" "https://iam.amazonaws.com/"
+      }
+
+      RESPONSE=$(iam_get "?Action=GetUser&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
+      if echo "$${RESPONSE}" | grep -q "<UserName>"; then
+        ACCESS_KEYS_XML=$(iam_get "?Action=ListAccessKeys&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
+        for KEY_ID in $(echo "$${ACCESS_KEYS_XML}" | grep -o '<AccessKeyId>[^<]*</AccessKeyId>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DeleteAccessKey&UserName=$${USER_NAME}&AccessKeyId=$${KEY_ID}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        POLICIES_XML=$(iam_get "?Action=ListUserPolicies&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
+        for POLICY in $(echo "$${POLICIES_XML}" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DeleteUserPolicy&UserName=$${USER_NAME}&PolicyName=$${POLICY}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        ATTACHED_XML=$(iam_get "?Action=ListAttachedUserPolicies&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
+        for ARN in $(echo "$${ATTACHED_XML}" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DetachUserPolicy&UserName=$${USER_NAME}&PolicyArn=$${ARN}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        GROUPS_XML=$(iam_get "?Action=ListGroupsForUser&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
+        for GROUP in $(echo "$${GROUPS_XML}" | grep -o '<GroupName>[^<]*</GroupName>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=RemoveUserFromGroup&UserName=$${USER_NAME}&GroupName=$${GROUP}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        iam_post "Action=DeleteLoginProfile&UserName=$${USER_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+        iam_post "Action=DeleteUser&UserName=$${USER_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+      fi
+
+      ROLE_RESPONSE=$(iam_get "?Action=GetRole&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
+      if echo "$${ROLE_RESPONSE}" | grep -q "<RoleName>"; then
+        ROLE_POLICIES_XML=$(iam_get "?Action=ListRolePolicies&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
+        for POLICY in $(echo "$${ROLE_POLICIES_XML}" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DeleteRolePolicy&RoleName=$${ROLE_NAME}&PolicyName=$${POLICY}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        ROLE_ATTACHED_XML=$(iam_get "?Action=ListAttachedRolePolicies&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
+        for ARN in $(echo "$${ROLE_ATTACHED_XML}" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DetachRolePolicy&RoleName=$${ROLE_NAME}&PolicyArn=$${ARN}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        iam_post "Action=DeleteRole&RoleName=$${ROLE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+      fi
+
+      exit 0
+    EOT
+  }
+}
+
 ################################################################################
 # IAM User + Harness Secrets for Packer CI Builds
 ################################################################################
