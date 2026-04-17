@@ -3,8 +3,8 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-TOFU_DIR="${PROJECT_ROOT}/tofu/environments/sandbox"
-TFVARS_FILE="${TOFU_DIR}/terraform.tfvars"
+TOFU_DIR="${TOFU_DIR:-${PROJECT_ROOT}/tofu/stacks/eks}"
+TFVARS_FILE="${TFVARS_FILE:-${TOFU_DIR}/terraform.tfvars}"
 
 IMAGE_TAG="${1:-latest}"
 IMAGE_NAME="harness-demo-app"

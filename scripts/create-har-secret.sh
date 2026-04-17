@@ -22,7 +22,7 @@ NC='\033[0m' # No Color
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-TFVARS_FILE="$PROJECT_ROOT/tofu/environments/sandbox/terraform.tfvars"
+TFVARS_FILE="${TFVARS_FILE:-$PROJECT_ROOT/tofu/stacks/eks/terraform.tfvars}"
 
 # Function to extract value from tfvars
 get_tfvar() {
