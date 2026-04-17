@@ -68,8 +68,23 @@ data "aws_eks_cluster_auth" "new" {
 # Local Variables
 ################################################################################
 
+module "sandbox_context" {
+  source = "../../modules/sandbox-context"
+
+  owner                 = var.owner
+  environment           = var.environment
+  stack                 = "sandbox"
+  workspace_id          = var.workspace_id
+  workspace_template_id = var.workspace_template_id
+
+  extra_common_tags = {
+    Contact = "todd.parson@harness.io"
+  }
+}
+
 locals {
-  name_prefix  = "harness-demo-${var.owner}"
+  owner_title  = module.sandbox_context.owner_title
+  name_prefix  = module.sandbox_context.name_prefix
   cluster_name = var.create_eks_cluster ? "${local.name_prefix}-eks" : var.existing_cluster_name
 
   # Cluster connection details (from new or existing cluster)
@@ -77,16 +92,15 @@ locals {
   cluster_ca_data  = var.create_eks_cluster ? module.eks[0].cluster_certificate_authority_data : data.aws_eks_cluster.existing[0].certificate_authority[0].data
   cluster_token    = var.create_eks_cluster ? data.aws_eks_cluster_auth.new[0].token : data.aws_eks_cluster_auth.existing[0].token
 
-  common_tags = {
-    Project     = "harness-demo"
-    Environment = var.environment
-    ManagedBy   = "tofu"
-    Owner       = var.owner
-    Contact     = "todd.parson@harness.io"
-  }
+  common_tag_values          = module.sandbox_context.common_tag_values
+  common_tags                = module.sandbox_context.common_tags
+  common_tags_with_workspace = module.sandbox_context.common_tags_with_workspace
+
+  workspace_deployment_target = var.deployment_target != "" ? var.deployment_target : (length(var.deployment_targets) == 1 ? var.deployment_targets[0] : "mixed")
+  target_tag                  = join("-", var.deployment_targets)
 
   # Delegate selector includes owner for uniqueness
-  delegate_selector = "delegate-${var.owner}"
+  delegate_selector = module.sandbox_context.delegate_selector
 }
 
 ################################################################################
@@ -97,7 +111,7 @@ provider "aws" {
   region = var.aws_region
 
   default_tags {
-    tags = local.common_tags
+    tags = local.common_tags_with_workspace
   }
 }
 
@@ -141,10 +155,10 @@ module "harness_org_project" {
   create_project      = var.create_harness_project
   existing_project_id = var.harness_project_id
   project_id          = var.new_harness_project_id != "" ? var.new_harness_project_id : "${var.owner}_demo"
-  project_name        = var.new_harness_project_name != "" ? var.new_harness_project_name : "${title(var.owner)} Demo"
+  project_name        = var.new_harness_project_name != "" ? var.new_harness_project_name : "${local.owner_title} Demo"
   project_description = "Demo project for ${var.owner}"
 
-  tags = ["tofu-managed", var.owner]
+  tags = local.common_tag_values
 }
 
 locals {
@@ -154,12 +168,12 @@ locals {
 }
 
 locals {
-  packer_ci_role_name                 = "harness-packer-ci-${var.owner}"
-  harness_oidc_provider_url           = "app.harness.io/ng/api/oidc/account/${var.harness_account_id}"
-  harness_oidc_provider_arn           = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.harness_oidc_provider_url}"
+  packer_ci_role_name                    = "harness-packer-ci-${var.owner}"
+  harness_oidc_provider_url              = "app.harness.io/ng/api/oidc/account/${var.harness_account_id}"
+  harness_oidc_provider_arn              = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.harness_oidc_provider_url}"
   packer_ci_access_key_secret_identifier = "${var.owner}_aws_access_key_id"
   packer_ci_secret_key_secret_identifier = "${var.owner}_aws_secret_access_key"
-  resolved_asg_packer_aws_oidc_role_arn = var.asg_packer_aws_oidc_role_arn != "" ? var.asg_packer_aws_oidc_role_arn : (var.asg_ci_auth_mode == "oidc" ? aws_iam_role.packer_ci[0].arn : "")
+  resolved_asg_packer_aws_oidc_role_arn  = var.asg_packer_aws_oidc_role_arn != "" ? var.asg_packer_aws_oidc_role_arn : (var.asg_ci_auth_mode == "oidc" ? aws_iam_role.packer_ci[0].arn : "")
 }
 
 ################################################################################
@@ -198,7 +212,7 @@ module "vpc" {
   cluster_name       = local.cluster_name
   enable_nat_gateway = var.enable_nat_gateway
 
-  tags = local.common_tags
+  tags = local.common_tags_with_workspace
 }
 
 ################################################################################
@@ -356,7 +370,7 @@ resource "terraform_data" "cleanup_existing_packer_ci_user" {
 resource "aws_iam_role" "packer_ci" {
   count = local.enable_asg && var.asg_ci_auth_mode == "oidc" ? 1 : 0
   name  = local.packer_ci_role_name
-  tags  = local.common_tags
+  tags  = local.common_tags_with_workspace
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -422,7 +436,7 @@ resource "aws_iam_role_policy" "packer_ci" {
 resource "aws_iam_user" "packer_ci" {
   count = local.enable_asg && var.asg_ci_auth_mode == "access_key" ? 1 : 0
   name  = local.packer_ci_role_name
-  tags  = local.common_tags
+  tags  = local.common_tags_with_workspace
 
   depends_on = [terraform_data.cleanup_existing_packer_ci_user]
 }
@@ -550,7 +564,7 @@ module "irsa_delegate_role" {
   enable_lambda_permissions = var.enable_lambda_permissions
   enable_asg_permissions    = local.enable_asg || var.enable_asg_permissions
 
-  tags = local.common_tags
+  tags = local.common_tags_with_workspace
 
   depends_on = [module.eks]
 }
@@ -602,7 +616,7 @@ module "harness_delegate" {
 
   delegate_tags = [var.owner, var.environment, "eks"]
 
-  tags = local.common_tags
+  tags = local.common_tags_with_workspace
 
   depends_on = [module.eks, module.irsa_delegate_role]
 }
@@ -623,14 +637,14 @@ module "harness_connectors" {
   # Kubernetes Connector
   create_k8s_connector = true
   k8s_connector_id     = "${var.owner}_k8s_reference_architecture"
-  k8s_connector_name   = "${title(var.owner)} K8s Reference Architecture"
+  k8s_connector_name   = "${local.owner_title} K8s Reference Architecture"
 
   # AWS Connector with IRSA and cross-account support
   # Note: AmazonMachineImage artifact type requires cross_account_access even for same-account IRSA
   create_aws_connector        = true
   aws_connector_id            = "${var.owner}_aws_reference_architecture"
-  aws_connector_name          = "${title(var.owner)} AWS Reference Architecture"
-  aws_connector_description   = "AWS connector for ${title(var.owner)} sandbox Reference Architecture (irsa)"
+  aws_connector_name          = "${local.owner_title} AWS Reference Architecture"
+  aws_connector_description   = "AWS connector for ${local.owner_title} sandbox Reference Architecture (irsa)"
   connector_tags              = ["tofu-managed:true", "harness-sandbox:true", "owner:${var.owner}"]
   aws_auth_type               = var.enable_irsa ? "irsa" : "delegate"
   aws_region                  = var.aws_region
@@ -641,13 +655,13 @@ module "harness_connectors" {
   # Docker/ECR Connector - disabled, ECR auth handled by AWS connector via IRSA
   create_docker_connector = false
   docker_connector_id     = "${var.owner}_ecr"
-  docker_connector_name   = "${title(var.owner)} ECR"
+  docker_connector_name   = "${local.owner_title} ECR"
   docker_registry_url     = var.artifact_registry_type == "ecr" && length(module.ecr) > 0 ? module.ecr[0].repository_url : ""
 
   # GitHub Connector (keep for backward compatibility, but service uses Harness Code when enabled)
   create_github_connector = var.github_token_ref != ""
   github_connector_id     = "${var.owner}_github_reference_architecture"
-  github_connector_name   = "${title(var.owner)} GitHub Reference Architecture"
+  github_connector_name   = "${local.owner_title} GitHub Reference Architecture"
   github_url              = var.github_url
   github_username         = var.github_username
   github_token_ref        = var.github_token_ref
@@ -655,7 +669,7 @@ module "harness_connectors" {
   # Prometheus Connector (for CV)
   create_prometheus_connector = var.enable_cv && var.prometheus_url != ""
   prometheus_connector_id     = "${var.owner}_prometheus"
-  prometheus_connector_name   = "${title(var.owner)} Prometheus"
+  prometheus_connector_name   = "${local.owner_title} Prometheus"
   prometheus_url              = var.prometheus_url
 
   depends_on = [module.harness_delegate]
@@ -676,7 +690,7 @@ module "harness_service_asg" {
   count  = local.enable_asg && var.create_harness_service ? 1 : 0
 
   service_id          = "${var.owner}_demo_app_asg"
-  service_name        = "${title(var.owner)} Demo App ASG"
+  service_name        = "${local.owner_title} Demo App ASG"
   service_description = "ASG demo application for ${var.owner} - Blue/Green, Canary, Rolling on EC2"
   org_id              = local.resolved_org_id
   project_id          = local.resolved_project_id
@@ -704,7 +718,7 @@ module "harness_service_asg" {
   asg_startup_script_git_repo_name     = element(split("/", var.source_github_repo), length(split("/", var.source_github_repo)) - 1)
   git_branch                           = var.service_git_branch
 
-  tags = ["tofu-managed", var.owner, "asg"]
+  tags = concat(local.common_tag_values, ["asg"])
 
   service_variables = [
     {
@@ -747,7 +761,7 @@ module "harness_service" {
   count  = var.create_harness_service && (local.enable_eks || local.enable_ecs || local.enable_lambda) ? 1 : 0
 
   service_id          = "${var.owner}_demo_app"
-  service_name        = "${title(var.owner)} Demo App"
+  service_name        = "${local.owner_title} Demo App"
   service_description = "Demo application for ${var.owner} (${join(", ", var.deployment_targets)})"
   org_id              = local.resolved_org_id
   project_id          = local.resolved_project_id
@@ -791,7 +805,7 @@ module "harness_service" {
   ) : ""
   har_image_path = var.artifact_registry_type == "har" ? "${var.owner}demoapp" : ""
 
-  tags = ["tofu-managed", var.owner, join("-", var.deployment_targets)]
+  tags = concat(local.common_tag_values, [local.target_tag])
 
   service_variables = var.acm_cert_arn != "" ? [
     {
@@ -839,7 +853,7 @@ module "harness_environment_dev" {
   count  = var.create_harness_environment ? 1 : 0
 
   environment_id          = "${var.owner}_dev"
-  environment_name        = "${title(var.owner)} Dev"
+  environment_name        = "${local.owner_title} Dev"
   environment_description = "Development environment for ${var.owner}"
   org_id                  = local.resolved_org_id
   project_id              = local.resolved_project_id
@@ -849,14 +863,14 @@ module "harness_environment_dev" {
   create_k8s_infrastructure = local.enable_eks
   create_k8s_namespace      = false # Namespace created in main.tf
   k8s_infra_id              = "${var.owner}_k8s_dev"
-  k8s_infra_name            = "${title(var.owner)} K8s Dev"
+  k8s_infra_name            = "${local.owner_title} K8s Dev"
   k8s_connector_ref         = var.create_connectors ? "${var.owner}_k8s_reference_architecture" : var.k8s_connector_ref
   k8s_namespace             = "harness-demo-${var.owner}"
 
   # ECS infrastructure (created if ecs in deployment_targets)
   create_ecs_infrastructure = local.enable_ecs
   ecs_infra_id              = "${var.owner}_ecs_dev"
-  ecs_infra_name            = "${title(var.owner)} ECS Dev"
+  ecs_infra_name            = "${local.owner_title} ECS Dev"
   aws_connector_ref         = var.create_connectors ? "${var.owner}_aws_reference_architecture" : var.aws_connector_ref
   aws_region                = var.aws_region
   ecs_cluster_name          = var.ecs_cluster_name
@@ -864,19 +878,19 @@ module "harness_environment_dev" {
   # Lambda infrastructure (created if lambda in deployment_targets)
   create_lambda_infrastructure = local.enable_lambda
   lambda_infra_id              = "${var.owner}_lambda_dev"
-  lambda_infra_name            = "${title(var.owner)} Lambda Dev"
+  lambda_infra_name            = "${local.owner_title} Lambda Dev"
   lambda_stage                 = "dev"
 
   # ASG infrastructure (created if asg in deployment_targets)
   create_asg_infrastructure = local.enable_asg
   asg_infra_id              = "${var.owner}_asg_dev"
-  asg_infra_name            = "${title(var.owner)} ASG Dev"
+  asg_infra_name            = "${local.owner_title} ASG Dev"
   asg_base_asg_name         = local.enable_asg && length(module.asg) > 0 ? module.asg[0].base_asg_name : ""
   asg_load_balancer_name    = local.enable_asg && length(module.asg) > 0 ? module.asg[0].alb_name : ""
   asg_prod_listener_arn     = local.enable_asg && length(module.asg) > 0 ? module.asg[0].prod_listener_arn : ""
   asg_stage_listener_arn    = local.enable_asg && length(module.asg) > 0 ? module.asg[0].stage_listener_arn : ""
 
-  tags = ["tofu-managed", var.owner, join("-", var.deployment_targets)]
+  tags = concat(local.common_tag_values, [local.target_tag])
 
   depends_on = [module.harness_connectors, module.asg]
 }
@@ -886,7 +900,7 @@ module "harness_environment_prod" {
   count  = var.create_harness_environment && var.create_prod_environment ? 1 : 0
 
   environment_id          = "${var.owner}_prod"
-  environment_name        = "${title(var.owner)} Prod"
+  environment_name        = "${local.owner_title} Prod"
   environment_description = "Production environment for ${var.owner}"
   org_id                  = local.resolved_org_id
   project_id              = local.resolved_project_id
@@ -896,14 +910,14 @@ module "harness_environment_prod" {
   create_k8s_infrastructure = local.enable_eks
   create_k8s_namespace      = false # Namespace created in main.tf
   k8s_infra_id              = "${var.owner}_k8s_prod"
-  k8s_infra_name            = "${title(var.owner)} K8s Prod"
+  k8s_infra_name            = "${local.owner_title} K8s Prod"
   k8s_connector_ref         = var.create_connectors ? "${var.owner}_k8s_reference_architecture" : var.k8s_connector_ref
   k8s_namespace             = "harness-demo-${var.owner}-prod"
 
   # ECS infrastructure (created if ecs in deployment_targets)
   create_ecs_infrastructure = local.enable_ecs
   ecs_infra_id              = "${var.owner}_ecs_prod"
-  ecs_infra_name            = "${title(var.owner)} ECS Prod"
+  ecs_infra_name            = "${local.owner_title} ECS Prod"
   aws_connector_ref         = var.create_connectors ? "${var.owner}_aws_reference_architecture" : var.aws_connector_ref
   aws_region                = var.aws_region
   ecs_cluster_name          = var.ecs_cluster_name
@@ -911,20 +925,20 @@ module "harness_environment_prod" {
   # Lambda infrastructure (created if lambda in deployment_targets)
   create_lambda_infrastructure = local.enable_lambda
   lambda_infra_id              = "${var.owner}_lambda_prod"
-  lambda_infra_name            = "${title(var.owner)} Lambda Prod"
+  lambda_infra_name            = "${local.owner_title} Lambda Prod"
   lambda_stage                 = "prod"
 
   # ASG infrastructure (created if asg in deployment_targets)
   # Shares the same ASG/ALB as dev (single ALB with prod:80 + stage:8080 listeners)
   create_asg_infrastructure = local.enable_asg
   asg_infra_id              = "${var.owner}_asg_prod"
-  asg_infra_name            = "${title(var.owner)} ASG Prod"
+  asg_infra_name            = "${local.owner_title} ASG Prod"
   asg_base_asg_name         = local.enable_asg && length(module.asg) > 0 ? module.asg[0].base_asg_name : ""
   asg_load_balancer_name    = local.enable_asg && length(module.asg) > 0 ? module.asg[0].alb_name : ""
   asg_prod_listener_arn     = local.enable_asg && length(module.asg) > 0 ? module.asg[0].prod_listener_arn : ""
   asg_stage_listener_arn    = local.enable_asg && length(module.asg) > 0 ? module.asg[0].stage_listener_arn : ""
 
-  tags = ["tofu-managed", var.owner, join("-", var.deployment_targets)]
+  tags = concat(local.common_tag_values, [local.target_tag])
 
   depends_on = [module.harness_connectors, module.asg]
 }
@@ -1017,7 +1031,7 @@ module "harness_pipelines_asg" {
   # ASG strategy pipeline
   create_asg_strategy_pipeline      = var.create_asg_strategy_pipeline
   asg_strategy_pipeline_id          = "${var.owner}_asg_strategy_deploy"
-  asg_strategy_pipeline_name        = "${title(var.owner)} Application Delivery - ASG"
+  asg_strategy_pipeline_name        = "${local.owner_title} Application Delivery - ASG"
   asg_strategy_pipeline_description = "Unified ASG deployment pipeline with runtime strategy selection for customer demos"
   asg_service_ref                   = "${var.owner}_demo_app_asg"
   asg_infrastructure_ref            = "${var.owner}_asg_dev"
@@ -1042,7 +1056,7 @@ module "harness_pipelines_asg" {
   # ASG CI pipeline: Gradle + CI Intelligence + security scans → Packer AMI build (separate from EKS Docker CI pipeline)
   create_asg_ci_pipeline      = (local.enable_asg && !(local.enable_eks || local.enable_ecs || local.enable_lambda)) ? var.create_asg_ci_pipeline : false
   asg_ci_pipeline_id          = "${var.owner}_asg_ci_build"
-  asg_ci_pipeline_name        = "${title(var.owner)} ASG CI Build"
+  asg_ci_pipeline_name        = "${local.owner_title} ASG CI Build"
   asg_ci_pipeline_description = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning, and Packer AMI bake"
   git_connector_ref           = var.create_connectors && var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
   git_repo_name               = var.github_repo_name
@@ -1063,8 +1077,8 @@ module "harness_pipelines_asg" {
   asg_aws_secret_key_secret = local.packer_ci_secret_key_secret_identifier
   asg_aws_oidc_role_arn     = local.resolved_asg_packer_aws_oidc_role_arn
 
-  delegate_selector = "delegate-${var.owner}"
-  pipeline_tags     = ["tofu-managed:true", "owner:${var.owner}", "deployment-target:asg"]
+  delegate_selector = local.delegate_selector
+  pipeline_tags     = concat(["tofu-managed:true", "owner:${var.owner}", "deployment-target:${local.workspace_deployment_target}"], var.workspace_id != "" ? ["workspace-id:${var.workspace_id}"] : [], var.workspace_template_id != "" ? ["workspace-template-id:${var.workspace_template_id}"] : [])
 
   depends_on = [module.harness_service_asg, module.harness_environment_dev]
 }
@@ -1083,12 +1097,12 @@ module "harness_pipelines_dev" {
   # Strategy Choice pipeline (single pipeline with runtime strategy selection)
   create_strategy_pipeline      = var.create_strategy_pipeline
   strategy_pipeline_id          = "${var.owner}_k8s_strategy_deploy"
-  strategy_pipeline_name        = "${title(var.owner)} Application Delivery"
+  strategy_pipeline_name        = "${local.owner_title} Application Delivery"
   strategy_pipeline_description = "Unified deployment pipeline with runtime strategy selection for customer demos"
 
   create_standard_ci_gradle        = var.create_standard_ci_gradle
   standard_ci_gradle_id            = "${var.owner}_standard_ci_gradle"
-  standard_ci_gradle_name          = "${title(var.owner)} Standard CI - Gradle"
+  standard_ci_gradle_name          = "${local.owner_title} Standard CI - Gradle"
   standard_ci_gradle_description   = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
   standard_ci_gradle_test_packages = "io.harness.demo"
 
@@ -1109,9 +1123,9 @@ module "harness_pipelines_dev" {
   harness_project_id     = local.resolved_project_id
   harness_api_key        = var.harness_api_key
 
-  delegate_selector = "delegate-${var.owner}"
+  delegate_selector = local.delegate_selector
 
-  pipeline_tags = ["tofu-managed:true", "owner:${var.owner}"]
+  pipeline_tags = concat(["tofu-managed:true", "owner:${var.owner}", "deployment-target:${local.workspace_deployment_target}"], var.workspace_id != "" ? ["workspace-id:${var.workspace_id}"] : [], var.workspace_template_id != "" ? ["workspace-template-id:${var.workspace_template_id}"] : [])
 
   depends_on = [module.harness_service, module.harness_environment_dev, module.harness_environment_prod, module.harness_monitored_service_dev, module.har, module.harness_code_repo, module.asg, module.harness_service_asg]
 }
@@ -1128,7 +1142,7 @@ module "harness_monitored_service_dev" {
   project_id = local.resolved_project_id
 
   monitored_service_id          = "${var.owner}_demo_app_dev"
-  monitored_service_name        = "${title(var.owner)} Demo App - Dev"
+  monitored_service_name        = "${local.owner_title} Demo App - Dev"
   monitored_service_description = "Monitored service for CV on ${var.owner} demo app in Dev"
 
   service_ref     = "${var.owner}_demo_app"
@@ -1145,7 +1159,7 @@ module "harness_monitored_service_dev" {
   # Thresholds
   memory_threshold_bytes = 536870912 # 512MB
 
-  tags = ["tofu-managed", var.owner, "cv"]
+  tags = concat(local.common_tag_values, ["cv"])
 
   depends_on = [module.harness_service, module.harness_environment_dev]
 }

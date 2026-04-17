@@ -77,6 +77,31 @@ output "owner" {
   value       = var.owner
 }
 
+output "workspace_id" {
+  description = "Workspace identifier metadata"
+  value       = var.workspace_id
+}
+
+output "workspace_template_id" {
+  description = "Workspace template identifier metadata"
+  value       = var.workspace_template_id
+}
+
+output "sandbox_profile" {
+  description = "Sandbox profile metadata"
+  value       = var.sandbox_profile
+}
+
+output "deployment_target" {
+  description = "Workspace deployment target metadata"
+  value       = local.workspace_deployment_target
+}
+
+output "last_touched_at" {
+  description = "Workspace last touched timestamp metadata"
+  value       = var.last_touched_at
+}
+
 output "harness_org_id" {
   description = "Harness Organization ID (created or existing)"
   value       = local.resolved_org_id

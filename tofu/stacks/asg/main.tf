@@ -93,36 +93,32 @@ provider "helm" {
 # Local Variables
 ################################################################################
 
+module "sandbox_context" {
+  source = "../../modules/sandbox-context"
+
+  owner                 = var.owner
+  environment           = var.environment
+  stack                 = "asg"
+  workspace_id          = var.workspace_id
+  workspace_template_id = var.workspace_template_id
+}
+
 locals {
-  name_prefix           = "harness-demo-${var.owner}"
-  delegate_selector     = "delegate-${var.owner}"
-  har_registry_id       = "har-${var.owner}"
-  har_upstream_proxy_id = "${var.owner}-dockerhub-proxy"
-  har_image_name        = "${var.owner}demoapp"
-  packer_ci_role_name   = "harness-packer-ci-${var.owner}"
+  name_prefix                            = module.sandbox_context.name_prefix
+  delegate_selector                      = module.sandbox_context.delegate_selector
+  har_registry_id                        = "har-${var.owner}"
+  har_upstream_proxy_id                  = "${var.owner}-dockerhub-proxy"
+  har_image_name                         = "${var.owner}demoapp"
+  packer_ci_role_name                    = "harness-packer-ci-${var.owner}"
   packer_ci_access_key_secret_identifier = "${var.owner}_aws_access_key_id"
   packer_ci_secret_key_secret_identifier = "${var.owner}_aws_secret_access_key"
-  harness_oidc_provider_url = "app.harness.io/ng/api/oidc/account/${var.harness_account_id}"
-  harness_oidc_provider_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.harness_oidc_provider_url}"
-  asg_file_store_folder_identifier = substr(replace("${var.owner}_demo_app_asg_asg", "-", "_"), 0, 128)
+  harness_oidc_provider_url              = "app.harness.io/ng/api/oidc/account/${var.harness_account_id}"
+  harness_oidc_provider_arn              = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.harness_oidc_provider_url}"
+  asg_file_store_folder_identifier       = substr(replace("${var.owner}_demo_app_asg_asg", "-", "_"), 0, 128)
 
-  common_tags = {
-    Project     = "harness-demo"
-    Environment = var.environment
-    ManagedBy   = "tofu"
-    Owner       = var.owner
-    Stack       = "asg"
-  }
-
-  common_tags_with_workspace = merge(
-    local.common_tags,
-    var.workspace_id != "" ? {
-      WorkspaceId = var.workspace_id
-    } : {},
-    var.workspace_template_id != "" ? {
-      WorkspaceTemplateId = var.workspace_template_id
-    } : {}
-  )
+  common_tag_values          = module.sandbox_context.common_tag_values
+  common_tags                = module.sandbox_context.common_tags
+  common_tags_with_workspace = module.sandbox_context.common_tags_with_workspace
 
   asg_alb_name_source      = "${local.name_prefix}-asg-alb"
   asg_prod_tg_name_source  = "${local.name_prefix}-asg-prod-tg"
@@ -148,10 +144,10 @@ module "harness_org_project" {
   create_project      = var.create_harness_project
   existing_project_id = var.harness_project_id
   project_id          = var.new_harness_project_id != "" ? var.new_harness_project_id : "${var.owner}_demo"
-  project_name        = var.new_harness_project_name != "" ? var.new_harness_project_name : "${title(var.owner)} Demo"
+  project_name        = var.new_harness_project_name != "" ? var.new_harness_project_name : "${module.sandbox_context.owner_title} Demo"
   project_description = "Demo project for ${var.owner}"
 
-  tags = ["tofu-managed", var.owner, "asg"]
+  tags = local.common_tag_values
 }
 
 locals {
@@ -199,7 +195,7 @@ resource "terraform_data" "cleanup_existing_asg_named_resources" {
     environment = {
       HARNESS_API_KEY = var.harness_api_key
     }
-    command     = <<-EOT
+    command = <<-EOT
       set +e
       AWS_REGION="${var.aws_region}"
       IAM_AUTH_USER="$${AWS_ACCESS_KEY_ID}:$${AWS_SECRET_ACCESS_KEY}"
@@ -869,7 +865,7 @@ module "harness_service_asg" {
   asg_startup_script_git_repo_name     = var.github_repo_name
   git_branch                           = var.git_branch
 
-  tags = ["tofu-managed", var.owner, "asg"]
+  tags = local.common_tag_values
 
   service_variables = [
     {
@@ -937,7 +933,7 @@ module "harness_environment_dev" {
   create_ecs_infrastructure    = false
   create_lambda_infrastructure = false
 
-  tags = ["tofu-managed", var.owner, "asg"]
+  tags = local.common_tag_values
 
   depends_on = [module.harness_connectors, module.asg]
 }

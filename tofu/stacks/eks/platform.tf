@@ -2,10 +2,20 @@
 # Local Variables
 ################################################################################
 
+module "sandbox_context" {
+  source = "../../modules/sandbox-context"
+
+  owner                 = var.owner
+  environment           = var.environment
+  stack                 = "eks"
+  workspace_id          = var.workspace_id
+  workspace_template_id = var.workspace_template_id
+}
+
 locals {
-  owner_title                = title(var.owner)
-  name_prefix                = "harness-demo-${var.owner}"
-  delegate_selector          = "delegate-${var.owner}"
+  owner_title                = module.sandbox_context.owner_title
+  name_prefix                = module.sandbox_context.name_prefix
+  delegate_selector          = module.sandbox_context.delegate_selector
   k8s_namespace              = "harness-demo-${var.owner}"
   repo_name                  = "${var.owner}-demo-app"
   service_id                 = "${var.owner}_demo_app"
@@ -30,29 +40,9 @@ locals {
   has_code_source            = var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != ""
   pipeline_git_connector_ref = var.github_token_ref != "" ? local.github_connector_id : var.github_connector_ref
 
-  common_tag_values = concat(
-    ["tofu-managed", var.owner, "eks"],
-    var.workspace_id != "" ? ["workspace-id:${var.workspace_id}"] : [],
-    var.workspace_template_id != "" ? ["workspace-template-id:${var.workspace_template_id}"] : []
-  )
-
-  common_tags = {
-    Project     = "harness-demo"
-    Environment = var.environment
-    ManagedBy   = "tofu"
-    Owner       = var.owner
-    Stack       = "eks"
-  }
-
-  common_tags_with_workspace = merge(
-    local.common_tags,
-    var.workspace_id != "" ? {
-      WorkspaceId = var.workspace_id
-    } : {},
-    var.workspace_template_id != "" ? {
-      WorkspaceTemplateId = var.workspace_template_id
-    } : {}
-  )
+  common_tag_values          = module.sandbox_context.common_tag_values
+  common_tags                = module.sandbox_context.common_tags
+  common_tags_with_workspace = module.sandbox_context.common_tags_with_workspace
 }
 
 ################################################################################
@@ -71,7 +61,7 @@ module "harness_org_project" {
   create_project      = var.create_harness_project
   existing_project_id = var.harness_project_id
   project_id          = var.new_harness_project_id != "" ? var.new_harness_project_id : "${var.owner}_demo"
-  project_name        = var.new_harness_project_name != "" ? var.new_harness_project_name : "${title(var.owner)} Demo"
+  project_name        = var.new_harness_project_name != "" ? var.new_harness_project_name : "${local.owner_title} Demo"
   project_description = "Demo project for ${var.owner}"
 
   tags = local.common_tag_values
@@ -191,21 +181,21 @@ module "opa_policies" {
   project_id = local.resolved_project_id
 
   # Policy creation flags
-  create_ci_policies       = true
-  create_security_policies = true
-  create_quality_policies  = true
+  create_ci_policies                = true
+  create_security_policies          = true
+  create_quality_policies           = true
   create_change_governance_policies = var.manage_shared_change_governance
 
   # Policy set creation flags
-  create_ci_policy_set       = true
-  create_security_policy_set = true
-  create_quality_policy_set  = true
+  create_ci_policy_set                = true
+  create_security_policy_set          = true
+  create_quality_policy_set           = true
   create_change_governance_policy_set = var.manage_shared_change_governance
 
   # Enforcement flags
-  enforce_ci_policies       = var.enforce_ci_policies
-  enforce_security_policies = var.enforce_security_policies
-  enforce_quality_policies  = var.enforce_quality_policies
+  enforce_ci_policies                = var.enforce_ci_policies
+  enforce_security_policies          = var.enforce_security_policies
+  enforce_quality_policies           = var.enforce_quality_policies
   enforce_change_governance_policies = var.manage_shared_change_governance
 
   depends_on = [module.harness_org_project]

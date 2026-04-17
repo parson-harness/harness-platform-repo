@@ -619,6 +619,41 @@ variable "asg_packer_aws_oidc_role_arn" {
 
 
 ################################################################################
+# Workspace Metadata Compatibility
+################################################################################
+
+variable "workspace_id" {
+  description = "Workspace identifier metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "last_touched_at" {
+  description = "Workspace last touched timestamp metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "deployment_target" {
+  description = "Deployment target metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "sandbox_profile" {
+  description = "Sandbox profile metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+variable "workspace_template_id" {
+  description = "Workspace template identifier metadata stamped by the provisioner"
+  type        = string
+  default     = ""
+}
+
+
+################################################################################
 # Sandbox TTL Configuration
 ################################################################################
 
