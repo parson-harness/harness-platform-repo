@@ -600,16 +600,10 @@ variable "asg_create_dns_record" {
   default     = false
 }
 
-variable "asg_packer_aws_access_key_secret" {
-  description = "Name of the Harness secret storing AWS_ACCESS_KEY_ID for Packer AMI builds"
+variable "asg_packer_aws_oidc_role_arn" {
+  description = "Optional AWS IAM role ARN for Harness Cloud CI to assume via OIDC when building ASG AMIs"
   type        = string
-  default     = "aws_access_key_id"
-}
-
-variable "asg_packer_aws_secret_key_secret" {
-  description = "Name of the Harness secret storing AWS_SECRET_ACCESS_KEY for Packer AMI builds"
-  type        = string
-  default     = "aws_secret_access_key"
+  default     = ""
 }
 
 

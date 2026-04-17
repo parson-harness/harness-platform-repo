@@ -313,6 +313,16 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                           - name: IMAGE_TAG
                           - name: AMI_NAME
                   - step:
+                      type: Plugin
+                      name: Assume AWS Role with OIDC
+                      identifier: assume_role_with_oidc
+                      spec:
+                        image: plugins/aws-oidc
+                        settings:
+                          iamRoleArn: ${var.asg_aws_oidc_role_arn}
+                          roleSessionName: ${var.asg_ci_pipeline_id}
+                          duration: 3600
+                  - step:
                       type: Run
                       name: Build AMI with Packer
                       identifier: packer_build_ami
@@ -387,8 +397,9 @@ ${local.asg_ci_pipeline_yaml_tags != "" ? "${local.asg_ci_pipeline_yaml_tags}\n"
                           APP_VERSION: <+execution.steps.build_info.output.outputVariables.IMAGE_TAG>
                           AMI_NAME: <+execution.steps.build_info.output.outputVariables.AMI_NAME>
                           OWNER: ${var.asg_packer_owner}
-                          AWS_ACCESS_KEY_ID: <+secrets.getValue("${var.asg_aws_access_key_secret}")>
-                          AWS_SECRET_ACCESS_KEY: <+secrets.getValue("${var.asg_aws_secret_key_secret}")>
+                          AWS_ACCESS_KEY_ID: <+execution.steps.assume_role_with_oidc.output.outputVariables.AWS_ACCESS_KEY_ID>
+                          AWS_SECRET_ACCESS_KEY: <+execution.steps.assume_role_with_oidc.output.outputVariables.AWS_SECRET_ACCESS_KEY>
+                          AWS_SESSION_TOKEN: <+execution.steps.assume_role_with_oidc.output.outputVariables.AWS_SESSION_TOKEN>
                           AWS_DEFAULT_REGION: ${var.asg_packer_region}
                         outputVariables:
                           - name: AMI_ID

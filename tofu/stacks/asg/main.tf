@@ -59,6 +59,8 @@ provider "harness" {
   platform_api_key = var.harness_api_key
 }
 
+data "aws_caller_identity" "current" {}
+
 ################################################################################
 # Data Sources - Shared EKS Cluster (for delegate deployment)
 ################################################################################
@@ -97,6 +99,9 @@ locals {
   har_registry_id       = "har-${var.owner}"
   har_upstream_proxy_id = "${var.owner}-dockerhub-proxy"
   har_image_name        = "${var.owner}demoapp"
+  packer_ci_role_name   = "harness-packer-ci-${var.owner}"
+  harness_oidc_provider_url = "app.harness.io/ng/api/oidc/account/${var.harness_account_id}"
+  harness_oidc_provider_arn = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.harness_oidc_provider_url}"
 
   common_tags = {
     Project     = "harness-demo"
@@ -522,6 +527,7 @@ resource "terraform_data" "cleanup_existing_packer_ci_user" {
     command     = <<-EOT
       set +e
       USER_NAME="harness-packer-ci-${var.owner}"
+      ROLE_NAME="harness-packer-ci-${var.owner}"
       IAM_ACCESS_KEY_ID="$${AWS_ACCESS_KEY_ID}"
       IAM_SECRET_ACCESS_KEY="$${AWS_SECRET_ACCESS_KEY}"
       IAM_AUTH_USER="$${IAM_ACCESS_KEY_ID}:$${IAM_SECRET_ACCESS_KEY}"
@@ -540,50 +546,79 @@ resource "terraform_data" "cleanup_existing_packer_ci_user" {
       }
 
       RESPONSE=$(iam_get "?Action=GetUser&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
-      if echo "$${RESPONSE}" | grep -q "NoSuchEntity"; then
-        exit 0
+      if echo "$${RESPONSE}" | grep -q "<UserName>"; then
+        ACCESS_KEYS_XML=$(iam_get "?Action=ListAccessKeys&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
+        for KEY_ID in $(echo "$${ACCESS_KEYS_XML}" | grep -o '<AccessKeyId>[^<]*</AccessKeyId>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DeleteAccessKey&UserName=$${USER_NAME}&AccessKeyId=$${KEY_ID}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        POLICIES_XML=$(iam_get "?Action=ListUserPolicies&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
+        for POLICY in $(echo "$${POLICIES_XML}" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DeleteUserPolicy&UserName=$${USER_NAME}&PolicyName=$${POLICY}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        ATTACHED_XML=$(iam_get "?Action=ListAttachedUserPolicies&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
+        for ARN in $(echo "$${ATTACHED_XML}" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DetachUserPolicy&UserName=$${USER_NAME}&PolicyArn=$${ARN}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        GROUPS_XML=$(iam_get "?Action=ListGroupsForUser&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
+        for GROUP in $(echo "$${GROUPS_XML}" | grep -o '<GroupName>[^<]*</GroupName>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=RemoveUserFromGroup&UserName=$${USER_NAME}&GroupName=$${GROUP}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        iam_post "Action=DeleteLoginProfile&UserName=$${USER_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
+        iam_post "Action=DeleteUser&UserName=$${USER_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
       fi
-      if ! echo "$${RESPONSE}" | grep -q "<UserName>"; then
-        exit 0
+
+      ROLE_RESPONSE=$(iam_get "?Action=GetRole&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
+      if echo "$${ROLE_RESPONSE}" | grep -q "<RoleName>"; then
+        ROLE_POLICIES_XML=$(iam_get "?Action=ListRolePolicies&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
+        for POLICY in $(echo "$${ROLE_POLICIES_XML}" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DeleteRolePolicy&RoleName=$${ROLE_NAME}&PolicyName=$${POLICY}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        ROLE_ATTACHED_XML=$(iam_get "?Action=ListAttachedRolePolicies&RoleName=$${ROLE_NAME}&Version=2010-05-08" 2>&1)
+        for ARN in $(echo "$${ROLE_ATTACHED_XML}" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
+          iam_post "Action=DetachRolePolicy&RoleName=$${ROLE_NAME}&PolicyArn=$${ARN}&Version=2010-05-08" >/dev/null 2>&1 || true
+        done
+
+        iam_post "Action=DeleteRole&RoleName=$${ROLE_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
       fi
 
-      ACCESS_KEYS_XML=$(iam_get "?Action=ListAccessKeys&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
-      for KEY_ID in $(echo "$${ACCESS_KEYS_XML}" | grep -o '<AccessKeyId>[^<]*</AccessKeyId>' | sed 's/<[^>]*>//g'); do
-        iam_post "Action=DeleteAccessKey&UserName=$${USER_NAME}&AccessKeyId=$${KEY_ID}&Version=2010-05-08" >/dev/null 2>&1 || true
-      done
-
-      POLICIES_XML=$(iam_get "?Action=ListUserPolicies&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
-      for POLICY in $(echo "$${POLICIES_XML}" | grep -o '<member>[^<]*</member>' | sed 's/<[^>]*>//g'); do
-        iam_post "Action=DeleteUserPolicy&UserName=$${USER_NAME}&PolicyName=$${POLICY}&Version=2010-05-08" >/dev/null 2>&1 || true
-      done
-
-      ATTACHED_XML=$(iam_get "?Action=ListAttachedUserPolicies&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
-      for ARN in $(echo "$${ATTACHED_XML}" | grep -o '<PolicyArn>[^<]*</PolicyArn>' | sed 's/<[^>]*>//g'); do
-        iam_post "Action=DetachUserPolicy&UserName=$${USER_NAME}&PolicyArn=$${ARN}&Version=2010-05-08" >/dev/null 2>&1 || true
-      done
-
-      GROUPS_XML=$(iam_get "?Action=ListGroupsForUser&UserName=$${USER_NAME}&Version=2010-05-08" 2>&1)
-      for GROUP in $(echo "$${GROUPS_XML}" | grep -o '<GroupName>[^<]*</GroupName>' | sed 's/<[^>]*>//g'); do
-        iam_post "Action=RemoveUserFromGroup&UserName=$${USER_NAME}&GroupName=$${GROUP}&Version=2010-05-08" >/dev/null 2>&1 || true
-      done
-
-      iam_post "Action=DeleteLoginProfile&UserName=$${USER_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
-      iam_post "Action=DeleteUser&UserName=$${USER_NAME}&Version=2010-05-08" >/dev/null 2>&1 || true
       exit 0
     EOT
   }
 }
 
-resource "aws_iam_user" "packer_ci" {
-  name = "harness-packer-ci-${var.owner}"
+resource "aws_iam_role" "packer_ci" {
+  name = local.packer_ci_role_name
   tags = local.common_tags_with_workspace
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Federated = local.harness_oidc_provider_arn
+        }
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Condition = {
+          StringEquals = {
+            "${local.harness_oidc_provider_url}:aud" = "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
 
   depends_on = [terraform_data.cleanup_existing_packer_ci_user]
 }
 
-resource "aws_iam_user_policy" "packer_ci" {
+resource "aws_iam_role_policy" "packer_ci" {
   name = "harness-packer-ci-policy"
-  user = aws_iam_user.packer_ci.name
+  role = aws_iam_role.packer_ci.name
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -618,36 +653,6 @@ resource "aws_iam_user_policy" "packer_ci" {
       }
     ]
   })
-}
-
-resource "aws_iam_access_key" "packer_ci" {
-  user = aws_iam_user.packer_ci.name
-}
-
-resource "harness_platform_secret_text" "packer_aws_access_key" {
-  identifier = "aws_access_key_id"
-  name       = "AWS-Access-Key-ID-Packer"
-  org_id     = local.resolved_org_id
-  project_id = local.resolved_project_id
-
-  secret_manager_identifier = "harnessSecretManager"
-  value_type                = "Inline"
-  value                     = aws_iam_access_key.packer_ci.id
-
-  depends_on = [aws_iam_access_key.packer_ci]
-}
-
-resource "harness_platform_secret_text" "packer_aws_secret_key" {
-  identifier = "aws_secret_access_key"
-  name       = "AWS-Secret-Access-Key-Packer"
-  org_id     = local.resolved_org_id
-  project_id = local.resolved_project_id
-
-  secret_manager_identifier = "harnessSecretManager"
-  value_type                = "Inline"
-  value                     = aws_iam_access_key.packer_ci.secret
-
-  depends_on = [aws_iam_access_key.packer_ci]
 }
 
 ################################################################################
@@ -877,8 +882,7 @@ module "harness_pipelines_asg" {
 
   asg_packer_owner          = var.owner
   asg_packer_region         = var.aws_region
-  asg_aws_access_key_secret = "aws_access_key_id"
-  asg_aws_secret_key_secret = "aws_secret_access_key"
+  asg_aws_oidc_role_arn     = aws_iam_role.packer_ci.arn
 
   enable_change_governance = var.enable_change_governance
   delegate_selector        = local.delegate_selector

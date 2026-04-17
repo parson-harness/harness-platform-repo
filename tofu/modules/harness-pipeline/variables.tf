@@ -339,16 +339,10 @@ variable "asg_packer_region" {
   default     = "us-east-1"
 }
 
-variable "asg_aws_access_key_secret" {
-  description = "Name of the Harness secret holding AWS_ACCESS_KEY_ID for Packer builds"
+variable "asg_aws_oidc_role_arn" {
+  description = "AWS IAM role ARN assumed by the ASG CI pipeline via Harness OIDC for ephemeral Packer build credentials"
   type        = string
-  default     = "aws_access_key_id"
-}
-
-variable "asg_aws_secret_key_secret" {
-  description = "Name of the Harness secret holding AWS_SECRET_ACCESS_KEY for Packer builds"
-  type        = string
-  default     = "aws_secret_access_key"
+  default     = ""
 }
 
 ################################################################################

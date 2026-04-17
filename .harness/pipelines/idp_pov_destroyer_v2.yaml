@@ -78,6 +78,11 @@ pipeline:
       description: Advanced override. Recommended false. Set true only to bypass Terraform and run API/AWS/Kubernetes cleanup directly.
       required: false
       value: <+input>.default(false).allowedValues(true,false)
+    - name: cleanup_legacy_packer_secrets
+      type: String
+      description: Advanced override for one-time cleanup of deprecated shared ASG Packer secret identifiers from older failed provisioner runs.
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
     - name: auto_approve
       type: String
       description: Recommended true for one-click cleanup. Set false only if you want a manual destroy approval gate.
@@ -838,6 +843,26 @@ pipeline:
                               echo "Packer IAM User ${PACKER_USER}: not found (ok)"
                             fi
 
+                            PACKER_ROLE="harness-packer-ci-${OWNER}"
+                            if aws iam get-role --role-name "$PACKER_ROLE" 2>/dev/null >/dev/null; then
+                              echo "Packer IAM Role ${PACKER_ROLE}: deleting"
+                              PACKER_ROLE_POLICIES=$(aws iam list-role-policies --role-name "$PACKER_ROLE" --query 'PolicyNames[]' --output text 2>/dev/null || true)
+                              if [ -n "$PACKER_ROLE_POLICIES" ] && [ "$PACKER_ROLE_POLICIES" != "None" ]; then
+                                for POLICY in $PACKER_ROLE_POLICIES; do
+                                  aws iam delete-role-policy --role-name "$PACKER_ROLE" --policy-name "$POLICY" 2>/dev/null || true
+                                done
+                              fi
+                              PACKER_ROLE_ATTACHED=$(aws iam list-attached-role-policies --role-name "$PACKER_ROLE" --query 'AttachedPolicies[].PolicyArn' --output text 2>/dev/null || true)
+                              if [ -n "$PACKER_ROLE_ATTACHED" ] && [ "$PACKER_ROLE_ATTACHED" != "None" ]; then
+                                for ARN in $PACKER_ROLE_ATTACHED; do
+                                  aws iam detach-role-policy --role-name "$PACKER_ROLE" --policy-arn "$ARN" 2>/dev/null || true
+                                done
+                              fi
+                              aws iam delete-role --role-name "$PACKER_ROLE" 2>/dev/null || true
+                            else
+                              echo "Packer IAM Role ${PACKER_ROLE}: not found (ok)"
+                            fi
+
                             delete_amis_and_snapshots
                             wait_for_ami_cleanup
 
@@ -956,6 +981,8 @@ pipeline:
                             esac
                           }
 
+                          PLATFORM_ENDPOINT="${ENDPOINT%/gratis}"
+
                           echo "=== Pipelines ==="
                           for P in ci_build k8s_strategy_deploy k8s_canary_deploy k8s_bg_canary_deploy canary_deployment blue_green_deployment strategy_choice standard_ci_gradle; do
                             api_delete "${OWNER}_${P}" "${ENDPOINT}/pipeline/api/pipelines/${OWNER}_${P}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}"
@@ -989,6 +1016,24 @@ pipeline:
                             api_delete "${OWNER}_${CONN}" "${ENDPOINT}/ng/api/connectors/${OWNER}_${CONN}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
                           done
 
+                          if [ "${DEPLOYMENT_TARGET}" = "asg" ]; then
+                            echo ""
+                            echo "=== Secrets ==="
+                            for SECRET in "${OWNER}_aws_access_key_id" "${OWNER}_aws_secret_access_key"; do
+                              api_delete "$SECRET" "${PLATFORM_ENDPOINT}/v1/orgs/${ORG_ID}/projects/${PROJECT_ID}/secrets/${SECRET}"
+                            done
+                            if [ "${CLEANUP_LEGACY_PACKER_SECRETS}" = "true" ]; then
+                              for SECRET in aws_access_key_id aws_secret_access_key; do
+                                api_delete "${SECRET} (legacy)" "${PLATFORM_ENDPOINT}/v1/orgs/${ORG_ID}/projects/${PROJECT_ID}/secrets/${SECRET}"
+                              done
+                            fi
+
+                            echo ""
+                            echo "=== File Store ==="
+                            ASG_FILE_STORE_FOLDER_IDENTIFIER="${OWNER}_demo_app_asg_asg"
+                            api_delete "${ASG_FILE_STORE_FOLDER_IDENTIFIER}" "${PLATFORM_ENDPOINT}/ng/api/file-store/${ASG_FILE_STORE_FOLDER_IDENTIFIER}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&forceDelete=true"
+                          fi
+
                           echo ""
                           echo "=== HAR Registry ==="
                           api_delete "har-${OWNER}" "${ENDPOINT}/har/api/v1/registry/${ACCOUNT_ID}/${ORG_ID}/${PROJECT_ID}/har-${OWNER}/+"
@@ -1020,6 +1065,9 @@ pipeline:
                       - name: OWNER
                         type: String
                         value: <+pipeline.variables.owner>
+                      - name: DEPLOYMENT_TARGET
+                        type: String
+                        value: <+pipeline.variables.deployment_target>
                       - name: ACCOUNT_ID
                         type: String
                         value: <+pipeline.variables.harness_account_id>
@@ -1035,6 +1083,9 @@ pipeline:
                       - name: ENDPOINT
                         type: String
                         value: <+pipeline.variables.harness_endpoint>
+                      - name: CLEANUP_LEGACY_PACKER_SECRETS
+                        type: String
+                        value: <+pipeline.variables.cleanup_legacy_packer_secrets>
                     outputVariables: []
                   timeout: 10m
                   failureStrategies:
