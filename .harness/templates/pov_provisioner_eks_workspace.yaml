@@ -74,11 +74,11 @@ template:
         locked: false
         type: String
       - key: harness_api_key
-        value: <+pipeline.variables.target_api_key>
-        value_type: string
+        value: <+pipeline.variables.target_api_key_secret_ref>
+        value_type: secret
         status: manual
         locked: false
-        type: String
+        type: Secret
       - key: harness_api_key_email
         value: <+pipeline.variables.target_api_key_email>
         value_type: string

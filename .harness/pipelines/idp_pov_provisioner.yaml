@@ -63,6 +63,11 @@ pipeline:
       description: API Key for target Harness account (where resources are provisioned). Defaults to provisioner SAT for same-account use.
       required: false
       value: acct-automation-svc-acct
+    - name: target_api_key_secret_ref
+      type: String
+      description: Harness secret identifier to store in workspace variable harness_api_key. Keep this aligned with target_api_key.
+      required: false
+      value: <+input>.default(acct-automation-svc-acct)
     - name: target_api_key_email
       type: String
       description: Email associated with the target account API key. Defaults to service account email.
@@ -763,7 +768,7 @@ pipeline:
 
                           update_tf_var "harness_account_id" "$ACCOUNT_ID" "string"
                           update_tf_var "harness_endpoint" "$ENDPOINT" "string"
-                          update_tf_var "harness_api_key" "$TARGET_API_KEY" "string"
+                          update_tf_var "harness_api_key" "$TARGET_API_KEY_SECRET_REF" "secret"
                           update_tf_var "harness_org_id" "$ORG_ID" "string"
                           update_tf_var "harness_project_id" "$PROJECT_ID" "string"
                           update_tf_var "create_harness_org" "<+pipeline.variables.create_harness_org>" "string"
@@ -775,9 +780,9 @@ pipeline:
                       - name: PROVISIONER_API_KEY
                         type: String
                         value: <+pipeline.variables.provisioner_api_key>
-                      - name: TARGET_API_KEY
+                      - name: TARGET_API_KEY_SECRET_REF
                         type: String
-                        value: <+pipeline.variables.target_api_key>
+                        value: <+pipeline.variables.target_api_key_secret_ref>
                     outputVariables: []
                   timeout: 5m
                   when:
@@ -988,7 +993,7 @@ pipeline:
 
                           update_tf_var "harness_account_id" "$ACCOUNT_ID" "string"
                           update_tf_var "harness_endpoint" "$ENDPOINT" "string"
-                          update_tf_var "harness_api_key" "$TARGET_API_KEY" "string"
+                          update_tf_var "harness_api_key" "$TARGET_API_KEY_SECRET_REF" "secret"
                           update_tf_var "harness_org_id" "$ORG_ID" "string"
                           update_tf_var "harness_project_id" "$PROJECT_ID" "string"
                           update_tf_var "create_harness_org" "<+pipeline.variables.create_harness_org>" "string"
@@ -1018,9 +1023,9 @@ pipeline:
                       - name: PROVISIONER_API_KEY
                         type: String
                         value: <+pipeline.variables.provisioner_api_key>
-                      - name: TARGET_API_KEY
+                      - name: TARGET_API_KEY_SECRET_REF
                         type: String
-                        value: <+pipeline.variables.target_api_key>
+                        value: <+pipeline.variables.target_api_key_secret_ref>
                     outputVariables: []
                   timeout: 5m
                   when:
@@ -1701,7 +1706,7 @@ pipeline:
                           update_tf_var "ttl_days" "$TTL_DAYS_VALUE" "string"
                           update_tf_var "harness_account_id" "$ACCOUNT_ID" "string"
                           update_tf_var "harness_endpoint" "$ENDPOINT" "string"
-                          update_tf_var "harness_api_key" "$TARGET_API_KEY" "string"
+                          update_tf_var "harness_api_key" "$TARGET_API_KEY_SECRET_REF" "secret"
                           update_tf_var "harness_org_id" "$ORG_ID" "string"
                           update_tf_var "harness_project_id" "$PROJECT_ID" "string"
                           update_tf_var "create_harness_org" "$CREATE_HARNESS_ORG" "string"
@@ -1752,9 +1757,9 @@ pipeline:
                       - name: PROVISIONER_API_KEY
                         type: String
                         value: <+pipeline.variables.provisioner_api_key>
-                      - name: TARGET_API_KEY
+                      - name: TARGET_API_KEY_SECRET_REF
                         type: String
-                        value: <+pipeline.variables.target_api_key>
+                        value: <+pipeline.variables.target_api_key_secret_ref>
                     outputVariables: []
                   timeout: 5m
                   failureStrategies:
