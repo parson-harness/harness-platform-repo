@@ -104,6 +104,112 @@ public class AppConfig {
         }
     }
 
+    public String getDisplayCustomerName() {
+        if (customerName == null || customerName.isBlank()) {
+            return "Harness Customer";
+        }
+        return customerName.trim();
+    }
+
+    public String getDisplayBuildId() {
+        if (buildId == null || buildId.isBlank()) {
+            return "n/a";
+        }
+        return buildId.trim();
+    }
+
+    public String getDisplayDeploymentTarget() {
+        if (deploymentTarget == null || deploymentTarget.isBlank()) {
+            return "Unknown Target";
+        }
+
+        switch (deploymentTarget.trim().toLowerCase()) {
+            case "kubernetes":
+            case "eks":
+                return "Amazon EKS";
+            case "ecs":
+                return "Amazon ECS";
+            case "lambda":
+                return "AWS Lambda";
+            case "asg":
+                return "EC2 Auto Scaling";
+            default:
+                return humanize(deploymentTarget);
+        }
+    }
+
+    public String getDisplayDeploymentStrategy() {
+        return humanize(resolveEffectiveDeploymentStrategyKey());
+    }
+
+    public String getEffectiveDeploymentStrategy() {
+        return resolveEffectiveDeploymentStrategyKey();
+    }
+
+    public String getDeploymentNarrative() {
+        String variant = getEffectiveVariant();
+        String strategyKey = resolveEffectiveDeploymentStrategyKey();
+
+        if ("asg".equalsIgnoreCase(deploymentTarget) && ("blue".equalsIgnoreCase(variant) || "green".equalsIgnoreCase(variant))) {
+            return "You are viewing the " + variant + " fleet";
+        }
+
+        if ("blue".equalsIgnoreCase(variant) || "green".equalsIgnoreCase(variant)) {
+            return "You are viewing the " + variant + " release";
+        }
+
+        if ("canary".equalsIgnoreCase(variant)) {
+            return "You are viewing canary traffic";
+        }
+
+        if ("stable".equalsIgnoreCase(variant) && "canary".equalsIgnoreCase(strategyKey)) {
+            return "You are viewing the stable production track";
+        }
+
+        return "You are viewing the live production release";
+    }
+
+    private String resolveEffectiveDeploymentStrategyKey() {
+        if (deploymentStrategy != null && !deploymentStrategy.isBlank()) {
+            return deploymentStrategy.trim();
+        }
+
+        String variant = getEffectiveVariant();
+        if ("blue".equalsIgnoreCase(variant) || "green".equalsIgnoreCase(variant)) {
+            return "blue-green";
+        }
+        if ("canary".equalsIgnoreCase(variant) || "stable".equalsIgnoreCase(variant)) {
+            return "canary";
+        }
+        return "standard";
+    }
+
+    private String humanize(String value) {
+        if (value == null || value.isBlank()) {
+            return "Unknown";
+        }
+
+        String[] parts = value.trim().replace('-', ' ').replace('_', ' ').split("\\s+");
+        StringBuilder builder = new StringBuilder();
+
+        for (String part : parts) {
+            if (part.isEmpty()) {
+                continue;
+            }
+
+            if (builder.length() > 0) {
+                builder.append(' ');
+            }
+
+            builder.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) {
+                builder.append(part.substring(1).toLowerCase());
+            }
+        }
+
+        return builder.length() > 0 ? builder.toString() : "Unknown";
+    }
+
     private String resolveAsgDeploymentTrack() {
         if (asgDeploymentTrackResolved) {
             return inferredAsgDeploymentTrack;

@@ -29,12 +29,19 @@ public class ApiController {
         chaosService.maybeInjectChaos();
         
         Map<String, Object> info = new HashMap<>();
+        info.put("appName", appConfig.getAppName());
+        info.put("customerName", appConfig.getDisplayCustomerName());
         info.put("version", appConfig.getDisplayVersion());
         info.put("rawVersion", appConfig.getVersion());
+        info.put("buildId", appConfig.getDisplayBuildId());
         info.put("environment", appConfig.getEnvironment());
+        info.put("deploymentTarget", appConfig.getDeploymentTarget());
+        info.put("deploymentTargetDisplay", appConfig.getDisplayDeploymentTarget());
         info.put("deploymentVariant", appConfig.getEffectiveVariant());
         info.put("deploymentTrack", appConfig.getDeploymentTrack());
-        info.put("deploymentStrategy", appConfig.getDeploymentStrategy());
+        info.put("deploymentStrategy", appConfig.getEffectiveDeploymentStrategy());
+        info.put("deploymentStrategyDisplay", appConfig.getDisplayDeploymentStrategy());
+        info.put("deploymentNarrative", appConfig.getDeploymentNarrative());
         info.put("variantColor", appConfig.getVariantColor());
         info.put("hostname", getHostname());
         info.put("podName", appConfig.getPodName());

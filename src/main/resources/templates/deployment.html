@@ -45,6 +45,10 @@
             <span class="opacity-60">|</span>
             <span th:text="${config.displayVersion}">1.0.0</span>
             <span class="opacity-60">|</span>
+            <span th:text="${config.displayDeploymentTarget}">Amazon EKS</span>
+            <span class="opacity-60">|</span>
+            <span th:text="${config.displayDeploymentStrategy}">Canary</span>
+            <span class="opacity-60">|</span>
             <span th:text="${config.namespace}">harness-demo</span>
         </span>
     </div>
@@ -56,6 +60,10 @@
                 <div class="flex items-center space-x-3">
                     <img th:if="${config.customerLogo != ''}" th:src="${config.customerLogo}" alt="Logo" class="h-8">
                     <img th:if="${config.customerLogo == ''}" src="/images/harness-logo.png" alt="Harness" class="h-8">
+                    <div class="hidden md:block text-left">
+                        <div class="text-sm font-semibold text-white" th:text="${config.appName}">Harness Demo Application</div>
+                        <div class="text-xs text-gray-400" th:text="${config.displayCustomerName}">Harness Customer</div>
+                    </div>
                 </div>
                 <div class="flex items-center space-x-8">
                     <a href="/" class="text-gray-400 hover:text-white transition">Home</a>
@@ -73,7 +81,7 @@
             <h1 class="text-4xl font-bold mb-4">
                 <span class="gradient-text">Deployment Information</span>
             </h1>
-            <p class="text-gray-400">Real-time deployment details for this instance</p>
+            <p class="text-gray-400">Real-time deployment details for <span th:text="${config.displayCustomerName}">Harness Customer</span> on <span th:text="${config.displayDeploymentTarget}">Amazon EKS</span></p>
         </div>
     </section>
 
@@ -87,11 +95,12 @@
                     <div class="text-6xl font-black mb-4 uppercase"
                          th:classappend="${config.effectiveVariant == 'canary'} ? 'text-yellow-400' : (${config.effectiveVariant == 'stable'} ? 'text-purple-400' : 'gradient-text')"
                          th:text="${config.effectiveVariant}">STABLE</div>
-                    <div class="text-lg text-white/80 mb-4" th:text="${config.deploymentTarget == 'asg' and (config.effectiveVariant == 'blue' or config.effectiveVariant == 'green')} ? 'This request landed on the ' + config.effectiveVariant + ' fleet' : (${config.effectiveVariant == 'canary'} ? 'This request landed on canary traffic' : 'This request landed on the live release')">This request landed on the live release</div>
+                    <div class="text-lg text-white/80 mb-4" th:text="${config.deploymentNarrative}">You are viewing the live production release</div>
                     <div class="flex justify-center items-center space-x-4">
                         <span class="variant-badge px-4 py-2 rounded-full font-semibold" th:text="${config.displayVersion}">1.0.0</span>
                         <span class="px-4 py-2 bg-white/10 rounded-full" th:text="${config.environment}">production</span>
-                        <span class="px-4 py-2 bg-white/10 rounded-full" th:text="${config.deploymentTarget}">kubernetes</span>
+                        <span class="px-4 py-2 bg-white/10 rounded-full" th:text="${config.displayDeploymentTarget}">Amazon EKS</span>
+                        <span class="px-4 py-2 bg-white/10 rounded-full" th:text="${config.displayDeploymentStrategy}">Canary</span>
                     </div>
                 </div>
             </div>
@@ -101,10 +110,29 @@
                     <div class="text-sm text-gray-400 uppercase tracking-wider mb-2">Production URL</div>
                     <div class="font-mono text-sm break-all" th:text="${config.publicUrl}">https://toddasg-asg.harness-demo.dev</div>
                 </a>
-                <a th:if="${config.stageUrl != null and !config.stageUrl.isEmpty() and config.deploymentStrategy == 'blue-green'}" th:href="${config.stageUrl}" target="_blank" rel="noopener noreferrer" class="bg-white/5 rounded-xl p-5 border border-white/10 hover:border-harness-cyan/50 transition block">
+                <a th:if="${config.stageUrl != null and !config.stageUrl.isEmpty() and config.effectiveDeploymentStrategy == 'blue-green'}" th:href="${config.stageUrl}" target="_blank" rel="noopener noreferrer" class="bg-white/5 rounded-xl p-5 border border-white/10 hover:border-harness-cyan/50 transition block">
                     <div class="text-sm text-gray-400 uppercase tracking-wider mb-2">Stage URL</div>
                     <div class="font-mono text-sm break-all" th:text="${config.stageUrl}">http://toddasg-asg.harness-demo.dev:8080</div>
                 </a>
+            </div>
+
+            <div class="grid md:grid-cols-4 gap-4 mb-12">
+                <div class="bg-white/5 rounded-xl p-5 border border-white/10 text-center">
+                    <div class="text-sm text-gray-400 uppercase tracking-wider mb-2">Customer</div>
+                    <div class="font-semibold" th:text="${config.displayCustomerName}">Harness Customer</div>
+                </div>
+                <div class="bg-white/5 rounded-xl p-5 border border-white/10 text-center">
+                    <div class="text-sm text-gray-400 uppercase tracking-wider mb-2">Build</div>
+                    <div class="font-mono font-semibold" th:text="${config.displayBuildId}">n/a</div>
+                </div>
+                <div class="bg-white/5 rounded-xl p-5 border border-white/10 text-center">
+                    <div class="text-sm text-gray-400 uppercase tracking-wider mb-2">Target</div>
+                    <div class="font-semibold" th:text="${config.displayDeploymentTarget}">Amazon EKS</div>
+                </div>
+                <div class="bg-white/5 rounded-xl p-5 border border-white/10 text-center">
+                    <div class="text-sm text-gray-400 uppercase tracking-wider mb-2">Strategy</div>
+                    <div class="font-semibold" th:text="${config.displayDeploymentStrategy}">Canary</div>
+                </div>
             </div>
 
             <!-- Deployment Strategies -->
@@ -206,11 +234,19 @@
                     </div>
                     <div class="flex justify-between py-3 border-b border-white/10">
                         <span class="text-gray-400">Target</span>
-                        <span class="font-mono" th:text="${config.deploymentTarget}">kubernetes</span>
+                        <span class="font-mono" th:text="${config.displayDeploymentTarget}">Amazon EKS</span>
                     </div>
                     <div class="flex justify-between py-3 border-b border-white/10">
                         <span class="text-gray-400">Strategy</span>
-                        <span class="font-mono" th:text="${config.deploymentStrategy != null and !config.deploymentStrategy.isEmpty() ? config.deploymentStrategy : 'n/a'}">blue-green</span>
+                        <span class="font-mono" th:text="${config.displayDeploymentStrategy}">Blue Green</span>
+                    </div>
+                    <div class="flex justify-between py-3 border-b border-white/10">
+                        <span class="text-gray-400">Customer</span>
+                        <span class="font-mono" th:text="${config.displayCustomerName}">Harness Customer</span>
+                    </div>
+                    <div class="flex justify-between py-3 border-b border-white/10">
+                        <span class="text-gray-400">Build ID</span>
+                        <span class="font-mono" th:text="${config.displayBuildId}">n/a</span>
                     </div>
                 </div>
             </div>
@@ -223,14 +259,16 @@
                 </h3>
                 <pre class="text-green-400 text-sm overflow-x-auto"><code># Application
 APP_NAME="<span th:text="${config.appName}">My Application</span>"
+CUSTOMER_NAME="<span th:text="${config.displayCustomerName}">Harness Customer</span>"
 APP_VERSION=<span th:text="${config.displayVersion}">1.0.0</span>
+BUILD_ID=<span th:text="${config.displayBuildId}">n/a</span>
 APP_ENVIRONMENT=<span th:text="${config.environment}">production</span>
 
 # Deployment
 DEPLOYMENT_VARIANT=<span th:text="${config.effectiveVariant}">blue</span>
 VARIANT_COLOR=<span th:text="${config.variantColor}">#3B82F6</span>
 DEPLOYMENT_TARGET=<span th:text="${config.deploymentTarget}">kubernetes</span>
-DEPLOYMENT_STRATEGY=<span th:text="${config.deploymentStrategy}">blue-green</span>
+DEPLOYMENT_STRATEGY=<span th:text="${config.effectiveDeploymentStrategy}">blue-green</span>
 PUBLIC_URL=<span th:text="${config.publicUrl}">https://toddasg-asg.harness-demo.dev</span>
 STAGE_URL=<span th:text="${config.stageUrl}">http://toddasg-asg.harness-demo.dev:8080</span>
 
