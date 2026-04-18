@@ -526,7 +526,7 @@ pipeline:
 
                             if [ "$status_code" != "200" ]; then
                               echo "ERROR: Required Harness template '${template_id}' version '1.0' is not available in ${ORG_ID}/${PROJECT_ID} (HTTP ${status_code})."
-                              echo "Sync or create the template in Harness before running this provisioner."
+                              echo "Run python3 scripts/sync_harness_workspace_templates.py ${ENDPOINT} ${ACCOUNT_ID} ${ORG_ID} ${PROJECT_ID} <api_key> to sync the required templates before running this provisioner."
                               cat "$response_file"
                               rm -f "$response_file"
                               exit 1
