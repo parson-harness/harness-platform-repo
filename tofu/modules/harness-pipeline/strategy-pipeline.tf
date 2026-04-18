@@ -13,7 +13,7 @@ locals {
       value = regex("^([^:]+):(.*)$", tag)[1]
       } : {
       key   = tag
-      value = "true"
+      value = true
     }
   ]
   strategy_pipeline_yaml_tags = join("\n", [for tag in local.strategy_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])

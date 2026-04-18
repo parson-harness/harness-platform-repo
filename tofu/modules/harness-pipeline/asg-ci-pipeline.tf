@@ -11,7 +11,7 @@ locals {
       value = regex("^([^:]+):(.*)$", tag)[1]
       } : {
       key   = tag
-      value = "true"
+      value = true
     }
   ]
   asg_ci_pipeline_yaml_tags = join("\n", [for tag in local.asg_ci_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])

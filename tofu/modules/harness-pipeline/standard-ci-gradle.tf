@@ -22,7 +22,7 @@ locals {
       value = regex("^([^:]+):(.*)$", tag)[1]
       } : {
       key   = tag
-      value = "true"
+      value = true
     }
   ]
   standard_ci_gradle_yaml_tags                         = join("\n", [for tag in local.standard_ci_gradle_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
