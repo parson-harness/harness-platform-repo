@@ -53,7 +53,7 @@ template:
         value: POV_Provisioner
         value_type: string
         status: manual
-        locked: false
+        locked: true
         type: String
       - key: eks_cluster_name
         value: <+pipeline.variables.eks_cluster_name>
@@ -149,7 +149,7 @@ template:
         value: "false"
         value_type: string
         status: manual
-        locked: false
+        locked: true
         type: String
       - key: acm_cert_arn
         value: <+pipeline.variables.acm_cert_arn>
@@ -179,19 +179,19 @@ template:
         value: github_pat
         value_type: secret
         status: manual
-        locked: false
+        locked: true
         type: Secret
       - key: github_repo_is_public
         value: "true"
         value_type: string
         status: manual
-        locked: false
+        locked: true
         type: String
       - key: git_branch
         value: main
         value_type: string
         status: manual
-        locked: false
+        locked: true
         type: String
       - key: create_delegate
         value: "true"
