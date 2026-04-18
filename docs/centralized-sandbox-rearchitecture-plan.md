@@ -12,6 +12,8 @@ Move the repo from the legacy monolithic sandbox model toward a stack-based, cen
 
 - `8760356` - `Centralize sandbox workspace context metadata`
 - `b7a6284` - `Default helper scripts to stack-based tofu path`
+- `4681aaf` - `Add centralized sandbox rearchitecture plan`
+- Current working tree: stack docs migration, EKS helper/output compatibility, and tracked legacy sandbox removal
 
 ## Key Direction
 
@@ -52,33 +54,53 @@ Updated helper scripts to default to the stack-based EKS path instead of the leg
 - `scripts/build-and-push.sh`
 - `scripts/create-har-secret.sh`
 
+### 5. Stack compatibility and docs migration
+
+Aligned the stack-first operator experience by:
+
+- adding stack-friendly outputs to `tofu/stacks/eks/outputs.tf`
+- deriving AWS account identity for registry outputs in `tofu/stacks/eks/providers.tf`
+- correcting HAR fallback URL handling in `scripts/build-and-push.sh`
+- making `scripts/test-eks-deployment.sh` derive owner-aware stack defaults from `tofu/stacks/eks/terraform.tfvars`
+- migrating `README.md`, `tofu/README.md`, and `docs/EKS_TESTING_GUIDE.md` away from operational use of `tofu/environments/sandbox`
+
+### 6. Tracked legacy sandbox retirement
+
+Removed the tracked legacy sandbox entrypoint files from git:
+
+- `tofu/environments/sandbox/main.tf`
+- `tofu/environments/sandbox/variables.tf`
+- `tofu/environments/sandbox/outputs.tf`
+- `tofu/environments/sandbox/terraform.tfvars.example`
+- `tofu/environments/sandbox/tfplan`
+
+Local state, backup, and cache artifacts under that directory were intentionally left alone because they are not part of the tracked repo source of truth.
+
 ## Important Findings
 
 ### Legacy sandbox usage
 
 `tofu/environments/sandbox` does not appear to be referenced by live `.harness` pipeline/template/workspace paths.
 
-Remaining references are repo-local only:
+Remaining references are now intentional architectural mentions only, such as:
 
-- `README.md`
-- `tofu/README.md`
-- `docs/EKS_TESTING_GUIDE.md`
-- helper scripts and any remaining docs that still mention the legacy path
+- this re-architecture plan
+- migration notes in `tofu/stacks/README.md`
 
-This means the legacy sandbox path is likely removable after repo-local references are migrated and any small helper gaps in `tofu/stacks/eks` are addressed.
+Operational docs and helper scripts now point at the stack-based paths, and the tracked legacy sandbox entrypoint has been removed from git.
 
 ## Next Planned Slices
 
 ### Next slice
 
-- Migrate repo docs and README instructions away from `tofu/environments/sandbox` and toward `tofu/stacks/eks` / `tofu/stacks/asg`
-- Verify whether `tofu/stacks/eks` needs additional outputs or helper affordances to fully replace legacy helper assumptions
-- Remove `tofu/environments/sandbox` if no remaining references justify keeping it
+- Design the control-plane / factory / workload boundary more explicitly
+- Decide which resources belong in project governance vs customer-project provisioning
+- Keep pushing shared management concerns toward persistent factory-style IACM workspaces and templates
 
 ### After that
 
-- Continue thinning any remaining legacy compatibility paths
-- Clarify the control-plane / factory / workload boundaries
+- Refine project-governance and workspace-template ownership boundaries
+- Expand the factory model for reusable customer/demo project provisioning
 - Keep pushing management logic toward stack templates and centrally owned Terraform modules
 
 ## Resume Prompt
@@ -89,10 +111,10 @@ If chat context is lost, paste this:
 Resume the re-architecture initiative on branch rearch/centralized-sandbox-management.
 Use docs/centralized-sandbox-rearchitecture-plan.md as the source of truth.
 Continue the next slice:
-1) migrate remaining docs/readmes off tofu/environments/sandbox to stack-based paths,
-2) verify whether stacks/eks needs extra helper outputs for scripts/docs,
-3) if no references remain, remove tofu/environments/sandbox,
-4) commit and push.
+1) review docs/centralized-sandbox-rearchitecture-plan.md,
+2) continue the control-plane / factory boundary design,
+3) identify which resources should move under project governance vs customer-project provisioning,
+4) implement the next safe slice and commit/push.
 ```
 
 ## Minimal Facts To Mention When Resuming
@@ -100,9 +122,9 @@ Continue the next slice:
 Include these if possible:
 
 - branch: `rearch/centralized-sandbox-management`
-- latest checkpoint commit: `b7a6284`
+- latest checkpoint commit: `4681aaf`
 - forward path: `tofu/stacks/*`
-- legacy path under retirement review: `tofu/environments/sandbox`
+- tracked legacy entrypoint retired from git: `tofu/environments/sandbox`
 
 ## Notes
 

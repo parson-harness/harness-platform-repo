@@ -218,11 +218,16 @@ cd harness-demo-app
 ### 2. Provision AWS Infrastructure
 
 ```bash
-cd tofu/environments/sandbox
+cd tofu/stacks/eks
 
 # Configure your variables
 cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your Harness account details
+# Edit terraform.tfvars with your values:
+# - owner
+# - eks_cluster_name
+# - harness_account_id
+# - harness_api_key
+# - harness_api_key_email
 
 # Deploy infrastructure
 tofu init
@@ -230,13 +235,17 @@ tofu apply
 ```
 
 This creates:
-- VPC with public/private subnets
-- EKS cluster with managed node group
-- ECR repository for container images
-- Harness Delegate in the cluster
-- Harness Connectors (K8s, AWS, Docker, GitHub)
+- Kubernetes namespace for the sandbox
+- Harness service, environment, and infrastructure definitions
+- Harness connectors (K8s, AWS, GitHub, AWS for ECR when needed)
+- Harness Artifact Registry integration or ECR wiring, depending on `artifact_registry_type`
+- Optional per-sandbox delegate and generated delivery pipelines
 
-### 3. Import Pipeline Templates
+### 3. Use the Generated Delivery Pipelines
+
+The stack creates the Harness service, environment, infrastructure, and delivery pipeline resources for the sandbox.
+
+If you want to inspect or manually import legacy example YAMLs, they remain in `harness/pipelines/`:
 
 Pipeline YAML templates are in `harness/pipelines/`:
 
@@ -247,7 +256,7 @@ Pipeline YAML templates are in `harness/pipelines/`:
 | `cd-eks-bluegreen.yaml` | Blue-Green deployment |
 | `cd-ecs.yaml` | ECS rolling deployment |
 
-Import via Harness UI or CLI:
+Manual import example:
 ```bash
 harness pipeline create --file harness/pipelines/ci-build.yaml
 ```

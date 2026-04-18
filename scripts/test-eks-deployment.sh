@@ -12,8 +12,30 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+TFVARS_FILE="${TFVARS_FILE:-$PROJECT_ROOT/tofu/stacks/eks/terraform.tfvars}"
+
+get_tfvar() {
+    local key="$1"
+    if [ -f "$TFVARS_FILE" ]; then
+        grep "^${key}[[:space:]]*=" "$TFVARS_FILE" 2>/dev/null | sed 's/.*=[[:space:]]*"\([^"]*\)".*/\1/' | head -1
+    fi
+}
+
+OWNER="${OWNER:-$(get_tfvar 'owner')}"
+HARNESS_ACCOUNT_ID="${HARNESS_ACCOUNT_ID:-$(get_tfvar 'harness_account_id')}"
+ARTIFACT_REGISTRY_TYPE="${ARTIFACT_REGISTRY_TYPE:-$(get_tfvar 'artifact_registry_type')}"
+NAMESPACE="${NAMESPACE:-${OWNER:+harness-demo-${OWNER}}}"
 NAMESPACE="${NAMESPACE:-harness-demo}"
+APP_NAME="${APP_NAME:-${OWNER:+${OWNER}demoapp}}"
 APP_NAME="${APP_NAME:-harness-demo-app}"
+DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-${APP_NAME}-deployment}"
+SERVICE_NAME="${SERVICE_NAME:-${APP_NAME}-service}"
+DELEGATE_NS="${DELEGATE_NS:-${OWNER:+harness-delegate-ng-${OWNER}}}"
+DELEGATE_NS="${DELEGATE_NS:-harness-delegate-ng}"
+ECR_REPOSITORY="${ECR_REPOSITORY:-${OWNER:+harness-demo-app-${OWNER}}}"
+ECR_REPOSITORY="${ECR_REPOSITORY:-harness-demo-app}"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}EKS Deployment Verification${NC}"
@@ -61,7 +83,6 @@ fi
 
 # Check Harness Delegate
 echo -e "${YELLOW}[3/8] Checking Harness Delegate...${NC}"
-DELEGATE_NS="harness-delegate-ng"
 DELEGATE_PODS=$(kubectl get pods -n "$DELEGATE_NS" -l app=harness-delegate --no-headers 2>/dev/null | wc -l)
 if [ "$DELEGATE_PODS" -gt 0 ]; then
     echo -e "  ${GREEN}✓${NC} Delegate running ($DELEGATE_PODS pod(s))"
@@ -77,9 +98,9 @@ fi
 
 # Check app deployment
 echo -e "${YELLOW}[4/8] Checking application deployment...${NC}"
-if kubectl get deployment "$APP_NAME" -n "$NAMESPACE" &> /dev/null; then
-    READY=$(kubectl get deployment "$APP_NAME" -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}')
-    DESIRED=$(kubectl get deployment "$APP_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.replicas}')
+if kubectl get deployment "$DEPLOYMENT_NAME" -n "$NAMESPACE" &> /dev/null; then
+    READY=$(kubectl get deployment "$DEPLOYMENT_NAME" -n "$NAMESPACE" -o jsonpath='{.status.readyReplicas}')
+    DESIRED=$(kubectl get deployment "$DEPLOYMENT_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.replicas}')
     echo -e "  ${GREEN}✓${NC} Deployment found: $READY/$DESIRED replicas ready"
 else
     echo -e "  ${YELLOW}!${NC} No deployment found (expected if not yet deployed)"
@@ -87,12 +108,12 @@ fi
 
 # Check service
 echo -e "${YELLOW}[5/8] Checking service...${NC}"
-if kubectl get service "$APP_NAME" -n "$NAMESPACE" &> /dev/null; then
-    SVC_TYPE=$(kubectl get service "$APP_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.type}')
+if kubectl get service "$SERVICE_NAME" -n "$NAMESPACE" &> /dev/null; then
+    SVC_TYPE=$(kubectl get service "$SERVICE_NAME" -n "$NAMESPACE" -o jsonpath='{.spec.type}')
     echo -e "  ${GREEN}✓${NC} Service found: $SVC_TYPE"
     
     if [ "$SVC_TYPE" = "LoadBalancer" ]; then
-        LB_HOST=$(kubectl get service "$APP_NAME" -n "$NAMESPACE" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        LB_HOST=$(kubectl get service "$SERVICE_NAME" -n "$NAMESPACE" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
         if [ -n "$LB_HOST" ]; then
             echo -e "  ${GREEN}✓${NC} LoadBalancer: $LB_HOST"
             APP_URL="http://$LB_HOST:8080"
@@ -134,26 +155,37 @@ if [ -n "$APP_URL" ]; then
     fi
 else
     echo -e "  ${YELLOW}!${NC} Skipping (no accessible URL)"
-    echo "  To test locally: kubectl port-forward svc/$APP_NAME 8080:8080 -n $NAMESPACE"
+    echo "  To test locally: kubectl port-forward svc/$SERVICE_NAME 8080:8080 -n $NAMESPACE"
 fi
 
 # Check ECR images
-echo -e "${YELLOW}[7/8] Checking ECR repository...${NC}"
-ECR_REPO=$(aws ecr describe-repositories --repository-names harness-demo-app 2>/dev/null | jq -r '.repositories[0].repositoryUri' 2>/dev/null)
-if [ -n "$ECR_REPO" ] && [ "$ECR_REPO" != "null" ]; then
-    echo -e "  ${GREEN}✓${NC} ECR repo: $ECR_REPO"
-    
-    IMAGES=$(aws ecr list-images --repository-name harness-demo-app --query 'imageIds[*].imageTag' --output text 2>/dev/null | tr '\t' '\n' | head -5)
-    if [ -n "$IMAGES" ]; then
-        echo "  Available tags:"
-        echo "$IMAGES" | while read tag; do
-            echo "    - $tag"
-        done
+if [ "$ARTIFACT_REGISTRY_TYPE" = "har" ]; then
+    echo -e "${YELLOW}[7/8] Checking Harness Artifact Registry configuration...${NC}"
+    if [ -n "$HARNESS_ACCOUNT_ID" ] && [ -n "$OWNER" ]; then
+        HAR_REGISTRY_URL="pkg.harness.io/$(echo "$HARNESS_ACCOUNT_ID" | tr '[:upper:]' '[:lower:]')/har-${OWNER}"
+        echo -e "  ${GREEN}✓${NC} HAR registry URL: $HAR_REGISTRY_URL"
+        echo "  Verify image tags in Harness Artifact Registry or via docker pull/push commands"
     else
-        echo -e "  ${YELLOW}!${NC} No images pushed yet"
+        echo -e "  ${YELLOW}!${NC} Unable to derive HAR registry URL from tfvars"
     fi
 else
-    echo -e "  ${YELLOW}!${NC} ECR repo not found or not accessible"
+    echo -e "${YELLOW}[7/8] Checking ECR repository...${NC}"
+    ECR_REPO=$(aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" --query 'repositories[0].repositoryUri' --output text 2>/dev/null)
+    if [ -n "$ECR_REPO" ] && [ "$ECR_REPO" != "None" ]; then
+        echo -e "  ${GREEN}✓${NC} ECR repo: $ECR_REPO"
+        
+        IMAGES=$(aws ecr list-images --repository-name "$ECR_REPOSITORY" --query 'imageIds[*].imageTag' --output text 2>/dev/null | tr '\t' '\n' | head -5)
+        if [ -n "$IMAGES" ]; then
+            echo "  Available tags:"
+            echo "$IMAGES" | while read tag; do
+                echo "    - $tag"
+            done
+        else
+            echo -e "  ${YELLOW}!${NC} No images pushed yet"
+        fi
+    else
+        echo -e "  ${YELLOW}!${NC} ECR repo not found or not accessible"
+    fi
 fi
 
 # Summary
@@ -164,19 +196,19 @@ echo -e "${BLUE}Manual Test Commands${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 echo "# Port-forward to test locally:"
-echo "kubectl port-forward svc/$APP_NAME 8080:8080 -n $NAMESPACE"
+echo "kubectl port-forward svc/$SERVICE_NAME 8080:8080 -n $NAMESPACE"
 echo ""
 echo "# View logs:"
-echo "kubectl logs -f deployment/$APP_NAME -n $NAMESPACE"
+echo "kubectl logs -f deployment/$DEPLOYMENT_NAME -n $NAMESPACE"
 echo ""
 echo "# Test chaos injection (for CV demo):"
 echo "curl -X POST http://localhost:8080/api/chaos/enable?errorRate=0.3&latencyMs=500"
 echo ""
 echo "# Check delegate logs:"
-echo "kubectl logs -f -l app=harness-delegate -n harness-delegate-ng"
+echo "kubectl logs -f -l app=harness-delegate -n $DELEGATE_NS"
 echo ""
 echo "# Scale deployment:"
-echo "kubectl scale deployment/$APP_NAME --replicas=3 -n $NAMESPACE"
+echo "kubectl scale deployment/$DEPLOYMENT_NAME --replicas=3 -n $NAMESPACE"
 echo ""
 
 echo -e "${GREEN}========================================${NC}"

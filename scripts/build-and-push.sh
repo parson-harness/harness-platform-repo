@@ -32,7 +32,7 @@ cd "$PROJECT_ROOT"
 # If no REGISTRY_URL from tofu outputs, construct from tfvars for HAR
 if [ -z "$REGISTRY_URL" ] && [ "$REGISTRY_TYPE" = "har" ]; then
     if [ -n "$HARNESS_ACCOUNT_ID" ] && [ -n "$OWNER" ]; then
-        REGISTRY_URL="pkg.harness.io/${HARNESS_ACCOUNT_ID}/sandbox/${OWNER}/har-${OWNER}"
+        REGISTRY_URL="pkg.harness.io/$(echo "$HARNESS_ACCOUNT_ID" | tr '[:upper:]' '[:lower:]')/har-${OWNER}"
         echo "Constructed HAR URL from tfvars"
     fi
 fi

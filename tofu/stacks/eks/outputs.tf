@@ -2,6 +2,16 @@
 # Outputs
 ################################################################################
 
+output "cluster_name" {
+  description = "EKS cluster name"
+  value       = var.eks_cluster_name
+}
+
+output "cluster_endpoint" {
+  description = "EKS cluster endpoint"
+  value       = data.aws_eks_cluster.cluster.endpoint
+}
+
 output "org_id" {
   description = "Harness organization ID"
   value       = local.resolved_org_id
@@ -27,6 +37,26 @@ output "k8s_namespace" {
   value       = local.k8s_namespace
 }
 
+output "artifact_registry_type" {
+  description = "Artifact registry type (har or ecr)"
+  value       = var.artifact_registry_type
+}
+
+output "artifact_registry_url" {
+  description = "Artifact registry URL (HAR or ECR)"
+  value       = var.artifact_registry_type == "har" ? module.har[0].registry_url : "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${local.ecr_image_path}"
+}
+
+output "ecr_repository_url" {
+  description = "Derived ECR repository URL when artifact_registry_type=ecr"
+  value       = var.artifact_registry_type == "ecr" ? "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${local.ecr_image_path}" : null
+}
+
+output "har_registry_id" {
+  description = "Harness Artifact Registry ID when artifact_registry_type=har"
+  value       = var.artifact_registry_type == "har" ? module.har[0].registry_id : null
+}
+
 output "app_url" {
   description = "Application URL"
   value       = "https://${var.owner}.harness-demo.dev"
@@ -40,6 +70,16 @@ output "stage_url" {
 output "delegate_name" {
   description = "Delegate name"
   value       = var.create_delegate ? "delegate-${var.owner}" : null
+}
+
+output "delegate_namespace" {
+  description = "Harness delegate namespace"
+  value       = var.create_delegate ? "harness-delegate-ng-${var.owner}" : null
+}
+
+output "delegate_selector" {
+  description = "Delegate selector to use in Harness"
+  value       = local.delegate_selector
 }
 
 output "delegate_irsa_role_arn" {
@@ -60,4 +100,19 @@ output "dns_record" {
 output "opa_policy_sets" {
   description = "OPA policy sets created for CI/CD governance"
   value       = var.create_opa_policies ? module.opa_policies[0].policy_set_ids : null
+}
+
+output "k8s_connector_id" {
+  description = "Harness Kubernetes connector ID"
+  value       = module.harness_connectors.k8s_connector_id
+}
+
+output "aws_connector_id" {
+  description = "Harness AWS connector ID"
+  value       = var.create_aws_connector ? module.harness_connectors.aws_connector_id : null
+}
+
+output "github_connector_id" {
+  description = "Harness GitHub connector ID when created from this stack"
+  value       = var.github_token_ref != "" ? module.harness_connectors.github_connector_id : null
 }

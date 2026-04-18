@@ -17,15 +17,12 @@ This directory contains OpenTofu (Terraform-compatible) code to provision AWS in
 tofu/
 ├── bootstrap/               # S3 backend setup (run once per account)
 ├── modules/
-│   ├── vpc/                 # VPC with public/private subnets
-│   ├── eks/                 # EKS cluster with managed node group
-│   ├── ecr/                 # ECR container registry
-│   ├── irsa-delegate-role/  # IAM role for delegate IRSA
-│   ├── harness-delegate/    # Harness Delegate deployment
-│   └── harness-connectors/  # Harness connectors (K8s, AWS, Docker, GitHub)
-└── environments/
-    ├── sandbox/             # Personal sandbox environment
-    └── pov-template/        # Template for customer POVs
+│   └── ...                  # Reusable stack building blocks
+├── shared-infra/            # Long-lived shared infrastructure
+└── stacks/
+    ├── eks/                 # Harness + app resources targeting an existing EKS cluster
+    ├── asg/                 # Customer-AWS Auto Scaling Group deployment path
+    └── lambda/              # Future stack
 ```
 
 ## Prerequisites
@@ -38,18 +35,17 @@ tofu/
    - Delegate Token
    - Organization and Project created
 
-## Quick Start (Using Existing Cluster)
+## Quick Start (Existing EKS Cluster)
 
 ```bash
-cd tofu/environments/sandbox
+cd tofu/stacks/eks
 
 # Copy and configure variables
 cp terraform.tfvars.example terraform.tfvars
 
 # Edit terraform.tfvars - set your values:
 # - owner = "your-lastname"
-# - existing_cluster_name = "your-eks-cluster"
-# - create_eks_cluster = false
+# - eks_cluster_name = "your-eks-cluster"
 # - Harness credentials
 
 # Initialize and apply
@@ -57,75 +53,50 @@ tofu init
 tofu apply
 ```
 
-## Quick Start (Creating New Cluster)
+## Quick Start (Customer AWS via ASG Stack)
 
 ```bash
-cd tofu/environments/sandbox
+cd tofu/stacks/asg
 
-# Edit terraform.tfvars:
-# - create_eks_cluster = true
-# - enable_nat_gateway = true (or false to save costs)
+# Copy and configure variables
+cp terraform.tfvars.example terraform.tfvars
+
+# Edit terraform.tfvars with customer AWS and Harness values
 
 tofu init
-tofu apply  # Takes ~20 minutes
+tofu apply
 ```
 
 ## What Gets Created
 
-### AWS Resources (if creating new cluster)
-- **VPC** with 3 public and 3 private subnets across AZs
-- **NAT Gateway** for private subnet internet access
-- **EKS Cluster** with managed node group
-
-### AWS Resources (always)
-- **ECR Repository** for container images (`harness-demo-app-<owner>`)
-- **IRSA IAM Role** for delegate AWS access
+### EKS Stack
+- **Existing EKS cluster target** provided via `eks_cluster_name`
+- **Kubernetes namespace** for the owner sandbox
+- **IRSA IAM role** for delegate access when delegate creation is enabled
 
 ### Harness Resources
-- **Delegate** in namespace `harness-delegate-ng-<owner>`
+- **Delegate** in namespace `harness-delegate-ng-<owner>` when `create_delegate = true`
 - **Kubernetes Connector** using delegate credentials
-- **AWS Connector** with IRSA and optional cross-account STS
-- **Docker Connector** for ECR registry
+- **AWS Connector** with IRSA and optional ECR usage
 - **GitHub Connector** (optional) for pipeline source
+- **HAR registry integration** or ECR image path wiring depending on `artifact_registry_type`
+- **Harness Service, Environment, Infrastructure, and pipelines**
 
 ## Cost Optimization
 
-For development/POV environments:
-
-```hcl
-# Use SPOT instances
-node_capacity_type = "SPOT"
-
-# Smaller instance types
-node_instance_types = ["t3.small"]
-
-# Fewer nodes
-node_desired_size = 1
-node_max_size     = 2
-
-# Disable NAT Gateway (saves ~$30/month, but private subnets lose internet)
-enable_nat_gateway = false
-```
+For development/POV environments, prefer stack-specific sizing and registry options in the chosen stack's `terraform.tfvars.example`. The EKS stack assumes an existing cluster, while the ASG stack owns its own AWS footprint and is the right place to tune cost-sensitive infrastructure defaults.
 
 ## Creating a New POV Environment
 
-1. Copy the sandbox environment:
-   ```bash
-   cp -r tofu/environments/sandbox tofu/environments/pov-acme
-   ```
+Use a stack directory directly instead of copying a legacy environment:
 
-2. Update `terraform.tfvars`:
-   ```hcl
-   environment        = "pov-acme"
-   owner              = "your-name"
-   harness_project_id = "acme_pov"
-   ```
+1. Choose the stack:
+   - `tofu/stacks/eks` for shared-EKS demos
+   - `tofu/stacks/asg` for customer-AWS demos
 
-3. Apply:
-   ```bash
-   cd tofu/environments/pov-acme
-   tofu init && tofu apply
-   ```
+2. Copy the example tfvars and set owner/project values.
+
+3. Apply the chosen stack in its own directory.
 
 ## Cleanup
 

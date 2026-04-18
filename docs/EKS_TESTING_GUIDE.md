@@ -12,11 +12,16 @@ This guide walks through testing the full EKS deployment workflow before expandi
 ## Step 1: Deploy Infrastructure
 
 ```bash
-cd tofu/environments/sandbox
+cd tofu/stacks/eks
 
 # Configure variables
 cp terraform.tfvars.example terraform.tfvars
-# Edit with your Harness account details
+# Edit with your values:
+# - owner
+# - eks_cluster_name
+# - harness_account_id
+# - harness_api_key
+# - harness_api_key_email
 
 # Deploy
 tofu init
@@ -24,17 +29,19 @@ tofu apply
 ```
 
 **Expected outputs:**
-- VPC ID
 - EKS cluster name and endpoint
-- ECR repository URL
+- Artifact registry type and URL
 - Delegate name
-- Connector IDs
+- Kubernetes namespace
+- Harness org/project and connector IDs
 
 ## Step 2: Configure kubectl
 
 ```bash
-# Get the command from tofu output
-aws eks update-kubeconfig --region us-east-1 --name harness-demo-sandbox-eks
+# Use the deployed stack outputs
+aws eks update-kubeconfig \
+  --region us-east-1 \
+  --name "$(tofu output -raw cluster_name)"
 ```
 
 Verify:
@@ -47,10 +54,10 @@ kubectl get nodes
 
 ```bash
 # Check delegate pods
-kubectl get pods -n harness-delegate-ng
+kubectl get pods -n "$(tofu output -raw delegate_namespace)"
 
 # Check delegate logs
-kubectl logs -f -l app=harness-delegate -n harness-delegate-ng
+kubectl logs -f -l app=harness-delegate -n "$(tofu output -raw delegate_namespace)"
 ```
 
 **In Harness UI:**
@@ -61,78 +68,48 @@ kubectl logs -f -l app=harness-delegate -n harness-delegate-ng
 ## Step 4: Build and Push Image
 
 ```bash
-# Build locally
-./scripts/build-local.sh -v 1.0.0
-
-# Push to ECR (get registry URL from tofu output)
-./scripts/build-local.sh -v 1.0.0 -r <ecr-registry-url> -p
+# Build and push using the stack-based helper defaults
+./scripts/build-and-push.sh 1.0.0
 
 # Push a second version for deployment testing
-./scripts/build-local.sh -v 2.0.0 -r <ecr-registry-url> -p
+./scripts/build-and-push.sh 2.0.0
 ```
 
-## Step 5: Create Harness Service
+The script reads `tofu/stacks/eks/terraform.tfvars` by default and uses `tofu output` for registry details when available.
+
+## Step 5: Verify Harness Resources
 
 In Harness UI:
-1. Go to **Services** → **New Service**
-2. Name: `harness-demo-app`
-3. Deployment Type: Kubernetes
-4. Add artifact source:
-   - Type: ECR
-   - Connector: Use the one created by tofu
-   - Region: us-east-1
-   - Repository: harness-demo-app
+1. Go to the org/project returned by `tofu output`
+2. Verify the generated service, environment, and infrastructure exist
+3. Verify the delegate shows as Connected
+4. Test the generated connectors if needed
 
-## Step 6: Create Harness Environment
+## Step 6: Run the Generated Pipeline
 
-1. Go to **Environments** → **New Environment**
-2. Name: `sandbox-eks`
-3. Type: Pre-Production
-4. Add Infrastructure Definition:
-   - Type: Kubernetes
-   - Connector: Use K8s connector from tofu
-   - Namespace: `harness-demo`
-   - Release Name: `harness-demo-app`
+Run the deployment pipeline created by the stack and provide the image tag you pushed in the previous step.
 
-## Step 7: Deploy via Pipeline
-
-### Option A: Import Pipeline Template
+## Step 7: Run Verification Script
 
 ```bash
-# Import the canary pipeline
-harness pipeline create --file harness/pipelines/cd-eks-canary.yaml \
-  --project <project-id> --org <org-id>
-```
-
-### Option B: Create Manually
-
-1. Create new pipeline
-2. Add Deployment stage
-3. Select service and environment
-4. Use Canary deployment strategy
-5. Add Verify step after canary deploy
-
-## Step 8: Run Verification Script
-
-```bash
-./scripts/test-eks-deployment.sh
+OWNER=<your-owner> ./scripts/test-eks-deployment.sh
 ```
 
 This checks:
 - Cluster connectivity
 - Delegate status
 - Deployment status
-- Service/LoadBalancer
+- Service reachability
 - Application endpoints
-- ECR images
+- HAR or ECR registry configuration
 
-## Step 9: Test CV Rollback (Optional)
+## Step 8: Test CV Rollback (Optional)
 
 1. Deploy version 1.0.0 as stable
 2. Start canary deployment of 2.0.0
 3. During CV verification, trigger chaos:
    ```bash
-   kubectl port-forward svc/harness-demo-app-canary 8081:8080 -n harness-demo
+   kubectl port-forward svc/<service-name> 8081:8080 -n "$(tofu output -raw k8s_namespace)"
    curl -X POST "http://localhost:8081/api/chaos/enable?errorRate=0.5&latencyMs=1000"
    ```
 4. Watch CV detect degradation and trigger rollback
@@ -142,20 +119,21 @@ This checks:
 | Component | Test | Expected Result |
 |-----------|------|-----------------|
 | **Infrastructure** | | |
-| VPC | `tofu output vpc_id` | VPC ID returned |
+| EKS | `tofu output -raw cluster_name` | Cluster name returned |
 | EKS | `kubectl get nodes` | Nodes in Ready state |
-| ECR | `aws ecr describe-repositories` | Repository exists |
+| Registry | `tofu output -raw artifact_registry_url` | Registry URL returned |
 | **Harness** | | |
 | Delegate | Check Harness UI | Connected status |
 | K8s Connector | Test connection | Success |
 | AWS Connector | Test connection | Success |
 | **Application** | | |
-| Deployment | `kubectl get deploy -n harness-demo` | Running |
-| Service | `kubectl get svc -n harness-demo` | LoadBalancer IP |
+| Namespace | `tofu output -raw k8s_namespace` | Namespace returned |
+| Deployment | `kubectl get deploy -n "$(tofu output -raw k8s_namespace)"` | Running |
+| Service | `kubectl get svc -n "$(tofu output -raw k8s_namespace)"` | Service present |
 | Health | `curl <lb>/actuator/health` | `{"status":"UP"}` |
 | Metrics | `curl <lb>/actuator/prometheus` | Prometheus metrics |
 | **Pipeline** | | |
-| CI (if used) | Run pipeline | Image pushed to ECR |
+| CI (if used) | Run pipeline | Image pushed to configured registry |
 | CD Canary | Run pipeline | Canary + rolling deploy |
 | CV | Enable chaos | Detects degradation |
 
@@ -164,10 +142,10 @@ This checks:
 ### Delegate not connecting
 ```bash
 # Check pod status
-kubectl describe pod -l app=harness-delegate -n harness-delegate-ng
+kubectl describe pod -l app=harness-delegate -n "$(tofu output -raw delegate_namespace)"
 
 # Check logs for errors
-kubectl logs -l app=harness-delegate -n harness-delegate-ng --tail=100
+kubectl logs -l app=harness-delegate -n "$(tofu output -raw delegate_namespace)" --tail=100
 ```
 
 ### EKS access denied
@@ -182,18 +160,19 @@ aws eks update-kubeconfig --region us-east-1 --name <cluster-name>
 ### LoadBalancer pending
 ```bash
 # Check service events
-kubectl describe svc harness-demo-app -n harness-demo
+kubectl describe svc <service-name> -n "$(tofu output -raw k8s_namespace)"
 
 # May need to wait 2-3 minutes for AWS ALB provisioning
 ```
 
 ### Image pull errors
 ```bash
-# Verify ECR login
-aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <registry>
+# Verify configured registry
+tofu output -raw artifact_registry_type
+tofu output -raw artifact_registry_url
 
-# Check image exists
-aws ecr list-images --repository-name harness-demo-app
+# If using ECR, check image exists
+aws ecr list-images --repository-name <owner-specific-ecr-repo>
 ```
 
 ## Next Steps After EKS Verification
