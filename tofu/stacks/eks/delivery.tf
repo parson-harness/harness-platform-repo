@@ -93,7 +93,7 @@ module "harness_service" {
 
   # Artifact configuration - HAR
   artifact_registry_type = var.artifact_registry_type
-  har_registry_ref       = module.har[0].registry_id
+  har_registry_ref       = local.effective_har_registry_id
   har_image_path         = local.har_image_name
 
   # Artifact source remains HAR-only for sandbox flows
@@ -172,8 +172,8 @@ module "harness_pipelines" {
   strategy_pipeline_description = "Unified deployment pipeline with runtime strategy selection for customer demos"
   git_connector_ref       = local.pipeline_git_connector_ref
   git_repo_name           = var.github_repo_name
-  har_registry_ref        = local.har_registry_id
-  har_upstream_proxy_ref  = local.har_upstream_proxy_id
+  har_registry_ref        = local.effective_har_registry_id
+  har_upstream_proxy_ref  = local.effective_har_upstream_proxy_id
   har_image_name          = local.har_image_name
 
   use_harness_code       = true
@@ -194,7 +194,7 @@ module "harness_pipelines" {
   standard_ci_gradle_name          = "${local.owner_title} Standard CI - Gradle"
   standard_ci_gradle_description   = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
   standard_ci_gradle_test_packages = var.standard_ci_gradle_test_packages
-  har_base_image_registry          = "pkg.harness.io/${lower(var.harness_account_id)}/${local.har_registry_id}"
+  har_base_image_registry          = "pkg.harness.io/${lower(var.harness_account_id)}/${local.effective_har_registry_id}"
   publish_coverage_report_artifact = var.publish_coverage_report_artifact
   coverage_report_artifact_connector_ref = var.publish_coverage_report_artifact ? local.effective_aws_connector_id : ""
   coverage_report_artifact_bucket        = var.coverage_report_artifact_bucket

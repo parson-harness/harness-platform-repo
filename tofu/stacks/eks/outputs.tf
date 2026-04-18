@@ -44,12 +44,17 @@ output "artifact_registry_type" {
 
 output "artifact_registry_url" {
   description = "Harness Artifact Registry URL used by the EKS sandbox stack"
-  value       = module.har[0].registry_url
+  value       = "pkg.harness.io/${lower(var.harness_account_id)}/${local.effective_har_registry_id}"
 }
 
 output "har_registry_id" {
   description = "Harness Artifact Registry ID used by the EKS sandbox stack"
-  value       = module.har[0].registry_id
+  value       = local.effective_har_registry_id
+}
+
+output "har_upstream_proxy_id" {
+  description = "DockerHub upstream proxy ID used by the EKS sandbox stack"
+  value       = local.effective_har_upstream_proxy_id
 }
 
 output "app_url" {

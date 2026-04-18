@@ -31,6 +31,9 @@ SURFACED_CONTRACT = [
     ("shared_github_validation_repo", "project_factory_github_validation_repo"),
     ("shared_github_token_ref", "project_factory_github_token_ref"),
     ("shared_github_username", "project_factory_github_username"),
+    ("create_shared_har_registry", "create_project_shared_har_registry"),
+    ("shared_har_registry_id", "project_factory_har_registry_id"),
+    ("shared_har_dockerhub_upstream_id", "project_factory_har_upstream_proxy_id"),
     ("create_shared_harness_code_repo", "create_project_shared_harness_code_repo"),
     ("shared_harness_code_repo_identifier", "project_factory_harness_code_repo_identifier"),
     ("shared_harness_code_source_repo", "source_github_repo"),
@@ -39,6 +42,9 @@ SURFACED_CONTRACT = [
 WORKFLOW_SURFACED_INPUTS = [
     "source_github_repo",
     "create_project_factory",
+    "create_project_shared_har_registry",
+    "project_factory_har_registry_id",
+    "project_factory_har_upstream_proxy_id",
     "create_project_shared_harness_code_repo",
     "project_factory_harness_code_repo_identifier",
     "project_factory_github_token_ref",
@@ -279,6 +285,20 @@ def main() -> int:
     if not step_contains(
         pipeline_text,
         "resolve_shared_connector_refs",
+        'RESOLVED_SHARED_HAR_REGISTRY_ID="har-${PROJECT_ID}"',
+    ):
+        errors.append("Shared HAR resolution no longer falls back to the predictable project-factory HAR registry identifier")
+
+    if not step_contains(
+        pipeline_text,
+        "resolve_shared_connector_refs",
+        'RESOLVED_SHARED_HAR_UPSTREAM_PROXY_ID="${PROJECT_ID}-dockerhub-proxy"',
+    ):
+        errors.append("Shared HAR resolution no longer falls back to the predictable project-factory HAR upstream identifier")
+
+    if not step_contains(
+        pipeline_text,
+        "resolve_shared_connector_refs",
         'RESOLVED_SHARED_HARNESS_CODE_REPO_NAME="${PROJECT_ID}-demo-app"',
     ):
         errors.append("Shared Harness Code repo resolution no longer falls back to the predictable project-factory repo identifier")
@@ -341,6 +361,18 @@ def main() -> int:
     if not has_template_binding(asg_template_text, "shared_harness_code_repo_name", "shared_harness_code_repo_name"):
         errors.append("ASG template binding missing: shared_harness_code_repo_name <- shared_harness_code_repo_name")
 
+    if not has_template_binding(eks_template_text, "shared_har_registry_id", "shared_har_registry_id"):
+        errors.append("EKS template binding missing: shared_har_registry_id <- shared_har_registry_id")
+
+    if not has_template_binding(eks_template_text, "shared_har_upstream_proxy_id", "shared_har_upstream_proxy_id"):
+        errors.append("EKS template binding missing: shared_har_upstream_proxy_id <- shared_har_upstream_proxy_id")
+
+    if not has_template_binding(asg_template_text, "shared_har_registry_id", "shared_har_registry_id"):
+        errors.append("ASG template binding missing: shared_har_registry_id <- shared_har_registry_id")
+
+    if not has_template_binding(asg_template_text, "shared_har_upstream_proxy_id", "shared_har_upstream_proxy_id"):
+        errors.append("ASG template binding missing: shared_har_upstream_proxy_id <- shared_har_upstream_proxy_id")
+
     shared_repo_payload_matches = count_matches(
         pipeline_text,
         r'"shared_harness_code_repo_name"\s*:\s*\{',
@@ -348,6 +380,24 @@ def main() -> int:
     if shared_repo_payload_matches < 4:
         errors.append(
             f"Expected shared_harness_code_repo_name to be stamped in all workload create/recreate payloads, found {shared_repo_payload_matches} bindings"
+        )
+
+    shared_har_registry_payload_matches = count_matches(
+        pipeline_text,
+        r'"shared_har_registry_id"\s*:\s*\{',
+    )
+    if shared_har_registry_payload_matches < 4:
+        errors.append(
+            f"Expected shared_har_registry_id to be stamped in all workload create/recreate payloads, found {shared_har_registry_payload_matches} bindings"
+        )
+
+    shared_har_upstream_payload_matches = count_matches(
+        pipeline_text,
+        r'"shared_har_upstream_proxy_id"\s*:\s*\{',
+    )
+    if shared_har_upstream_payload_matches < 4:
+        errors.append(
+            f"Expected shared_har_upstream_proxy_id to be stamped in all workload create/recreate payloads, found {shared_har_upstream_payload_matches} bindings"
         )
 
     har_payload_matches = count_matches(

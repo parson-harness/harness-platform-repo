@@ -26,10 +26,14 @@ locals {
   shared_github_connector_id = var.shared_github_connector_id != "" ? var.shared_github_connector_id : "${var.harness_project_id}_github_reference_architecture"
   shared_github_connector_name = var.shared_github_connector_name != "" ? var.shared_github_connector_name : "${local.project_title} GitHub Reference Architecture"
 
+  shared_har_registry_id = var.shared_har_registry_id != "" ? var.shared_har_registry_id : "har-${var.harness_project_id}"
+  shared_har_dockerhub_upstream_id = var.shared_har_dockerhub_upstream_id != "" ? var.shared_har_dockerhub_upstream_id : "${var.harness_project_id}-dockerhub-proxy"
+
   shared_harness_code_repo_identifier = var.shared_harness_code_repo_identifier != "" ? var.shared_harness_code_repo_identifier : "${var.harness_project_id}-demo-app"
 
   should_create_shared_aws_connector    = var.create_shared_aws_connector
   should_create_shared_github_connector = var.create_shared_github_connector && var.shared_github_token_ref != ""
+  should_create_shared_har_registry = var.create_shared_har_registry
   should_create_shared_harness_code_repo = var.create_shared_harness_code_repo
 }
 
@@ -91,6 +95,27 @@ module "harness_connectors" {
   github_username         = var.shared_github_username
 
   create_prometheus_connector = false
+
+  depends_on = [module.harness_org_project]
+}
+
+module "shared_har" {
+  source = "../../modules/harness-artifact-registry"
+  count  = local.should_create_shared_har_registry ? 1 : 0
+
+  account_id = var.harness_account_id
+  org_id     = local.resolved_org_id
+  project_id = local.resolved_project_id
+
+  registry_id          = local.shared_har_registry_id
+  registry_description = "Docker registry for ${local.project_title} shared sandbox workloads"
+
+  create_dockerhub_upstream   = true
+  dockerhub_upstream_id       = local.shared_har_dockerhub_upstream_id
+  dockerhub_secret_space_path = var.harness_account_id
+
+  harness_endpoint = var.harness_endpoint
+  harness_api_key  = var.harness_api_key
 
   depends_on = [module.harness_org_project]
 }

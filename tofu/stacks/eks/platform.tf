@@ -35,6 +35,9 @@ locals {
   har_image_name             = "${var.owner}demoapp"
   app_host                   = "${var.owner}.harness-demo.dev"
   stage_host                 = "${var.owner}-stage.harness-demo.dev"
+  should_create_har          = var.shared_har_registry_id == ""
+  effective_har_registry_id  = var.shared_har_registry_id != "" ? var.shared_har_registry_id : local.har_registry_id
+  effective_har_upstream_proxy_id = var.shared_har_upstream_proxy_id != "" ? var.shared_har_upstream_proxy_id : local.har_upstream_proxy_id
   should_create_harness_code_repo = var.shared_harness_code_repo_name == ""
   harness_code_repo_name     = var.shared_harness_code_repo_name != "" ? var.shared_harness_code_repo_name : local.repo_name
   should_create_github_connector = var.github_connector_ref == "" && var.github_token_ref != ""
@@ -150,17 +153,17 @@ module "harness_connectors" {
 
 module "har" {
   source = "../../modules/harness-artifact-registry"
-  count  = 1
+  count  = local.should_create_har ? 1 : 0
 
   account_id = var.harness_account_id
   org_id     = local.resolved_org_id
   project_id = local.resolved_project_id
 
-  registry_id          = local.har_registry_id
+  registry_id          = local.effective_har_registry_id
   registry_description = "Docker registry for ${var.owner} demo app"
 
   create_dockerhub_upstream     = var.create_dockerhub_upstream
-  dockerhub_upstream_id         = local.har_upstream_proxy_id
+  dockerhub_upstream_id         = local.effective_har_upstream_proxy_id
   dockerhub_username            = var.dockerhub_username
   dockerhub_password_secret_ref = var.dockerhub_password_secret_ref
   dockerhub_secret_space_path   = var.harness_account_id

@@ -173,6 +173,16 @@ pipeline:
       description: Optional shared project-level GitHub connector ref to reuse instead of creating an owner-scoped connector in the workload workspace.
       required: false
       value: <+input>.default("")
+    - name: shared_har_registry_id
+      type: String
+      description: Optional shared project-level HAR registry identifier to reuse instead of creating an owner-scoped HAR in the workload workspace.
+      required: false
+      value: <+input>.default("")
+    - name: shared_har_upstream_proxy_id
+      type: String
+      description: Optional shared project-level DockerHub upstream proxy identifier to reuse instead of creating an owner-scoped HAR upstream in the workload workspace.
+      required: false
+      value: <+input>.default("")
     - name: shared_harness_code_repo_name
       type: String
       description: Optional shared project-level Harness Code repo name to reuse instead of creating an owner-scoped repo in the workload workspace.
@@ -243,6 +253,11 @@ pipeline:
       description: Create the shared project-level GitHub connector in the project factory workspace when a token ref is supplied.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
+    - name: create_project_shared_har_registry
+      type: String
+      description: Create the shared project-level HAR registry and DockerHub upstream in the project factory workspace.
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
     - name: create_project_shared_harness_code_repo
       type: String
       description: Create the shared project-level Harness Code repo in the project factory workspace.
@@ -283,6 +298,16 @@ pipeline:
       description: GitHub username used by the shared project-level GitHub connector.
       required: false
       value: <+input>.default(x-access-token)
+    - name: project_factory_har_registry_id
+      type: String
+      description: Optional override for the shared project-level HAR registry identifier.
+      required: false
+      value: <+input>.default("")
+    - name: project_factory_har_upstream_proxy_id
+      type: String
+      description: Optional override for the shared project-level DockerHub upstream identifier.
+      required: false
+      value: <+input>.default("")
     - name: project_factory_harness_code_repo_identifier
       type: String
       description: Optional override for the shared project-level Harness Code repo identifier.
@@ -466,14 +491,19 @@ pipeline:
                           PROJECT_ID="<+pipeline.variables.harness_project_id>"
                           RAW_SHARED_AWS_CONNECTOR_REF="<+pipeline.variables.shared_aws_connector_ref>"
                           RAW_SHARED_GITHUB_CONNECTOR_REF="<+pipeline.variables.shared_github_connector_ref>"
+                          RAW_SHARED_HAR_REGISTRY_ID="<+pipeline.variables.shared_har_registry_id>"
+                          RAW_SHARED_HAR_UPSTREAM_PROXY_ID="<+pipeline.variables.shared_har_upstream_proxy_id>"
                           RAW_SHARED_HARNESS_CODE_REPO_NAME="<+pipeline.variables.shared_harness_code_repo_name>"
                           CREATE_PROJECT_FACTORY="<+pipeline.variables.create_project_factory>"
                           CREATE_PROJECT_SHARED_AWS_CONNECTOR="<+pipeline.variables.create_project_shared_aws_connector>"
                           CREATE_PROJECT_SHARED_GITHUB_CONNECTOR="<+pipeline.variables.create_project_shared_github_connector>"
+                          CREATE_PROJECT_SHARED_HAR_REGISTRY="<+pipeline.variables.create_project_shared_har_registry>"
                           CREATE_PROJECT_SHARED_HARNESS_CODE_REPO="<+pipeline.variables.create_project_shared_harness_code_repo>"
                           PROJECT_FACTORY_AWS_CONNECTOR_ID="<+pipeline.variables.project_factory_aws_connector_id>"
                           PROJECT_FACTORY_GITHUB_CONNECTOR_ID="<+pipeline.variables.project_factory_github_connector_id>"
                           PROJECT_FACTORY_GITHUB_TOKEN_REF="<+pipeline.variables.project_factory_github_token_ref>"
+                          PROJECT_FACTORY_HAR_REGISTRY_ID="<+pipeline.variables.project_factory_har_registry_id>"
+                          PROJECT_FACTORY_HAR_UPSTREAM_PROXY_ID="<+pipeline.variables.project_factory_har_upstream_proxy_id>"
                           PROJECT_FACTORY_HARNESS_CODE_REPO_IDENTIFIER="<+pipeline.variables.project_factory_harness_code_repo_identifier>"
 
                           if [ -n "$RAW_SHARED_AWS_CONNECTOR_REF" ]; then
@@ -500,6 +530,30 @@ pipeline:
                             RESOLVED_SHARED_GITHUB_CONNECTOR_REF=""
                           fi
 
+                          if [ -n "$RAW_SHARED_HAR_REGISTRY_ID" ]; then
+                            RESOLVED_SHARED_HAR_REGISTRY_ID="$RAW_SHARED_HAR_REGISTRY_ID"
+                          elif [ "$CREATE_PROJECT_FACTORY" = "true" ] && [ "$CREATE_PROJECT_SHARED_HAR_REGISTRY" = "true" ]; then
+                            if [ -n "$PROJECT_FACTORY_HAR_REGISTRY_ID" ]; then
+                              RESOLVED_SHARED_HAR_REGISTRY_ID="$PROJECT_FACTORY_HAR_REGISTRY_ID"
+                            else
+                              RESOLVED_SHARED_HAR_REGISTRY_ID="har-${PROJECT_ID}"
+                            fi
+                          else
+                            RESOLVED_SHARED_HAR_REGISTRY_ID=""
+                          fi
+
+                          if [ -n "$RAW_SHARED_HAR_UPSTREAM_PROXY_ID" ]; then
+                            RESOLVED_SHARED_HAR_UPSTREAM_PROXY_ID="$RAW_SHARED_HAR_UPSTREAM_PROXY_ID"
+                          elif [ "$CREATE_PROJECT_FACTORY" = "true" ] && [ "$CREATE_PROJECT_SHARED_HAR_REGISTRY" = "true" ]; then
+                            if [ -n "$PROJECT_FACTORY_HAR_UPSTREAM_PROXY_ID" ]; then
+                              RESOLVED_SHARED_HAR_UPSTREAM_PROXY_ID="$PROJECT_FACTORY_HAR_UPSTREAM_PROXY_ID"
+                            else
+                              RESOLVED_SHARED_HAR_UPSTREAM_PROXY_ID="${PROJECT_ID}-dockerhub-proxy"
+                            fi
+                          else
+                            RESOLVED_SHARED_HAR_UPSTREAM_PROXY_ID=""
+                          fi
+
                           if [ -n "$RAW_SHARED_HARNESS_CODE_REPO_NAME" ]; then
                             RESOLVED_SHARED_HARNESS_CODE_REPO_NAME="$RAW_SHARED_HARNESS_CODE_REPO_NAME"
                           elif [ "$CREATE_PROJECT_FACTORY" = "true" ] && [ "$CREATE_PROJECT_SHARED_HARNESS_CODE_REPO" = "true" ]; then
@@ -514,6 +568,8 @@ pipeline:
 
                           echo "Resolved shared AWS connector ref: ${RESOLVED_SHARED_AWS_CONNECTOR_REF:-<none>}"
                           echo "Resolved shared GitHub connector ref: ${RESOLVED_SHARED_GITHUB_CONNECTOR_REF:-<none>}"
+                          echo "Resolved shared HAR registry: ${RESOLVED_SHARED_HAR_REGISTRY_ID:-<none>}"
+                          echo "Resolved shared HAR upstream: ${RESOLVED_SHARED_HAR_UPSTREAM_PROXY_ID:-<none>}"
                           echo "Resolved shared Harness Code repo: ${RESOLVED_SHARED_HARNESS_CODE_REPO_NAME:-<none>}"
                     environmentVariables: []
                     outputVariables:
@@ -523,6 +579,12 @@ pipeline:
                       - name: resolved_shared_github_connector_ref
                         type: String
                         value: RESOLVED_SHARED_GITHUB_CONNECTOR_REF
+                      - name: resolved_shared_har_registry_id
+                        type: String
+                        value: RESOLVED_SHARED_HAR_REGISTRY_ID
+                      - name: resolved_shared_har_upstream_proxy_id
+                        type: String
+                        value: RESOLVED_SHARED_HAR_UPSTREAM_PROXY_ID
                       - name: resolved_shared_harness_code_repo_name
                         type: String
                         value: RESOLVED_SHARED_HARNESS_CODE_REPO_NAME
@@ -1051,6 +1113,9 @@ pipeline:
                           update_tf_var "shared_github_validation_repo" "<+pipeline.variables.project_factory_github_validation_repo>" "string"
                           update_tf_var "shared_github_token_ref" "<+pipeline.variables.project_factory_github_token_ref>" "string"
                           update_tf_var "shared_github_username" "<+pipeline.variables.project_factory_github_username>" "string"
+                          update_tf_var "create_shared_har_registry" "<+pipeline.variables.create_project_shared_har_registry>" "string"
+                          update_tf_var "shared_har_registry_id" "<+pipeline.variables.project_factory_har_registry_id>" "string"
+                          update_tf_var "shared_har_dockerhub_upstream_id" "<+pipeline.variables.project_factory_har_upstream_proxy_id>" "string"
                           update_tf_var "create_shared_harness_code_repo" "<+pipeline.variables.create_project_shared_harness_code_repo>" "string"
                           update_tf_var "shared_harness_code_repo_identifier" "<+pipeline.variables.project_factory_harness_code_repo_identifier>" "string"
                           update_tf_var "shared_harness_code_source_repo" "<+pipeline.variables.source_github_repo>" "string"
@@ -1179,6 +1244,16 @@ pipeline:
                           "create_dockerhub_upstream": {
                             "key": "create_dockerhub_upstream",
                             "value": "true",
+                            "value_type": "string"
+                          },
+                          "shared_har_registry_id": {
+                            "key": "shared_har_registry_id",
+                            "value": "<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_registry_id>",
+                            "value_type": "string"
+                          },
+                          "shared_har_upstream_proxy_id": {
+                            "key": "shared_har_upstream_proxy_id",
+                            "value": "<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_upstream_proxy_id>",
                             "value_type": "string"
                           },
                           "create_strategy_pipeline": {
@@ -1415,6 +1490,16 @@ pipeline:
                           "create_dns_record": {
                             "key": "create_dns_record",
                             "value": "true",
+                            "value_type": "string"
+                          },
+                          "shared_har_registry_id": {
+                            "key": "shared_har_registry_id",
+                            "value": "<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_registry_id>",
+                            "value_type": "string"
+                          },
+                          "shared_har_upstream_proxy_id": {
+                            "key": "shared_har_upstream_proxy_id",
+                            "value": "<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_upstream_proxy_id>",
                             "value_type": "string"
                           },
                           "route53_zone_name": {
@@ -1667,6 +1752,8 @@ pipeline:
                           SHARED_ALB_DNS_NAME="<+pipeline.variables.shared_alb_dns_name>"
                           RESOLVED_SHARED_AWS_CONNECTOR_REF="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_aws_connector_ref>"
                           RESOLVED_SHARED_GITHUB_CONNECTOR_REF="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_github_connector_ref>"
+                          RESOLVED_SHARED_HAR_REGISTRY_ID="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_registry_id>"
+                          RESOLVED_SHARED_HAR_UPSTREAM_PROXY_ID="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_upstream_proxy_id>"
                           RESOLVED_SHARED_HARNESS_CODE_REPO_NAME="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_harness_code_repo_name>"
                           CURRENT_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -1767,6 +1854,8 @@ pipeline:
                           update_tf_var "aws_connector_ref" "$RESOLVED_SHARED_AWS_CONNECTOR_REF" "string"
                           update_tf_var "github_repo_name" "$SOURCE_GITHUB_REPO" "string"
                           update_tf_var "github_connector_ref" "$RESOLVED_SHARED_GITHUB_CONNECTOR_REF" "string"
+                          update_tf_var "shared_har_registry_id" "$RESOLVED_SHARED_HAR_REGISTRY_ID" "string"
+                          update_tf_var "shared_har_upstream_proxy_id" "$RESOLVED_SHARED_HAR_UPSTREAM_PROXY_ID" "string"
                           update_tf_var "use_harness_code" "$RESOLVED_USE_HARNESS_CODE" "string"
                           update_tf_var "shared_harness_code_repo_name" "$RESOLVED_SHARED_HARNESS_CODE_REPO_NAME" "string"
 
@@ -2191,6 +2280,16 @@ pipeline:
                             "value": "true",
                             "value_type": "string"
                           },
+                          "shared_har_registry_id": {
+                            "key": "shared_har_registry_id",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_registry_id>",
+                            "value_type": "string"
+                          },
+                          "shared_har_upstream_proxy_id": {
+                            "key": "shared_har_upstream_proxy_id",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_upstream_proxy_id>",
+                            "value_type": "string"
+                          },
                           "create_strategy_pipeline": {
                             "key": "create_strategy_pipeline",
                             "value": "<+pipeline.variables.create_strategy_pipeline>",
@@ -2399,6 +2498,16 @@ pipeline:
                           "create_dns_record": {
                             "key": "create_dns_record",
                             "value": "true",
+                            "value_type": "string"
+                          },
+                          "shared_har_registry_id": {
+                            "key": "shared_har_registry_id",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_registry_id>",
+                            "value_type": "string"
+                          },
+                          "shared_har_upstream_proxy_id": {
+                            "key": "shared_har_upstream_proxy_id",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_upstream_proxy_id>",
                             "value_type": "string"
                           },
                           "route53_zone_name": {
@@ -3242,6 +3351,10 @@ pipeline:
                             if [ -z "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_harness_code_repo_name>" ]; then
                               echo "Harness Code Repo: <+pipeline.variables.owner>-demo-app"
                             fi
+                            echo "HAR Registry: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_registry_id>"
+                            if [ -z "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_registry_id>" ]; then
+                              echo "HAR Registry: har-<+pipeline.variables.owner>"
+                            fi
                             echo "  (Terraform-managed, imported from: <+pipeline.variables.source_github_repo>)"
                             echo ""
                             echo "All resources are managed by Terraform state."
@@ -3280,6 +3393,10 @@ pipeline:
                               echo "Harness Code Repo: <+pipeline.variables.owner>-demo-app"
                             fi
                             echo "  (Terraform-managed, imported from: <+pipeline.variables.source_github_repo>)"
+                            echo "HAR Registry: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_registry_id>"
+                            if [ -z "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_har_registry_id>" ]; then
+                              echo "HAR Registry: har-<+pipeline.variables.owner>"
+                            fi
                             echo "Artifact Registry: ${ARTIFACT_REGISTRY_TYPE}"
                             echo ""
                             echo "All resources are managed by Terraform state."

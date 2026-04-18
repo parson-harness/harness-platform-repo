@@ -18,6 +18,16 @@ output "shared_github_connector_id" {
   value       = local.should_create_shared_github_connector ? module.harness_connectors.github_connector_id : (var.shared_github_connector_id != "" ? var.shared_github_connector_id : null)
 }
 
+output "shared_har_registry_id" {
+  description = "Shared project-level Harness Artifact Registry identifier in use"
+  value       = local.should_create_shared_har_registry ? module.shared_har[0].registry_id : (var.shared_har_registry_id != "" ? var.shared_har_registry_id : null)
+}
+
+output "shared_har_dockerhub_upstream_id" {
+  description = "Shared project-level DockerHub upstream proxy identifier in use"
+  value       = local.should_create_shared_har_registry ? module.shared_har[0].dockerhub_upstream_id : (var.shared_har_dockerhub_upstream_id != "" ? var.shared_har_dockerhub_upstream_id : null)
+}
+
 output "shared_harness_code_repo_identifier" {
   description = "Shared project-level Harness Code repository identifier in use"
   value       = local.should_create_shared_harness_code_repo ? module.shared_harness_code_repo.repo_identifier : (var.shared_harness_code_repo_identifier != "" ? var.shared_harness_code_repo_identifier : null)

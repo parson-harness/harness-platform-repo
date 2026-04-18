@@ -115,6 +115,18 @@ template:
         status: manual
         locked: true
         type: String
+      - key: shared_har_registry_id
+        value: <+pipeline.variables.shared_har_registry_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_har_upstream_proxy_id
+        value: <+pipeline.variables.shared_har_upstream_proxy_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
       - key: aws_region
         value: us-east-1
         value_type: string
