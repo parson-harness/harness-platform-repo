@@ -127,6 +127,7 @@ locals {
   should_create_github_connector = var.github_connector_ref == "" && var.github_token_ref != ""
   effective_aws_connector_id = var.aws_connector_ref != "" ? var.aws_connector_ref : local.aws_connector_id
   effective_github_connector_id = var.github_connector_ref != "" ? var.github_connector_ref : (local.should_create_github_connector ? local.github_connector_id : "")
+  harness_code_repo_name     = "${var.owner}-demo-app"
 
   asg_alb_name_source      = "${local.name_prefix}-asg-alb"
   asg_prod_tg_name_source  = "${local.name_prefix}-asg-prod-tg"
@@ -165,7 +166,7 @@ locals {
 
 module "harness_code_repo" {
   source = "../../modules/harness-code-repo"
-  count  = var.use_harness_code ? 1 : 0
+  count  = 1
 
   harness_account_id = var.harness_account_id
   org_id             = local.resolved_org_id
@@ -816,7 +817,7 @@ module "harness_connectors" {
 
 module "har" {
   source = "../../modules/harness-artifact-registry"
-  count  = var.artifact_registry_type == "har" ? 1 : 0
+  count  = 1
 
   account_id = var.harness_account_id
   org_id     = local.resolved_org_id
@@ -862,13 +863,11 @@ module "harness_service_asg" {
   asg_startup_script_path            = "asg/user-data.sh"
   asg_startup_script_use_file_store  = var.asg_startup_script_use_file_store
   asg_startup_script_local_file_path = "${path.root}/../../../asg/user-data.sh"
-  manifest_store_type                = var.use_harness_code ? "HarnessCode" : "Github"
-  git_connector_ref = var.use_harness_code ? "" : (
-    local.effective_github_connector_id
-  )
-  git_repo_name                        = var.use_harness_code ? "" : var.github_repo_name
-  harness_code_repo_name               = var.use_harness_code ? "${var.owner}-demo-app" : ""
-  asg_startup_script_use_git           = !var.use_harness_code && local.effective_github_connector_id != ""
+  manifest_store_type                = "HarnessCode"
+  git_connector_ref                  = ""
+  git_repo_name                      = ""
+  harness_code_repo_name             = local.harness_code_repo_name
+  asg_startup_script_use_git         = false
   asg_startup_script_git_connector_ref = local.effective_github_connector_id
   asg_startup_script_git_repo_name     = var.github_repo_name
   git_branch                           = var.git_branch
@@ -986,14 +985,14 @@ module "harness_pipelines_asg" {
   create_ci_pipeline         = false
 
   # ASG CI pipeline: Gradle + CI Intelligence + security scans → Packer AMI build
-  create_asg_ci_pipeline           = var.create_asg_ci_pipeline && (var.use_harness_code || local.effective_github_connector_id != "")
+  create_asg_ci_pipeline           = var.create_asg_ci_pipeline
   asg_ci_pipeline_id               = "${var.owner}_asg_ci_build"
   asg_ci_pipeline_name             = "${local.owner_title} ASG CI Build"
   asg_ci_pipeline_description      = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning, and Packer AMI bake"
   git_connector_ref                = local.effective_github_connector_id
   git_repo_name                    = var.github_repo_name
-  use_harness_code                 = var.use_harness_code
-  harness_code_repo_name           = var.use_harness_code ? "${var.owner}-demo-app" : ""
+  use_harness_code                 = true
+  harness_code_repo_name           = local.harness_code_repo_name
   harness_account_id               = var.harness_account_id
   harness_org_id                   = local.resolved_org_id
   harness_project_id               = local.resolved_project_id
@@ -1011,8 +1010,8 @@ module "harness_pipelines_asg" {
   delegate_selector        = local.delegate_selector
   pipeline_tags            = ["tofu-managed:true", "owner:${var.owner}", "deployment-target:asg", "managed-by:provisioner"]
 
-  har_registry_ref       = var.artifact_registry_type == "har" ? local.har_registry_id : ""
-  har_upstream_proxy_ref = var.artifact_registry_type == "har" && var.create_dockerhub_upstream ? local.har_upstream_proxy_id : ""
+  har_registry_ref       = local.har_registry_id
+  har_upstream_proxy_ref = local.har_upstream_proxy_id
   har_image_name         = local.har_image_name
 
   depends_on = [module.harness_service_asg, module.harness_environment_dev, module.harness_code_repo, module.har]
@@ -1083,8 +1082,8 @@ output "aws_connector_id" {
 }
 
 output "github_connector_id" {
-  description = "Harness GitHub connector ID in use when not using Harness Code"
-  value       = var.use_harness_code ? null : local.effective_github_connector_id
+  description = "Harness GitHub connector ID used to import the sandbox repo into Harness Code when configured"
+  value       = local.effective_github_connector_id != "" ? local.effective_github_connector_id : null
 }
 
 ################################################################################
