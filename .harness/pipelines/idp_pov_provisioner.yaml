@@ -1141,6 +1141,11 @@ pipeline:
                             "value": "<+pipeline.variables.harness_endpoint>",
                             "value_type": "string"
                           },
+                          "harness_api_key_email": {
+                            "key": "harness_api_key_email",
+                            "value": "<+pipeline.variables.target_api_key_email>",
+                            "value_type": "string"
+                          },
                           "harness_org_id": {
                             "key": "harness_org_id",
                             "value": "<+pipeline.variables.harness_org_id>",
@@ -2143,6 +2148,11 @@ pipeline:
                           "harness_endpoint": {
                             "key": "harness_endpoint",
                             "value": "<+pipeline.variables.harness_endpoint>",
+                            "value_type": "string"
+                          },
+                          "harness_api_key_email": {
+                            "key": "harness_api_key_email",
+                            "value": "<+pipeline.variables.target_api_key_email>",
                             "value_type": "string"
                           },
                           "harness_org_id": {
