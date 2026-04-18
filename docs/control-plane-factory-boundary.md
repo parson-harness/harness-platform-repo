@@ -242,13 +242,11 @@ Right now, the stack workspaces still create many resources that are arguably pr
 
 ## Recommended Next Slice
 
-Start with Option A plus a small implementation probe:
+Start with Option C for the first durable shared-resource move:
 
-- create a resource ownership matrix
-- pick one candidate shared resource class
-- move only that class if the blast radius is small
-
-The best first candidate appears to be project-level connectors, because they are highly reusable and their lifecycle often should not follow a single owner workspace.
+- keep `project-governance` limited to policy assets and project guardrails
+- introduce a separate `project-factory` workspace for reusable project-scoped wiring
+- move only the AWS and GitHub connector class first because it has a small blast radius and clear reuse value
 
 ## First Implemented Factory Move
 
@@ -260,4 +258,16 @@ The first low-risk factory move is now in place as an opt-in reuse path:
 - `.harness/templates/POV_Provisioner` and `.harness/templates/Sandbox_Provisioner_ASG` now accept those optional shared connector refs
 - `.harness/pipelines/idp_pov_provisioner.yaml` passes the optional refs through initial create, reconcile, and recreate workspace flows
 
-This is intentionally a reuse-first move, not a full connector factory stack yet. The next step is to decide where those shared project-level connectors should be created and reconciled permanently.
+This is intentionally a reuse-first move and established the connector contract before introducing a permanent factory owner.
+
+## Current Connector Factory Slice
+
+Shared project-level AWS and GitHub connectors now belong in a separate `project-factory` layer, not in `project-governance`:
+
+- `tofu/stacks/project-governance` remains policy-only
+- `tofu/stacks/project-factory` owns project-scoped shared AWS and GitHub connectors
+- `.harness/templates/project_factory_workspace.yaml` defines the durable IACM workspace template for that layer
+- `.harness/pipelines/idp_pov_provisioner.yaml` can now optionally create or reconcile `${project}_factory` before provisioning workload workspaces
+- workload workspace create, reconcile, and recreate paths resolve effective shared connector refs from either explicit pipeline inputs or the predictable project-factory connector IDs
+
+The new path is deliberately opt-in so existing owner-scoped connector behavior remains unchanged until the shared factory workflow is enabled for a target project.

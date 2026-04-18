@@ -88,6 +88,16 @@ Implemented the first safe factory-oriented extraction as a reuse-first path for
 - IACM templates and the IDP provisioner now pass those optional connector refs through create, reconcile, and recreate flows
 - stack outputs now expose the effective connector refs actually in use
 
+### 8. Project factory bootstrap for shared connectors
+
+Implemented the next safe slice by giving shared project-level connectors a durable home outside workload workspaces:
+
+- added `tofu/stacks/project-factory` to create or reconcile shared AWS and GitHub connectors once per target project
+- added `.harness/templates/project_factory_workspace.yaml` as the long-lived IACM template for that layer
+- updated `.harness/pipelines/idp_pov_provisioner.yaml` to optionally bootstrap `${project}_factory` before workload provisioning
+- resolved workload `aws_connector_ref` and `github_connector_ref` from either explicit shared refs or predictable project-factory connector IDs
+- kept the new path opt-in so existing owner-scoped connector behavior remains the default until enabled
+
 ## Important Findings
 
 ### Legacy sandbox usage
@@ -106,13 +116,13 @@ Operational docs and helper scripts now point at the stack-based paths, and the 
 ### Next slice
 
 - Boundary doc: `docs/control-plane-factory-boundary.md`
-- Decide where shared project-level connectors should be created and reconciled permanently
-- Choose whether that permanent home belongs in project governance or a dedicated customer-project factory layer
-- Keep pushing shared management concerns toward persistent factory-style IACM workspaces and templates
+- Validate the new `${project}_factory` workspace flow in a target project
+- Decide when to flip shared connector creation on by default for specific sandbox profiles or projects
+- Keep pushing shared management concerns toward persistent factory-style IACM workspaces and templates while leaving Kubernetes connectors in workload stacks for now
 
 ### After that
 
-- Pick the first candidate factory move from `docs/control-plane-factory-boundary.md`
+- Refine the project-factory contract for additional shared project-level resources beyond connectors
 - Refine project-governance and workspace-template ownership boundaries
 - Expand the factory model for reusable customer/demo project provisioning
 - Keep pushing management logic toward stack templates and centrally owned Terraform modules
@@ -127,8 +137,9 @@ Use docs/centralized-sandbox-rearchitecture-plan.md as the source of truth.
 Continue the next slice:
 1) review docs/centralized-sandbox-rearchitecture-plan.md,
 2) review docs/control-plane-factory-boundary.md,
-3) decide where shared project-level connectors should be created and reconciled permanently,
-4) implement the next safe slice and commit/push.
+3) validate the `${project}_factory` shared connector bootstrap flow,
+4) decide the next shared resource class to move after connectors,
+5) implement the next safe slice and commit/push.
 ```
 
 ## Minimal Facts To Mention When Resuming

@@ -1,0 +1,190 @@
+template:
+  name: Project Factory
+  identifier: Project_Factory
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  versionLabel: "1.0"
+  type: Workspace
+  tags: {}
+  spec:
+    provider:
+      type: others
+      title: thirdPartyGitProvider
+      info: thirdPartyGitProviderInfo
+      icon: service-github
+      size: 20
+      disabled: false
+    tags: []
+    cost_estimation:
+      enabled: false
+      locked: false
+    default_pipelines:
+      plan: pov_provisioning
+      apply: pov_provisioning
+      destroy: pov_destroy
+      drift: pov_provisioning
+      locked: true
+    provisioner:
+      type: opentofu
+      version: 1.11.2
+      connector: aws_oidc_iacm
+      locked: true
+    provider_connectors:
+      - connector_ref: aws_oidc_iacm
+        type: aws
+        locked: true
+    repository:
+      isHarnessCode: false
+      connector: parsongh
+      name: harness-demo-app
+      branch: main
+      gitFetchType: branch
+      path: tofu/stacks/project-factory
+      locked: true
+    variables: []
+    terraform_variables:
+      - key: harness_account_id
+        value: <+pipeline.variables.harness_account_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: harness_endpoint
+        value: <+pipeline.variables.harness_endpoint>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: harness_api_key
+        value: <+pipeline.variables.target_api_key>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: harness_org_id
+        value: <+pipeline.variables.harness_org_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: harness_project_id
+        value: <+pipeline.variables.harness_project_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: create_harness_org
+        value: <+pipeline.variables.create_harness_org>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: create_harness_project
+        value: <+pipeline.variables.create_harness_project>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_delegate_selector
+        value: <+pipeline.variables.project_factory_delegate_selector>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: create_shared_aws_connector
+        value: <+pipeline.variables.create_project_shared_aws_connector>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_aws_connector_id
+        value: <+pipeline.variables.project_factory_aws_connector_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_aws_connector_name
+        value: <+pipeline.variables.project_factory_aws_connector_name>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_aws_region
+        value: <+pipeline.variables.project_factory_aws_region>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_aws_auth_type
+        value: <+pipeline.variables.project_factory_aws_auth_type>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_enable_cross_account_access
+        value: <+pipeline.variables.project_factory_enable_cross_account_access>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_cross_account_role_arn
+        value: <+pipeline.variables.project_factory_cross_account_role_arn>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_cross_account_external_id
+        value: <+pipeline.variables.project_factory_cross_account_external_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: create_shared_github_connector
+        value: <+pipeline.variables.create_project_shared_github_connector>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_github_connector_id
+        value: <+pipeline.variables.project_factory_github_connector_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_github_connector_name
+        value: <+pipeline.variables.project_factory_github_connector_name>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_github_url
+        value: <+pipeline.variables.project_factory_github_url>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_github_connection_type
+        value: <+pipeline.variables.project_factory_github_connection_type>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_github_validation_repo
+        value: <+pipeline.variables.project_factory_github_validation_repo>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_github_token_ref
+        value: <+pipeline.variables.project_factory_github_token_ref>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_github_username
+        value: <+pipeline.variables.project_factory_github_username>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+    terraform_variable_files: []

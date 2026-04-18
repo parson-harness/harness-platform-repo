@@ -1047,6 +1047,10 @@ pipeline:
                           echo "=== Project Governance ==="
                           echo "Skipping project-scoped OPA cleanup here; shared governance assets are owned by ${PROJECT_ID}_governance"
 
+                          echo ""
+                          echo "=== Project Factory ==="
+                          echo "Skipping project-scoped shared connector cleanup here; shared factory assets are owned by ${PROJECT_ID}_factory"
+
                           echo "=== Delegate Token ==="
                           # List and delete matching tokens
                           TOKENS=$(curl -s "${ENDPOINT}/ng/api/delegate-token-ng?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}" \

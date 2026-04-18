@@ -2,6 +2,8 @@
 
 This directory contains **decoupled, per-tech-stack Terraform configurations** for deploying Harness demo environments.
 
+For the full repository architecture and lifecycle ownership model, see [../../docs/repo-architecture.md](../../docs/repo-architecture.md).
+
 ## Architecture
 
 ```

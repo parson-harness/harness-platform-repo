@@ -2,6 +2,8 @@
 
 This directory contains OpenTofu (Terraform-compatible) code to provision AWS infrastructure and Harness resources for the demo application.
 
+For the full repository architecture, including how `.harness/`, `tofu/stacks/`, application payloads, and the new project-factory layer fit together, see [../docs/repo-architecture.md](../docs/repo-architecture.md).
+
 ## Key Features
 
 - **Use existing or create new EKS cluster** - Skip cluster creation for faster setup

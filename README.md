@@ -16,6 +16,10 @@ This repo is designed to be **forked** for customer POVs. Each SE can:
 
 See [Getting Started for SEs](#getting-started-for-ses) below.
 
+## Repository Architecture
+
+For the current repo-level architecture, lifecycle boundaries, and control-plane vs workload ownership model, see [docs/repo-architecture.md](docs/repo-architecture.md).
+
 ## Features
 
 ### 🎨 Visual & Engaging UI

@@ -178,7 +178,20 @@ spec:
           enum:
             - "true"
             - "false"
-    
+        create_project_factory:
+          title: Create Project Factory?
+          type: string
+          description: "Create or reuse the project-scoped factory workspace for shared AWS and GitHub connectors. Leave false to keep connector ownership inside the workload workspace."
+          default: "false"
+          enum:
+            - "true"
+            - "false"
+        project_factory_github_token_ref:
+          title: Shared GitHub Token Ref
+          type: string
+          description: "Optional Harness secret reference for the project-scoped shared GitHub connector (for example account.github_pat). Leave empty to skip shared GitHub connector creation."
+          default: ""
+
   steps:
     - id: trigger
       name: Provisioning POV Environment
@@ -200,4 +213,6 @@ spec:
           source_github_repo: ${{ parameters.source_github_repo }}
           force_recreate: ${{ parameters.force_recreate }}
           create_opa_policies: ${{ parameters.create_opa_policies }}
+          create_project_factory: ${{ parameters.create_project_factory }}
+          project_factory_github_token_ref: ${{ parameters.project_factory_github_token_ref }}
         apikey: ${{ parameters.token }}

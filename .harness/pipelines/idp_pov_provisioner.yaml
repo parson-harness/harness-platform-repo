@@ -163,6 +163,96 @@ pipeline:
       description: Optional shared project-level GitHub connector ref to reuse instead of creating an owner-scoped connector in the workload workspace.
       required: false
       value: <+input>.default("")
+    - name: create_project_factory
+      type: String
+      description: Create or reuse the project-scoped factory workspace for shared connectors. Leave false to preserve workload-owned connector behavior.
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
+    - name: project_factory_delegate_selector
+      type: String
+      description: Stable delegate selector used by project-scoped shared connectors.
+      required: false
+      value: <+input>.default(parson-eks-delegate)
+    - name: create_project_shared_aws_connector
+      type: String
+      description: Create the shared project-level AWS connector in the project factory workspace when project factory bootstrapping is enabled.
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
+    - name: project_factory_aws_connector_id
+      type: String
+      description: Optional override for the shared project-level AWS connector identifier.
+      required: false
+      value: <+input>.default("")
+    - name: project_factory_aws_connector_name
+      type: String
+      description: Optional override for the shared project-level AWS connector name.
+      required: false
+      value: <+input>.default("")
+    - name: project_factory_aws_region
+      type: String
+      description: AWS region for the shared project-level AWS connector.
+      required: false
+      value: <+input>.default(us-east-1)
+    - name: project_factory_aws_auth_type
+      type: String
+      description: AWS auth type for the shared project-level AWS connector.
+      required: false
+      value: <+input>.default(irsa).allowedValues(delegate,manual,irsa)
+    - name: project_factory_enable_cross_account_access
+      type: String
+      description: Enable cross-account STS access on the shared project-level AWS connector.
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
+    - name: project_factory_cross_account_role_arn
+      type: String
+      description: Optional cross-account role ARN for the shared project-level AWS connector.
+      required: false
+      value: <+input>.default("")
+    - name: project_factory_cross_account_external_id
+      type: String
+      description: Optional external ID for the shared project-level AWS connector cross-account role.
+      required: false
+      value: <+input>.default("")
+    - name: create_project_shared_github_connector
+      type: String
+      description: Create the shared project-level GitHub connector in the project factory workspace when a token ref is supplied.
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
+    - name: project_factory_github_connector_id
+      type: String
+      description: Optional override for the shared project-level GitHub connector identifier.
+      required: false
+      value: <+input>.default("")
+    - name: project_factory_github_connector_name
+      type: String
+      description: Optional override for the shared project-level GitHub connector name.
+      required: false
+      value: <+input>.default("")
+    - name: project_factory_github_url
+      type: String
+      description: GitHub URL for the shared project-level GitHub connector.
+      required: false
+      value: <+input>.default(https://github.com)
+    - name: project_factory_github_connection_type
+      type: String
+      description: GitHub connection type for the shared project-level GitHub connector.
+      required: false
+      value: <+input>.default(Account).allowedValues(Account,Repo)
+    - name: project_factory_github_validation_repo
+      type: String
+      description: Validation repository for the shared project-level GitHub connector.
+      required: false
+      value: <+input>.default(parson-harness/harness-demo-app)
+    - name: project_factory_github_token_ref
+      type: String
+      description: Harness secret reference for the shared project-level GitHub connector token.
+      required: false
+      value: <+input>.default("")
+    - name: project_factory_github_username
+      type: String
+      description: GitHub username used by the shared project-level GitHub connector.
+      required: false
+      value: <+input>.default(x-access-token)
     - name: force_recreate
       type: String
       description: If workspace exists, destroy it first and recreate (clean slate). If false, will update existing workspace.
@@ -326,6 +416,64 @@ pipeline:
                       - name: resolved_create_asg_ci_pipeline
                         type: String
                         value: RESOLVED_CREATE_ASG_CI_PIPELINE
+                  timeout: 2m
+              - step:
+                  type: ShellScript
+                  name: Resolve Shared Connector References
+                  identifier: resolve_shared_connector_refs
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          PROJECT_ID="<+pipeline.variables.harness_project_id>"
+                          RAW_SHARED_AWS_CONNECTOR_REF="<+pipeline.variables.shared_aws_connector_ref>"
+                          RAW_SHARED_GITHUB_CONNECTOR_REF="<+pipeline.variables.shared_github_connector_ref>"
+                          CREATE_PROJECT_FACTORY="<+pipeline.variables.create_project_factory>"
+                          CREATE_PROJECT_SHARED_AWS_CONNECTOR="<+pipeline.variables.create_project_shared_aws_connector>"
+                          CREATE_PROJECT_SHARED_GITHUB_CONNECTOR="<+pipeline.variables.create_project_shared_github_connector>"
+                          PROJECT_FACTORY_AWS_CONNECTOR_ID="<+pipeline.variables.project_factory_aws_connector_id>"
+                          PROJECT_FACTORY_GITHUB_CONNECTOR_ID="<+pipeline.variables.project_factory_github_connector_id>"
+                          PROJECT_FACTORY_GITHUB_TOKEN_REF="<+pipeline.variables.project_factory_github_token_ref>"
+
+                          if [ -n "$RAW_SHARED_AWS_CONNECTOR_REF" ]; then
+                            RESOLVED_SHARED_AWS_CONNECTOR_REF="$RAW_SHARED_AWS_CONNECTOR_REF"
+                          elif [ "$CREATE_PROJECT_FACTORY" = "true" ] && [ "$CREATE_PROJECT_SHARED_AWS_CONNECTOR" = "true" ]; then
+                            if [ -n "$PROJECT_FACTORY_AWS_CONNECTOR_ID" ]; then
+                              RESOLVED_SHARED_AWS_CONNECTOR_REF="$PROJECT_FACTORY_AWS_CONNECTOR_ID"
+                            else
+                              RESOLVED_SHARED_AWS_CONNECTOR_REF="${PROJECT_ID}_aws_reference_architecture"
+                            fi
+                          else
+                            RESOLVED_SHARED_AWS_CONNECTOR_REF=""
+                          fi
+
+                          if [ -n "$RAW_SHARED_GITHUB_CONNECTOR_REF" ]; then
+                            RESOLVED_SHARED_GITHUB_CONNECTOR_REF="$RAW_SHARED_GITHUB_CONNECTOR_REF"
+                          elif [ "$CREATE_PROJECT_FACTORY" = "true" ] && [ "$CREATE_PROJECT_SHARED_GITHUB_CONNECTOR" = "true" ] && [ -n "$PROJECT_FACTORY_GITHUB_TOKEN_REF" ]; then
+                            if [ -n "$PROJECT_FACTORY_GITHUB_CONNECTOR_ID" ]; then
+                              RESOLVED_SHARED_GITHUB_CONNECTOR_REF="$PROJECT_FACTORY_GITHUB_CONNECTOR_ID"
+                            else
+                              RESOLVED_SHARED_GITHUB_CONNECTOR_REF="${PROJECT_ID}_github_reference_architecture"
+                            fi
+                          else
+                            RESOLVED_SHARED_GITHUB_CONNECTOR_REF=""
+                          fi
+
+                          echo "Resolved shared AWS connector ref: ${RESOLVED_SHARED_AWS_CONNECTOR_REF:-<none>}"
+                          echo "Resolved shared GitHub connector ref: ${RESOLVED_SHARED_GITHUB_CONNECTOR_REF:-<none>}"
+                    environmentVariables: []
+                    outputVariables:
+                      - name: resolved_shared_aws_connector_ref
+                        type: String
+                        value: RESOLVED_SHARED_AWS_CONNECTOR_REF
+                      - name: resolved_shared_github_connector_ref
+                        type: String
+                        value: RESOLVED_SHARED_GITHUB_CONNECTOR_REF
                   timeout: 2m
               - step:
                   type: Http
@@ -570,6 +718,343 @@ pipeline:
                     condition: <+pipeline.variables.create_opa_policies> == "true"
               - step:
                   type: Http
+                  name: Check Project Factory Workspace Exists
+                  identifier: check_project_factory_workspace_exists
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces/<+pipeline.variables.harness_project_id>_factory
+                    method: GET
+                    headers:
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    outputVariables:
+                      - name: workspace_exists
+                        value: <+httpResponseCode>
+                        type: String
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 404
+                  timeout: 1m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.create_project_factory> == "true"
+              - step:
+                  type: Http
+                  name: Create Project Factory Workspace
+                  identifier: create_project_factory_workspace
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspaces
+                    method: POST
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    requestBody: |
+                      {
+                        "identifier": "<+pipeline.variables.harness_project_id>_factory",
+                        "name": "<+pipeline.variables.harness_project_id> Project Factory Workspace",
+                        "description": "Project-scoped shared connector factory assets for <+pipeline.variables.harness_org_id>/<+pipeline.variables.harness_project_id>",
+                        "provisioner": "opentofu",
+                        "provisioner_version": "1.11.2",
+                        "repository_connector": "parsongh",
+                        "repository": "harness-demo-app",
+                        "repository_branch": "main",
+                        "repository_path": "tofu/stacks/project-factory",
+                        "provider_connector": "aws_oidc_iacm",
+                        "cost_estimation_enabled": false,
+                        "provider_connectors": [
+                          {
+                            "connector_ref": "aws_oidc_iacm",
+                            "type": "aws"
+                          }
+                        ],
+                        "default_pipelines": {
+                          "provision": {
+                            "project_pipeline": "pov_provisioning"
+                          },
+                          "destroy": {
+                            "project_pipeline": "pov_destroy"
+                          }
+                        },
+                        "terraform_variables": {
+                          "harness_account_id": {
+                            "key": "harness_account_id",
+                            "value": "<+pipeline.variables.harness_account_id>",
+                            "value_type": "string"
+                          },
+                          "harness_endpoint": {
+                            "key": "harness_endpoint",
+                            "value": "<+pipeline.variables.harness_endpoint>",
+                            "value_type": "string"
+                          },
+                          "harness_api_key": {
+                            "key": "harness_api_key",
+                            "value": "<+pipeline.variables.target_api_key>",
+                            "value_type": "string"
+                          },
+                          "harness_org_id": {
+                            "key": "harness_org_id",
+                            "value": "<+pipeline.variables.harness_org_id>",
+                            "value_type": "string"
+                          },
+                          "harness_project_id": {
+                            "key": "harness_project_id",
+                            "value": "<+pipeline.variables.harness_project_id>",
+                            "value_type": "string"
+                          },
+                          "create_harness_org": {
+                            "key": "create_harness_org",
+                            "value": "<+pipeline.variables.create_harness_org>",
+                            "value_type": "string"
+                          },
+                          "create_harness_project": {
+                            "key": "create_harness_project",
+                            "value": "<+pipeline.variables.create_harness_project>",
+                            "value_type": "string"
+                          },
+                          "shared_delegate_selector": {
+                            "key": "shared_delegate_selector",
+                            "value": "<+pipeline.variables.project_factory_delegate_selector>",
+                            "value_type": "string"
+                          },
+                          "create_shared_aws_connector": {
+                            "key": "create_shared_aws_connector",
+                            "value": "<+pipeline.variables.create_project_shared_aws_connector>",
+                            "value_type": "string"
+                          },
+                          "shared_aws_connector_id": {
+                            "key": "shared_aws_connector_id",
+                            "value": "<+pipeline.variables.project_factory_aws_connector_id>",
+                            "value_type": "string"
+                          },
+                          "shared_aws_connector_name": {
+                            "key": "shared_aws_connector_name",
+                            "value": "<+pipeline.variables.project_factory_aws_connector_name>",
+                            "value_type": "string"
+                          },
+                          "shared_aws_region": {
+                            "key": "shared_aws_region",
+                            "value": "<+pipeline.variables.project_factory_aws_region>",
+                            "value_type": "string"
+                          },
+                          "shared_aws_auth_type": {
+                            "key": "shared_aws_auth_type",
+                            "value": "<+pipeline.variables.project_factory_aws_auth_type>",
+                            "value_type": "string"
+                          },
+                          "shared_enable_cross_account_access": {
+                            "key": "shared_enable_cross_account_access",
+                            "value": "<+pipeline.variables.project_factory_enable_cross_account_access>",
+                            "value_type": "string"
+                          },
+                          "shared_cross_account_role_arn": {
+                            "key": "shared_cross_account_role_arn",
+                            "value": "<+pipeline.variables.project_factory_cross_account_role_arn>",
+                            "value_type": "string"
+                          },
+                          "shared_cross_account_external_id": {
+                            "key": "shared_cross_account_external_id",
+                            "value": "<+pipeline.variables.project_factory_cross_account_external_id>",
+                            "value_type": "string"
+                          },
+                          "create_shared_github_connector": {
+                            "key": "create_shared_github_connector",
+                            "value": "<+pipeline.variables.create_project_shared_github_connector>",
+                            "value_type": "string"
+                          },
+                          "shared_github_connector_id": {
+                            "key": "shared_github_connector_id",
+                            "value": "<+pipeline.variables.project_factory_github_connector_id>",
+                            "value_type": "string"
+                          },
+                          "shared_github_connector_name": {
+                            "key": "shared_github_connector_name",
+                            "value": "<+pipeline.variables.project_factory_github_connector_name>",
+                            "value_type": "string"
+                          },
+                          "shared_github_url": {
+                            "key": "shared_github_url",
+                            "value": "<+pipeline.variables.project_factory_github_url>",
+                            "value_type": "string"
+                          },
+                          "shared_github_connection_type": {
+                            "key": "shared_github_connection_type",
+                            "value": "<+pipeline.variables.project_factory_github_connection_type>",
+                            "value_type": "string"
+                          },
+                          "shared_github_validation_repo": {
+                            "key": "shared_github_validation_repo",
+                            "value": "<+pipeline.variables.project_factory_github_validation_repo>",
+                            "value_type": "string"
+                          },
+                          "shared_github_token_ref": {
+                            "key": "shared_github_token_ref",
+                            "value": "<+pipeline.variables.project_factory_github_token_ref>",
+                            "value_type": "string"
+                          },
+                          "shared_github_username": {
+                            "key": "shared_github_username",
+                            "value": "<+pipeline.variables.project_factory_github_username>",
+                            "value_type": "string"
+                          }
+                        },
+                        "environment_variables": {}
+                      }
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201
+                  timeout: 2m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.create_project_factory> == "true" && <+execution.steps.check_project_factory_workspace_exists.output.outputVariables.workspace_exists> == "404"
+              - step:
+                  type: Http
+                  name: Link Project Factory Workspace to Template
+                  identifier: link_project_factory_workspace_template
+                  spec:
+                    url: <+pipeline.variables.harness_endpoint>/iacm/api/orgs/<+pipeline.variables.harness_org_id>/projects/<+pipeline.variables.harness_project_id>/workspace/templates
+                    method: POST
+                    headers:
+                      - key: Content-Type
+                        value: application/json
+                      - key: Harness-Account
+                        value: <+pipeline.variables.harness_account_id>
+                      - key: x-api-key
+                        value: <+pipeline.variables.provisioner_api_key>
+                    requestBody: |
+                      {
+                        "template_id": "Project_Factory",
+                        "version": "1.0",
+                        "workspace_id": "<+pipeline.variables.harness_project_id>_factory"
+                      }
+                    assertion: <+httpResponseCode> == 200 || <+httpResponseCode> == 201 || <+httpResponseCode> == 409
+                  timeout: 1m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.create_project_factory> == "true"
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: ShellScript
+                  name: Reconcile Project Factory Workspace Variables
+                  identifier: reconcile_project_factory_workspace_variables
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          WORKSPACE_ID="<+pipeline.variables.harness_project_id>_factory"
+                          ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
+                          ENDPOINT="<+pipeline.variables.harness_endpoint>"
+                          ORG_ID="<+pipeline.variables.harness_org_id>"
+                          PROJECT_ID="<+pipeline.variables.harness_project_id>"
+
+                          json_escape() {
+                            local value="$1"
+                            value=${value//\\/\\\\}
+                            value=${value//"/\\"}
+                            value=${value//$'\n'/\\n}
+                            value=${value//$'\r'/\\r}
+                            value=${value//$'\t'/\\t}
+                            printf '%s' "$value"
+                          }
+
+                          build_payload() {
+                            printf '{"value":"%s","value_type":"%s"}' "$(json_escape "$1")" "$(json_escape "$2")"
+                          }
+
+                          build_create_payload() {
+                            printf '{"key":"%s","kind":"tf","value":"%s","value_type":"%s"}' "$(json_escape "$1")" "$(json_escape "$2")" "$(json_escape "$3")"
+                          }
+
+                          update_tf_var() {
+                            local key="$1"
+                            local value="$2"
+                            local value_type="$3"
+                            local payload
+                            local create_payload
+                            local status_code
+                            local response_file
+
+                            payload=$(build_payload "$value" "$value_type")
+                            response_file=$(mktemp)
+
+                            status_code=$(curl -s -o "$response_file" -w "%{http_code}" \
+                              -X PUT "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces/${WORKSPACE_ID}/variables/tf/${key}" \
+                              -H "Content-Type: application/json" \
+                              -H "Harness-Account: ${ACCOUNT_ID}" \
+                              -H "x-api-key: ${PROVISIONER_API_KEY}" \
+                              -d "$payload")
+
+                            if [ "$status_code" = "404" ]; then
+                              create_payload=$(build_create_payload "$key" "$value" "$value_type")
+
+                              status_code=$(curl -s -o "$response_file" -w "%{http_code}" \
+                                -X POST "${ENDPOINT}/iacm/api/orgs/${ORG_ID}/projects/${PROJECT_ID}/workspaces/${WORKSPACE_ID}/variables" \
+                                -H "Content-Type: application/json" \
+                                -H "Harness-Account: ${ACCOUNT_ID}" \
+                                -H "x-api-key: ${PROVISIONER_API_KEY}" \
+                                -d "$create_payload")
+                            fi
+
+                            if [ "$status_code" != "200" ] && [ "$status_code" != "201" ]; then
+                              echo "Failed to upsert tf variable ${key} (HTTP ${status_code})"
+                              cat "$response_file"
+                              rm -f "$response_file"
+                              exit 1
+                            fi
+
+                            rm -f "$response_file"
+                          }
+
+                          update_tf_var "harness_account_id" "$ACCOUNT_ID" "string"
+                          update_tf_var "harness_endpoint" "$ENDPOINT" "string"
+                          update_tf_var "harness_api_key" "$TARGET_API_KEY" "string"
+                          update_tf_var "harness_org_id" "$ORG_ID" "string"
+                          update_tf_var "harness_project_id" "$PROJECT_ID" "string"
+                          update_tf_var "create_harness_org" "<+pipeline.variables.create_harness_org>" "string"
+                          update_tf_var "create_harness_project" "<+pipeline.variables.create_harness_project>" "string"
+                          update_tf_var "shared_delegate_selector" "<+pipeline.variables.project_factory_delegate_selector>" "string"
+                          update_tf_var "create_shared_aws_connector" "<+pipeline.variables.create_project_shared_aws_connector>" "string"
+                          update_tf_var "shared_aws_connector_id" "<+pipeline.variables.project_factory_aws_connector_id>" "string"
+                          update_tf_var "shared_aws_connector_name" "<+pipeline.variables.project_factory_aws_connector_name>" "string"
+                          update_tf_var "shared_aws_region" "<+pipeline.variables.project_factory_aws_region>" "string"
+                          update_tf_var "shared_aws_auth_type" "<+pipeline.variables.project_factory_aws_auth_type>" "string"
+                          update_tf_var "shared_enable_cross_account_access" "<+pipeline.variables.project_factory_enable_cross_account_access>" "string"
+                          update_tf_var "shared_cross_account_role_arn" "<+pipeline.variables.project_factory_cross_account_role_arn>" "string"
+                          update_tf_var "shared_cross_account_external_id" "<+pipeline.variables.project_factory_cross_account_external_id>" "string"
+                          update_tf_var "create_shared_github_connector" "<+pipeline.variables.create_project_shared_github_connector>" "string"
+                          update_tf_var "shared_github_connector_id" "<+pipeline.variables.project_factory_github_connector_id>" "string"
+                          update_tf_var "shared_github_connector_name" "<+pipeline.variables.project_factory_github_connector_name>" "string"
+                          update_tf_var "shared_github_url" "<+pipeline.variables.project_factory_github_url>" "string"
+                          update_tf_var "shared_github_connection_type" "<+pipeline.variables.project_factory_github_connection_type>" "string"
+                          update_tf_var "shared_github_validation_repo" "<+pipeline.variables.project_factory_github_validation_repo>" "string"
+                          update_tf_var "shared_github_token_ref" "<+pipeline.variables.project_factory_github_token_ref>" "string"
+                          update_tf_var "shared_github_username" "<+pipeline.variables.project_factory_github_username>" "string"
+
+                          echo "Project factory workspace variables reconciled for ${WORKSPACE_ID}"
+                    environmentVariables:
+                      - name: PROVISIONER_API_KEY
+                        type: String
+                        value: <+pipeline.variables.provisioner_api_key>
+                      - name: TARGET_API_KEY
+                        type: String
+                        value: <+pipeline.variables.target_api_key>
+                    outputVariables: []
+                  timeout: 5m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.create_project_factory> == "true"
+              - step:
+                  type: Http
                   name: Create IACM Workspace
                   identifier: create_iacm_workspace
                   spec:
@@ -673,7 +1158,7 @@ pipeline:
                           },
                           "aws_connector_ref": {
                             "key": "aws_connector_ref",
-                            "value": "<+pipeline.variables.shared_aws_connector_ref>",
+                            "value": "<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_aws_connector_ref>",
                             "value_type": "string"
                           },
                           "artifact_registry_type": {
@@ -723,7 +1208,7 @@ pipeline:
                           },
                           "github_connector_ref": {
                             "key": "github_connector_ref",
-                            "value": "<+pipeline.variables.shared_github_connector_ref>",
+                            "value": "<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_github_connector_ref>",
                             "value_type": "string"
                           },
                           "github_pat": {
@@ -854,7 +1339,7 @@ pipeline:
                           },
                           "aws_connector_ref": {
                             "key": "aws_connector_ref",
-                            "value": "<+pipeline.variables.shared_aws_connector_ref>",
+                            "value": "<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_aws_connector_ref>",
                             "value_type": "string"
                           },
                           "aws_region": {
@@ -964,7 +1449,7 @@ pipeline:
                           },
                           "github_connector_ref": {
                             "key": "github_connector_ref",
-                            "value": "<+pipeline.variables.shared_github_connector_ref>",
+                            "value": "<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_github_connector_ref>",
                             "value_type": "string"
                           },
                           "github_pat": {
@@ -1177,6 +1662,8 @@ pipeline:
                           CREATE_OPA_POLICIES="<+pipeline.variables.create_opa_policies>"
                           ACM_CERT_ARN="<+pipeline.variables.acm_cert_arn>"
                           SHARED_ALB_DNS_NAME="<+pipeline.variables.shared_alb_dns_name>"
+                          RESOLVED_SHARED_AWS_CONNECTOR_REF="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_aws_connector_ref>"
+                          RESOLVED_SHARED_GITHUB_CONNECTOR_REF="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_github_connector_ref>"
                           CURRENT_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
                           WORKSPACE_DETAILS=$(curl -s \
@@ -1273,9 +1760,9 @@ pipeline:
                           update_tf_var "harness_project_id" "$PROJECT_ID" "string"
                           update_tf_var "create_harness_org" "$CREATE_HARNESS_ORG" "string"
                           update_tf_var "create_harness_project" "$CREATE_HARNESS_PROJECT" "string"
-                          update_tf_var "aws_connector_ref" "<+pipeline.variables.shared_aws_connector_ref>" "string"
+                          update_tf_var "aws_connector_ref" "$RESOLVED_SHARED_AWS_CONNECTOR_REF" "string"
                           update_tf_var "github_repo_name" "$SOURCE_GITHUB_REPO" "string"
-                          update_tf_var "github_connector_ref" "<+pipeline.variables.shared_github_connector_ref>" "string"
+                          update_tf_var "github_connector_ref" "$RESOLVED_SHARED_GITHUB_CONNECTOR_REF" "string"
                           update_tf_var "use_harness_code" "$RESOLVED_USE_HARNESS_CODE" "string"
 
                           if [ "$DEPLOYMENT_TARGET" = "asg" ]; then
@@ -1691,7 +2178,7 @@ pipeline:
                           },
                           "aws_connector_ref": {
                             "key": "aws_connector_ref",
-                            "value": "<+pipeline.variables.shared_aws_connector_ref>",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_aws_connector_ref>",
                             "value_type": "string"
                           },
                           "artifact_registry_type": {
@@ -1736,7 +2223,7 @@ pipeline:
                           },
                           "github_connector_ref": {
                             "key": "github_connector_ref",
-                            "value": "<+pipeline.variables.shared_github_connector_ref>",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_github_connector_ref>",
                             "value_type": "string"
                           },
                           "github_pat": {
@@ -1956,7 +2443,7 @@ pipeline:
                           },
                           "github_connector_ref": {
                             "key": "github_connector_ref",
-                            "value": "<+pipeline.variables.shared_github_connector_ref>",
+                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_github_connector_ref>",
                             "value_type": "string"
                           },
                           "github_pat": {
@@ -2293,6 +2780,76 @@ pipeline:
                   type: IACMApproval
                   name: Approve Governance Plan
                   identifier: approve_governance_plan
+                  spec:
+                    autoApprove: true
+                  timeout: 1m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - Timeout
+                        action:
+                          type: MarkAsSuccess
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Apply
+                  identifier: apply
+                  timeout: 30m
+                  spec:
+                    command: apply
+    - stage:
+        name: Bootstrap Project Factory
+        identifier: bootstrap_project_factory
+        description: Create or reconcile project-scoped shared connector factory assets before provisioning the sandbox workspace
+        type: IACM
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.create_project_factory> == "true"
+        spec:
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          workspace: <+pipeline.variables.harness_project_id>_factory
+          execution:
+            steps:
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Init
+                  identifier: init
+                  timeout: 10m
+                  spec:
+                    command: init
+              - step:
+                  type: IACMTerraformPlugin
+                  name: Plan
+                  identifier: plan
+                  timeout: 15m
+                  spec:
+                    command: plan
+              - step:
+                  type: Run
+                  name: Show Project Factory Plan Summary
+                  identifier: show_project_factory_plan_summary
+                  spec:
+                    shell: Bash
+                    command: |
+                      echo "=== Project Factory Plan Summary ==="
+                      echo "Workspace: <+pipeline.variables.harness_project_id>_factory"
+                      echo "Org: <+pipeline.variables.harness_org_id>"
+                      echo "Project: <+pipeline.variables.harness_project_id>"
+                      echo "===================================="
+
+                      if [ -f /harness/plan.json ]; then
+                        echo ""
+                        echo "Resources to be created/modified:"
+                        jq -r '.resource_changes[] | select(.change.actions | contains(["create"]) or contains(["update"]) or contains(["delete"])) | "  \(.change.actions[0]): \(.type).\(.name)"' /harness/plan.json 2>/dev/null || echo "  (unable to parse plan)"
+                      fi
+              - step:
+                  type: IACMApproval
+                  name: Approve Project Factory Plan
+                  identifier: approve_project_factory_plan
                   spec:
                     autoApprove: true
                   timeout: 1m
