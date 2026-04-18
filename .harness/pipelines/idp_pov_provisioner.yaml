@@ -125,7 +125,12 @@ pipeline:
       value: <+input>.default(true).allowedValues(true,false)
     - name: create_opa_policies
       type: String
-      description: Create or reuse the project-scoped governance workspace and enable policy-driven deployment governance for this sandbox. Default true so project-level OPA assets are bootstrapped once per project.
+      description: Create or reuse the project-scoped governance workspace. Default true so project-level OPA assets are bootstrapped once per project.
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
+    - name: enable_change_governance
+      type: String
+      description: Enable policy-driven change governance gates in generated workload deployment pipelines. Leave true to use project-level governance when available.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
     - name: create_asg_strategy_pipeline
@@ -1205,7 +1210,7 @@ pipeline:
                           },
                           "enable_change_governance": {
                             "key": "enable_change_governance",
-                            "value": "<+pipeline.variables.create_opa_policies>",
+                            "value": "<+pipeline.variables.enable_change_governance>",
                             "value_type": "string"
                           },
                           "create_opa_policies": {
@@ -1411,7 +1416,7 @@ pipeline:
                           },
                           "enable_change_governance": {
                             "key": "enable_change_governance",
-                            "value": "<+pipeline.variables.create_opa_policies>",
+                            "value": "<+pipeline.variables.enable_change_governance>",
                             "value_type": "string"
                           },
                           "standard_ci_gradle_test_packages": {
@@ -1681,7 +1686,7 @@ pipeline:
                           CREATE_STANDARD_CI_GRADLE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>"
                           CREATE_ASG_STRATEGY_PIPELINE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>"
                           CREATE_ASG_CI_PIPELINE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>"
-                          CREATE_OPA_POLICIES="<+pipeline.variables.create_opa_policies>"
+                          ENABLE_CHANGE_GOVERNANCE="<+pipeline.variables.enable_change_governance>"
                           ACM_CERT_ARN="<+pipeline.variables.acm_cert_arn>"
                           SHARED_ALB_DNS_NAME="<+pipeline.variables.shared_alb_dns_name>"
                           RESOLVED_SHARED_AWS_CONNECTOR_REF="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_aws_connector_ref>"
@@ -1797,7 +1802,7 @@ pipeline:
                             update_tf_var "asg_startup_script_use_file_store" "$ASG_STARTUP_SCRIPT_USE_FILE_STORE" "string"
                             update_tf_var "create_asg_strategy_pipeline" "$CREATE_ASG_STRATEGY_PIPELINE" "string"
                             update_tf_var "create_asg_ci_pipeline" "$CREATE_ASG_CI_PIPELINE" "string"
-                            update_tf_var "enable_change_governance" "$CREATE_OPA_POLICIES" "string"
+                            update_tf_var "enable_change_governance" "$ENABLE_CHANGE_GOVERNANCE" "string"
                             update_tf_var "standard_ci_gradle_test_packages" "io.harness.demo" "string"
                             update_tf_var "acm_cert_arn" "$ACM_CERT_ARN" "string"
                             update_tf_var "create_dns_record" "true" "string"
@@ -1815,7 +1820,7 @@ pipeline:
                             update_tf_var "create_dockerhub_upstream" "$CREATE_DOCKERHUB_UPSTREAM" "string"
                             update_tf_var "create_strategy_pipeline" "$CREATE_STRATEGY_PIPELINE" "string"
                             update_tf_var "create_standard_ci_gradle" "$CREATE_STANDARD_CI_GRADLE" "string"
-                            update_tf_var "enable_change_governance" "$CREATE_OPA_POLICIES" "string"
+                            update_tf_var "enable_change_governance" "$ENABLE_CHANGE_GOVERNANCE" "string"
                             update_tf_var "create_opa_policies" "false" "string"
                             update_tf_var "acm_cert_arn" "$ACM_CERT_ARN" "string"
                             update_tf_var "create_delegate" "true" "string"
@@ -2220,7 +2225,7 @@ pipeline:
                           },
                           "enable_change_governance": {
                             "key": "enable_change_governance",
-                            "value": "<+pipeline.variables.create_opa_policies>",
+                            "value": "<+pipeline.variables.enable_change_governance>",
                             "value_type": "string"
                           },
                           "create_opa_policies": {
@@ -2405,7 +2410,7 @@ pipeline:
                           },
                           "enable_change_governance": {
                             "key": "enable_change_governance",
-                            "value": "<+pipeline.variables.create_opa_policies>",
+                            "value": "<+pipeline.variables.enable_change_governance>",
                             "value_type": "string"
                           },
                           "standard_ci_gradle_test_packages": {

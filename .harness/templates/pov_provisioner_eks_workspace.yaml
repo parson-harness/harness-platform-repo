@@ -140,7 +140,7 @@ template:
         locked: false
         type: String
       - key: enable_change_governance
-        value: <+pipeline.variables.create_opa_policies>
+        value: <+pipeline.variables.enable_change_governance>
         value_type: string
         status: manual
         locked: false

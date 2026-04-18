@@ -117,7 +117,15 @@ spec:
         create_opa_policies:
           title: Create OPA Policies?
           type: string
-          description: "Create or reuse the project-scoped governance workspace and enable policy-driven deployment governance for this sandbox. Default true so project-level OPA assets are bootstrapped once per project."
+          description: "Create or reuse the project-scoped governance workspace. Default true so project-level OPA assets are bootstrapped once per project."
+          default: "true"
+          enum:
+            - "true"
+            - "false"
+        enable_change_governance:
+          title: Enable Change Governance?
+          type: string
+          description: "Enable policy-driven change governance gates in generated workload deployment pipelines. Leave true to use project-level governance when available."
           default: "true"
           enum:
             - "true"
@@ -163,6 +171,7 @@ spec:
           use_profile_defaults: "true"
           eks_cluster_name: ${{ parameters.eks_cluster_name }}
           create_opa_policies: ${{ parameters.create_opa_policies }}
+          enable_change_governance: ${{ parameters.enable_change_governance }}
           create_project_factory: ${{ parameters.create_project_factory }}
           project_factory_github_token_ref: ${{ parameters.project_factory_github_token_ref }}
           project_factory_aws_access_key_ref: ${{ parameters.project_factory_aws_access_key_ref }}

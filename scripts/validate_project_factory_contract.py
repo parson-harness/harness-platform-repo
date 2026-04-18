@@ -8,6 +8,8 @@ TEMPLATE_PATH = ROOT / ".harness/templates/project_factory_workspace.yaml"
 STACK_VARS_PATH = ROOT / "tofu/stacks/project-factory/variables.tf"
 POV_WORKFLOW_PATH = ROOT / ".harness/workflows/pov_provisioner_workflow.yaml"
 SE_WORKFLOW_PATH = ROOT / ".harness/workflows/se_sandbox_provisioner.yaml"
+EKS_TEMPLATE_PATH = ROOT / ".harness/templates/pov_provisioner_eks_workspace.yaml"
+ASG_TEMPLATE_PATH = ROOT / ".harness/templates/sandbox_provisioner_asg_workspace.yaml"
 
 SURFACED_CONTRACT = [
     ("shared_delegate_selector", "project_factory_delegate_selector"),
@@ -36,6 +38,11 @@ WORKFLOW_SURFACED_INPUTS = [
     "project_factory_github_token_ref",
     "project_factory_aws_access_key_ref",
     "project_factory_aws_secret_key_ref",
+]
+
+GOVERNANCE_WORKFLOW_INPUTS = [
+    "create_opa_policies",
+    "enable_change_governance",
 ]
 
 INTENTIONALLY_UNSURFACED_STACK_VARS = {
@@ -84,12 +91,18 @@ def has_workflow_inputset_binding(text: str, name: str) -> bool:
     return f"          {name}: ${{{{ parameters.{name} }}}}" in text
 
 
+def count_matches(text: str, pattern: str) -> int:
+    return len(re.findall(pattern, text, re.DOTALL))
+
+
 def main() -> int:
     pipeline_text = read_text(PIPELINE_PATH)
     template_text = read_text(TEMPLATE_PATH)
     stack_vars_text = read_text(STACK_VARS_PATH)
     pov_workflow_text = read_text(POV_WORKFLOW_PATH)
     se_workflow_text = read_text(SE_WORKFLOW_PATH)
+    eks_template_text = read_text(EKS_TEMPLATE_PATH)
+    asg_template_text = read_text(ASG_TEMPLATE_PATH)
 
     stack_vars = extract_hcl_variable_names(stack_vars_text)
     surfaced_stack_vars = {stack_var for stack_var, _ in SURFACED_CONTRACT}
@@ -126,15 +139,56 @@ def main() -> int:
                 errors.append(f"Workflow parameter missing in {workflow_name}: {name}")
             if not has_workflow_inputset_binding(workflow_text, name):
                 errors.append(f"Workflow inputset binding missing in {workflow_name}: {name}")
+        for name in GOVERNANCE_WORKFLOW_INPUTS:
+            if not has_workflow_parameter(workflow_text, name):
+                errors.append(f"Governance workflow parameter missing in {workflow_name}: {name}")
+            if not has_workflow_inputset_binding(workflow_text, name):
+                errors.append(f"Governance workflow inputset binding missing in {workflow_name}: {name}")
+
+    if not has_pipeline_input(pipeline_text, "enable_change_governance"):
+        errors.append("Pipeline input missing: enable_change_governance")
+
+    if not has_template_binding(eks_template_text, "enable_change_governance", "enable_change_governance"):
+        errors.append("EKS template binding missing: enable_change_governance <- enable_change_governance")
+
+    if not has_template_binding(asg_template_text, "enable_change_governance", "enable_change_governance"):
+        errors.append("ASG template binding missing: enable_change_governance <- enable_change_governance")
+
+    governance_payload_matches = count_matches(
+        pipeline_text,
+        r'"enable_change_governance"\s*:\s*\{[^}]*"value"\s*:\s*"<\+pipeline\.variables\.enable_change_governance>"',
+    )
+    if governance_payload_matches < 4:
+        errors.append(
+            f"Expected enable_change_governance to be passed in all workload create/recreate payloads, found {governance_payload_matches} bindings"
+        )
+
+    legacy_governance_payload_matches = count_matches(
+        pipeline_text,
+        r'"enable_change_governance"\s*:\s*\{[^}]*"value"\s*:\s*"<\+pipeline\.variables\.create_opa_policies>"',
+    )
+    if legacy_governance_payload_matches != 0:
+        errors.append("Legacy governance coupling remains: enable_change_governance still references create_opa_policies in a workload payload")
+
+    reconcile_matches = count_matches(
+        pipeline_text,
+        r'update_tf_var "enable_change_governance" "\$ENABLE_CHANGE_GOVERNANCE" "string"',
+    )
+    if reconcile_matches < 2:
+        errors.append(f"Expected enable_change_governance reconcile updates for both workload targets, found {reconcile_matches}")
 
     if errors:
-        print("Project-factory contract validation failed:")
+        print("Provisioner contract validation failed:")
         for error in errors:
             print(f"- {error}")
         return 1
 
-    print("Project-factory contract validation passed.")
-    print(f"Validated {len(SURFACED_CONTRACT)} surfaced stack variables and {len(WORKFLOW_SURFACED_INPUTS)} workflow-exposed inputs.")
+    print("Provisioner contract validation passed.")
+    print(
+        f"Validated {len(SURFACED_CONTRACT)} surfaced project-factory stack variables, "
+        f"{len(WORKFLOW_SURFACED_INPUTS)} project-factory workflow inputs, and "
+        f"{len(GOVERNANCE_WORKFLOW_INPUTS)} governance workflow inputs."
+    )
     return 0
 
 
