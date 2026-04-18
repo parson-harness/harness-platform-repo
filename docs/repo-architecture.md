@@ -129,6 +129,8 @@ Key pipelines include:
 - `idp_pov_provisioner.yaml`
   - main orchestration pipeline
   - creates or reconciles project-scoped and owner-scoped workspaces
+  - links workload workspaces to their durable IACM templates, then reconciles workspace variables after creation
+  - treats top-level pipeline inputs as the primary template contract for stable defaults while keeping the reconcile step authoritative for resolved profile-driven values
   - drives OpenTofu execution through IACM
 
 - `idp_pov_destroyer_v2.yaml`
@@ -150,15 +152,19 @@ The most important workspace templates are:
 
 - `pov_provisioner_eks_workspace.yaml`
   - owner-scoped EKS workload workspace template
+  - locks platform-managed invariants and prefers top-level pipeline inputs over deep provisioner step-output references for stable defaults
 
 - `sandbox_provisioner_asg_workspace.yaml`
   - owner-scoped ASG workload workspace template
+  - locks platform-managed invariants and prefers top-level pipeline inputs over deep provisioner step-output references for stable defaults
 
 - `project_governance_workspace.yaml`
   - long-lived project governance workspace template
 
 - `project_factory_workspace.yaml`
   - long-lived project factory workspace template for shared connectors
+
+In the current control-plane model, the template layer is intended to be the product contract for stable workspace inputs, while the provisioner pipeline remains responsible for resolving profile-specific values and reconciling the effective tfvars onto the linked workspace.
 
 ### Workflows
 

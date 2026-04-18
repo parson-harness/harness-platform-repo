@@ -116,25 +116,25 @@ template:
         locked: false
         type: String
       - key: artifact_registry_type
-        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>
+        value: <+pipeline.variables.artifact_registry_type>
         value_type: string
         status: manual
         locked: false
         type: String
       - key: create_dockerhub_upstream
-        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_dockerhub_upstream>
+        value: <+pipeline.variables.create_dockerhub_upstream>
         value_type: string
         status: manual
         locked: false
         type: String
       - key: create_strategy_pipeline
-        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>
+        value: <+pipeline.variables.create_strategy_pipeline>
         value_type: string
         status: manual
         locked: false
         type: String
       - key: create_standard_ci_gradle
-        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>
+        value: <+pipeline.variables.create_standard_ci_gradle>
         value_type: string
         status: manual
         locked: false
@@ -158,10 +158,10 @@ template:
         locked: false
         type: String
       - key: use_harness_code
-        value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>
+        value: "true"
         value_type: string
         status: manual
-        locked: false
+        locked: true
         type: String
       - key: github_repo_name
         value: <+pipeline.variables.source_github_repo>

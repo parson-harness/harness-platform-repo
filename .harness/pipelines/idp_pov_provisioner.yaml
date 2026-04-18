@@ -1163,22 +1163,22 @@ pipeline:
                           },
                           "artifact_registry_type": {
                             "key": "artifact_registry_type",
-                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>",
+                            "value": "<+pipeline.variables.artifact_registry_type>",
                             "value_type": "string"
                           },
                           "create_dockerhub_upstream": {
                             "key": "create_dockerhub_upstream",
-                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_dockerhub_upstream>",
+                            "value": "<+pipeline.variables.create_dockerhub_upstream>",
                             "value_type": "string"
                           },
                           "create_strategy_pipeline": {
                             "key": "create_strategy_pipeline",
-                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>",
+                            "value": "<+pipeline.variables.create_strategy_pipeline>",
                             "value_type": "string"
                           },
                           "create_standard_ci_gradle": {
                             "key": "create_standard_ci_gradle",
-                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>",
+                            "value": "<+pipeline.variables.create_standard_ci_gradle>",
                             "value_type": "string"
                           },
                           "enable_change_governance": {
@@ -1198,7 +1198,7 @@ pipeline:
                           },
                           "use_harness_code": {
                             "key": "use_harness_code",
-                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>",
+                            "value": "true",
                             "value_type": "string"
                           },
                           "github_repo_name": {
@@ -1379,12 +1379,12 @@ pipeline:
                           },
                           "create_asg_strategy_pipeline": {
                             "key": "create_asg_strategy_pipeline",
-                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>",
+                            "value": "<+pipeline.variables.create_asg_strategy_pipeline>",
                             "value_type": "string"
                           },
                           "create_asg_ci_pipeline": {
                             "key": "create_asg_ci_pipeline",
-                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>",
+                            "value": "<+pipeline.variables.create_asg_ci_pipeline>",
                             "value_type": "string"
                           },
                           "enable_change_governance": {
@@ -1469,7 +1469,7 @@ pipeline:
                           },
                           "use_harness_code": {
                             "key": "use_harness_code",
-                            "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>",
+                            "value": "true",
                             "value_type": "string"
                           }
                         },
@@ -1649,7 +1649,7 @@ pipeline:
                           EKS_CLUSTER_NAME="<+pipeline.variables.eks_cluster_name>"
                           WORKSPACE_TEMPLATE_ID=$([ "<+pipeline.variables.deployment_target>" = "asg" ] && echo "Sandbox_Provisioner_ASG" || echo "POV_Provisioner")
                           RESOLVED_PROFILE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
-                          RESOLVED_USE_HARNESS_CODE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>"
+                          RESOLVED_USE_HARNESS_CODE="true"
                           ASG_STARTUP_SCRIPT_USE_FILE_STORE="<+pipeline.variables.asg_startup_script_use_file_store>"
                           CREATE_HARNESS_ORG="<+pipeline.variables.create_harness_org>"
                           CREATE_HARNESS_PROJECT="<+pipeline.variables.create_harness_project>"
@@ -2183,17 +2183,17 @@ pipeline:
                           },
                           "artifact_registry_type": {
                             "key": "artifact_registry_type",
-                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>",
+                            "value": "<+pipeline.variables.artifact_registry_type>",
                             "value_type": "string"
                           },
                           "create_dockerhub_upstream": {
                             "key": "create_dockerhub_upstream",
-                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_dockerhub_upstream>",
+                            "value": "<+pipeline.variables.create_dockerhub_upstream>",
                             "value_type": "string"
                           },
                           "create_strategy_pipeline": {
                             "key": "create_strategy_pipeline",
-                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>",
+                            "value": "<+pipeline.variables.create_strategy_pipeline>",
                             "value_type": "string"
                           },
                           "enable_change_governance": {
@@ -2213,7 +2213,7 @@ pipeline:
                           },
                           "use_harness_code": {
                             "key": "use_harness_code",
-                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>",
+                            "value": "true",
                             "value_type": "string"
                           },
                           "github_repo_name": {
@@ -2373,12 +2373,12 @@ pipeline:
                           },
                           "create_asg_strategy_pipeline": {
                             "key": "create_asg_strategy_pipeline",
-                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>",
+                            "value": "<+pipeline.variables.create_asg_strategy_pipeline>",
                             "value_type": "string"
                           },
                           "create_asg_ci_pipeline": {
                             "key": "create_asg_ci_pipeline",
-                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>",
+                            "value": "<+pipeline.variables.create_asg_ci_pipeline>",
                             "value_type": "string"
                           },
                           "enable_change_governance": {
@@ -2463,7 +2463,7 @@ pipeline:
                           },
                           "use_harness_code": {
                             "key": "use_harness_code",
-                            "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_use_harness_code>",
+                            "value": "true",
                             "value_type": "string"
                           }
                         },
