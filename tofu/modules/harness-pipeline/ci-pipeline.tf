@@ -43,12 +43,9 @@ EOT
   )
 
   ci_pipeline_tag_objects = [
-    for tag in var.pipeline_tags : can(regex("^([^:]+):(.*)$", tag)) ? {
+    for tag in local.explicit_pipeline_tags : {
       key   = regex("^([^:]+):(.*)$", tag)[0]
       value = regex("^([^:]+):(.*)$", tag)[1]
-      } : {
-      key   = tag
-      value = true
     }
   ]
   ci_pipeline_yaml_tags = join("\n", [for tag in local.ci_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
@@ -61,7 +58,7 @@ resource "harness_platform_pipeline" "ci_build" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.ci_pipeline_description
-  tags        = concat(["pipeline-type:ci", "build:docker", "harness-intelligence:enabled"], var.pipeline_tags)
+  tags        = concat(["pipeline-type:ci", "build:docker", "harness-intelligence:enabled"], local.explicit_pipeline_tags)
 
   yaml = <<-CI_EOT
     pipeline:

@@ -8,12 +8,9 @@ locals {
   # Placed at the stage level to pin ALL steps (K8sDelete, deploy, shell) to the right delegate.
   strategy_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
   strategy_pipeline_tag_objects = [
-    for tag in var.pipeline_tags : can(regex("^([^:]+):(.*)$", tag)) ? {
+    for tag in local.explicit_pipeline_tags : {
       key   = regex("^([^:]+):(.*)$", tag)[0]
       value = regex("^([^:]+):(.*)$", tag)[1]
-      } : {
-      key   = tag
-      value = true
     }
   ]
   strategy_pipeline_yaml_tags = join("\n", [for tag in local.strategy_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
@@ -194,7 +191,7 @@ resource "harness_platform_pipeline" "k8s_strategy" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.strategy_pipeline_description
-  tags        = concat(["deployment-type:kubernetes", "strategy:multi-strategy"], var.pipeline_tags)
+  tags        = concat(["deployment-type:kubernetes", "strategy:multi-strategy"], local.explicit_pipeline_tags)
 
   yaml = <<-STRATEGY_EOT
     pipeline:

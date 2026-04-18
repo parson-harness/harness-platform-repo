@@ -17,12 +17,9 @@
 
 locals {
   standard_ci_gradle_tag_objects = [
-    for tag in var.pipeline_tags : can(regex("^([^:]+):(.*)$", tag)) ? {
+    for tag in local.explicit_pipeline_tags : {
       key   = regex("^([^:]+):(.*)$", tag)[0]
       value = regex("^([^:]+):(.*)$", tag)[1]
-      } : {
-      key   = tag
-      value = true
     }
   ]
   standard_ci_gradle_yaml_tags                         = join("\n", [for tag in local.standard_ci_gradle_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
@@ -37,7 +34,7 @@ resource "harness_platform_pipeline" "standard_ci_gradle" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.standard_ci_gradle_description
-  tags        = concat(["pipeline-type:ci", "build:gradle", "standard-template:true", "harness-intelligence:enabled", "security-scanning:enabled"], var.pipeline_tags)
+  tags        = concat(["pipeline-type:ci", "build:gradle", "standard-template:true", "harness-intelligence:enabled", "security-scanning:enabled"], local.explicit_pipeline_tags)
 
   yaml = <<-GRADLE_CI_EOT
     pipeline:

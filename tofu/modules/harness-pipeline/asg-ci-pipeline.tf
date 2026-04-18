@@ -6,12 +6,9 @@
 
 locals {
   asg_ci_pipeline_tag_objects = [
-    for tag in var.pipeline_tags : can(regex("^([^:]+):(.*)$", tag)) ? {
+    for tag in local.explicit_pipeline_tags : {
       key   = regex("^([^:]+):(.*)$", tag)[0]
       value = regex("^([^:]+):(.*)$", tag)[1]
-      } : {
-      key   = tag
-      value = true
     }
   ]
   asg_ci_pipeline_yaml_tags = join("\n", [for tag in local.asg_ci_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
@@ -24,7 +21,7 @@ resource "harness_platform_pipeline" "asg_ci_build" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.asg_ci_pipeline_description
-  tags        = concat(["pipeline-type:ci", "build:gradle-packer", "deployment:asg", "standard-template:true", "harness-intelligence:enabled", "security-scanning:enabled"], var.pipeline_tags)
+  tags        = concat(["pipeline-type:ci", "build:gradle-packer", "deployment:asg", "standard-template:true", "harness-intelligence:enabled", "security-scanning:enabled"], local.explicit_pipeline_tags)
 
   yaml = <<-CI_EOT
     pipeline:
