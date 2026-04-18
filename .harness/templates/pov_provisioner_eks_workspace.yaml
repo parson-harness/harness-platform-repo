@@ -116,16 +116,16 @@ template:
         locked: false
         type: String
       - key: artifact_registry_type
-        value: <+pipeline.variables.artifact_registry_type>
+        value: har
         value_type: string
         status: manual
-        locked: false
+        locked: true
         type: String
       - key: create_dockerhub_upstream
-        value: <+pipeline.variables.create_dockerhub_upstream>
+        value: "true"
         value_type: string
         status: manual
-        locked: false
+        locked: true
         type: String
       - key: create_strategy_pipeline
         value: <+pipeline.variables.create_strategy_pipeline>

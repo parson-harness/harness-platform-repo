@@ -95,6 +95,14 @@ def count_matches(text: str, pattern: str) -> int:
     return len(re.findall(pattern, text, re.DOTALL))
 
 
+def has_literal_template_binding(text: str, key: str, value: str) -> bool:
+    anchor = text.find(f"- key: {key}")
+    if anchor == -1:
+        return False
+    window = text[anchor:anchor + 220]
+    return f"value: {value}" in window
+
+
 def main() -> int:
     pipeline_text = read_text(PIPELINE_PATH)
     template_text = read_text(TEMPLATE_PATH)
@@ -148,11 +156,57 @@ def main() -> int:
     if not has_pipeline_input(pipeline_text, "enable_change_governance"):
         errors.append("Pipeline input missing: enable_change_governance")
 
+    if 'value: <+input>.default(har).allowedValues(har)' not in pipeline_text:
+        errors.append("Pipeline input artifact_registry_type is not locked to HAR-only")
+
+    if 'value: <+input>.default(true).allowedValues(true)' not in pipeline_text:
+        errors.append("Pipeline input create_dockerhub_upstream is not locked to true-only")
+
     if not has_template_binding(eks_template_text, "enable_change_governance", "enable_change_governance"):
         errors.append("EKS template binding missing: enable_change_governance <- enable_change_governance")
 
     if not has_template_binding(asg_template_text, "enable_change_governance", "enable_change_governance"):
         errors.append("ASG template binding missing: enable_change_governance <- enable_change_governance")
+
+    if not has_literal_template_binding(eks_template_text, "artifact_registry_type", "har"):
+        errors.append("EKS template is not locked to artifact_registry_type=har")
+
+    if not has_literal_template_binding(eks_template_text, "create_dockerhub_upstream", '"true"'):
+        errors.append("EKS template is not locked to create_dockerhub_upstream=true")
+
+    if not has_literal_template_binding(asg_template_text, "artifact_registry_type", "har"):
+        errors.append("ASG template is not locked to artifact_registry_type=har")
+
+    if not has_literal_template_binding(asg_template_text, "create_dockerhub_upstream", '"true"'):
+        errors.append("ASG template is not locked to create_dockerhub_upstream=true")
+
+    if not has_literal_template_binding(eks_template_text, "use_harness_code", '"true"'):
+        errors.append("EKS template is not locked to use_harness_code=true")
+
+    if not has_literal_template_binding(asg_template_text, "use_harness_code", '"true"'):
+        errors.append("ASG template is not locked to use_harness_code=true")
+
+    har_payload_matches = count_matches(
+        pipeline_text,
+        r'"artifact_registry_type"\s*:\s*\{[^}]*"value"\s*:\s*"har"',
+    )
+    if har_payload_matches < 2:
+        errors.append(f"Expected HAR to be stamped in all EKS create/recreate payloads, found {har_payload_matches} bindings")
+
+    dockerhub_payload_matches = count_matches(
+        pipeline_text,
+        r'"create_dockerhub_upstream"\s*:\s*\{[^}]*"value"\s*:\s*"true"',
+    )
+    if dockerhub_payload_matches < 2:
+        errors.append(
+            f"Expected create_dockerhub_upstream=true to be stamped in all EKS create/recreate payloads, found {dockerhub_payload_matches} bindings"
+        )
+
+    if '<+pipeline.variables.artifact_registry_type>' in pipeline_text and '"artifact_registry_type"' in pipeline_text:
+        errors.append("Legacy artifact registry pipeline binding remains in a workload payload or status message")
+
+    if '<+pipeline.variables.create_dockerhub_upstream>' in pipeline_text:
+        errors.append("Legacy DockerHub upstream pipeline binding remains in a workload payload or status message")
 
     governance_payload_matches = count_matches(
         pipeline_text,

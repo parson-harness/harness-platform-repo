@@ -105,14 +105,14 @@ pipeline:
       value: <+input>.default(true).allowedValues(true,false)
     - name: artifact_registry_type
       type: String
-      description: Advanced override when use_profile_defaults is false. Artifact registry type for EKS delivery (recommended har).
+      description: Sandbox invariant for EKS delivery artifact registry. HAR is the only supported registry mode.
       required: false
-      value: <+input>.default(har).allowedValues(har,ecr)
+      value: <+input>.default(har).allowedValues(har)
     - name: create_dockerhub_upstream
       type: String
-      description: Advanced override when use_profile_defaults is false. Create the HAR DockerHub upstream proxy used for base image pulls.
+      description: Sandbox invariant for EKS delivery. The HAR DockerHub upstream proxy is always enabled for base image pulls.
       required: false
-      value: <+input>.default(true).allowedValues(true,false)
+      value: <+input>.default(true).allowedValues(true)
     - name: create_strategy_pipeline
       type: String
       description: Advanced override when use_profile_defaults is false. Create the EKS strategy deployment pipeline.
@@ -316,8 +316,6 @@ pipeline:
                           DEPLOYMENT_TARGET="<+pipeline.variables.deployment_target>"
                           SANDBOX_PROFILE="<+pipeline.variables.sandbox_profile>"
                           USE_PROFILE_DEFAULTS="<+pipeline.variables.use_profile_defaults>"
-                          RAW_ARTIFACT_REGISTRY_TYPE="<+pipeline.variables.artifact_registry_type>"
-                          RAW_CREATE_DOCKERHUB_UPSTREAM="<+pipeline.variables.create_dockerhub_upstream>"
                           RAW_CREATE_STRATEGY_PIPELINE="<+pipeline.variables.create_strategy_pipeline>"
                           RAW_CREATE_STANDARD_CI_GRADLE="<+pipeline.variables.create_standard_ci_gradle>"
                           RAW_CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.variables.create_asg_strategy_pipeline>"
@@ -386,8 +384,8 @@ pipeline:
                           else
                             RESOLVED_PROFILE="manual"
 
-                            RESOLVED_ARTIFACT_REGISTRY_TYPE="$RAW_ARTIFACT_REGISTRY_TYPE"
-                            RESOLVED_CREATE_DOCKERHUB_UPSTREAM="$RAW_CREATE_DOCKERHUB_UPSTREAM"
+                            RESOLVED_ARTIFACT_REGISTRY_TYPE="har"
+                            RESOLVED_CREATE_DOCKERHUB_UPSTREAM="true"
                             RESOLVED_CREATE_STRATEGY_PIPELINE="$RAW_CREATE_STRATEGY_PIPELINE"
                             RESOLVED_CREATE_STANDARD_CI_GRADLE="$RAW_CREATE_STANDARD_CI_GRADLE"
                             RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="$RAW_CREATE_ASG_STRATEGY_PIPELINE"
@@ -1190,12 +1188,12 @@ pipeline:
                           },
                           "artifact_registry_type": {
                             "key": "artifact_registry_type",
-                            "value": "<+pipeline.variables.artifact_registry_type>",
+                            "value": "har",
                             "value_type": "string"
                           },
                           "create_dockerhub_upstream": {
                             "key": "create_dockerhub_upstream",
-                            "value": "<+pipeline.variables.create_dockerhub_upstream>",
+                            "value": "true",
                             "value_type": "string"
                           },
                           "create_strategy_pipeline": {
@@ -2210,12 +2208,12 @@ pipeline:
                           },
                           "artifact_registry_type": {
                             "key": "artifact_registry_type",
-                            "value": "<+pipeline.variables.artifact_registry_type>",
+                            "value": "har",
                             "value_type": "string"
                           },
                           "create_dockerhub_upstream": {
                             "key": "create_dockerhub_upstream",
-                            "value": "<+pipeline.variables.create_dockerhub_upstream>",
+                            "value": "true",
                             "value_type": "string"
                           },
                           "create_strategy_pipeline": {
@@ -2930,8 +2928,8 @@ pipeline:
                     shell: Bash
                     command: |
                       RESOLVED_PROFILE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
-                      ARTIFACT_REGISTRY_TYPE="<+pipeline.variables.artifact_registry_type>"
-                      CREATE_DOCKERHUB_UPSTREAM="<+pipeline.variables.create_dockerhub_upstream>"
+                      ARTIFACT_REGISTRY_TYPE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>"
+                      CREATE_DOCKERHUB_UPSTREAM="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_dockerhub_upstream>"
                       CREATE_STRATEGY_PIPELINE="<+pipeline.variables.create_strategy_pipeline>"
                       CREATE_STANDARD_CI_GRADLE="<+pipeline.variables.create_standard_ci_gradle>"
                       CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.variables.create_asg_strategy_pipeline>"
@@ -2996,7 +2994,7 @@ pipeline:
                     shell: Bash
                     command: |
                       RESOLVED_PROFILE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
-                      ARTIFACT_REGISTRY_TYPE="<+pipeline.variables.artifact_registry_type>"
+                      ARTIFACT_REGISTRY_TYPE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>"
                       CREATE_STRATEGY_PIPELINE="<+pipeline.variables.create_strategy_pipeline>"
                       CREATE_STANDARD_CI_GRADLE="<+pipeline.variables.create_standard_ci_gradle>"
                       CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.variables.create_asg_strategy_pipeline>"
@@ -3245,7 +3243,7 @@ pipeline:
                       spec:
                         script: |
                           RESOLVED_PROFILE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
-                          ARTIFACT_REGISTRY_TYPE="<+pipeline.variables.artifact_registry_type>"
+                          ARTIFACT_REGISTRY_TYPE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>"
                           CREATE_STRATEGY_PIPELINE="<+pipeline.variables.create_strategy_pipeline>"
                           CREATE_STANDARD_CI_GRADLE="<+pipeline.variables.create_standard_ci_gradle>"
                           CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.variables.create_asg_strategy_pipeline>"
