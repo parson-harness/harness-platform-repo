@@ -1667,6 +1667,7 @@ pipeline:
                           SHARED_ALB_DNS_NAME="<+pipeline.variables.shared_alb_dns_name>"
                           RESOLVED_SHARED_AWS_CONNECTOR_REF="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_aws_connector_ref>"
                           RESOLVED_SHARED_GITHUB_CONNECTOR_REF="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_github_connector_ref>"
+                          RESOLVED_SHARED_HARNESS_CODE_REPO_NAME="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_harness_code_repo_name>"
                           CURRENT_TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
                           WORKSPACE_DETAILS=$(curl -s \
