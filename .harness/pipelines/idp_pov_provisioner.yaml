@@ -153,6 +153,16 @@ pipeline:
       description: DNS name of the shared ALB for EKS ingress (e.g., k8s-harnessdemo-xxx.us-east-1.elb.amazonaws.com)
       required: false
       value: <+input>.default(k8s-harnessdemo-d1317bf02a-762333093.us-east-1.elb.amazonaws.com)
+    - name: shared_aws_connector_ref
+      type: String
+      description: Optional shared project-level AWS connector ref to reuse instead of creating an owner-scoped connector in the workload workspace.
+      required: false
+      value: <+input>.default("")
+    - name: shared_github_connector_ref
+      type: String
+      description: Optional shared project-level GitHub connector ref to reuse instead of creating an owner-scoped connector in the workload workspace.
+      required: false
+      value: <+input>.default("")
     - name: force_recreate
       type: String
       description: If workspace exists, destroy it first and recreate (clean slate). If false, will update existing workspace.
@@ -661,6 +671,11 @@ pipeline:
                             "value": "<+pipeline.variables.create_harness_project>",
                             "value_type": "string"
                           },
+                          "aws_connector_ref": {
+                            "key": "aws_connector_ref",
+                            "value": "<+pipeline.variables.shared_aws_connector_ref>",
+                            "value_type": "string"
+                          },
                           "artifact_registry_type": {
                             "key": "artifact_registry_type",
                             "value": "<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>",
@@ -704,6 +719,11 @@ pipeline:
                           "github_repo_name": {
                             "key": "github_repo_name",
                             "value": "<+pipeline.variables.source_github_repo>",
+                            "value_type": "string"
+                          },
+                          "github_connector_ref": {
+                            "key": "github_connector_ref",
+                            "value": "<+pipeline.variables.shared_github_connector_ref>",
                             "value_type": "string"
                           },
                           "github_pat": {
@@ -832,6 +852,11 @@ pipeline:
                             "value": "<+pipeline.variables.create_harness_project>",
                             "value_type": "string"
                           },
+                          "aws_connector_ref": {
+                            "key": "aws_connector_ref",
+                            "value": "<+pipeline.variables.shared_aws_connector_ref>",
+                            "value_type": "string"
+                          },
                           "aws_region": {
                             "key": "aws_region",
                             "value": "us-east-1",
@@ -935,6 +960,11 @@ pipeline:
                           "github_repo_name": {
                             "key": "github_repo_name",
                             "value": "<+pipeline.variables.source_github_repo>",
+                            "value_type": "string"
+                          },
+                          "github_connector_ref": {
+                            "key": "github_connector_ref",
+                            "value": "<+pipeline.variables.shared_github_connector_ref>",
                             "value_type": "string"
                           },
                           "github_pat": {
@@ -1243,7 +1273,9 @@ pipeline:
                           update_tf_var "harness_project_id" "$PROJECT_ID" "string"
                           update_tf_var "create_harness_org" "$CREATE_HARNESS_ORG" "string"
                           update_tf_var "create_harness_project" "$CREATE_HARNESS_PROJECT" "string"
+                          update_tf_var "aws_connector_ref" "<+pipeline.variables.shared_aws_connector_ref>" "string"
                           update_tf_var "github_repo_name" "$SOURCE_GITHUB_REPO" "string"
+                          update_tf_var "github_connector_ref" "<+pipeline.variables.shared_github_connector_ref>" "string"
                           update_tf_var "use_harness_code" "$RESOLVED_USE_HARNESS_CODE" "string"
 
                           if [ "$DEPLOYMENT_TARGET" = "asg" ]; then
@@ -1657,6 +1689,11 @@ pipeline:
                             "value": "<+pipeline.variables.create_harness_project>",
                             "value_type": "string"
                           },
+                          "aws_connector_ref": {
+                            "key": "aws_connector_ref",
+                            "value": "<+pipeline.variables.shared_aws_connector_ref>",
+                            "value_type": "string"
+                          },
                           "artifact_registry_type": {
                             "key": "artifact_registry_type",
                             "value": "<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>",
@@ -1695,6 +1732,11 @@ pipeline:
                           "github_repo_name": {
                             "key": "github_repo_name",
                             "value": "<+pipeline.variables.source_github_repo>",
+                            "value_type": "string"
+                          },
+                          "github_connector_ref": {
+                            "key": "github_connector_ref",
+                            "value": "<+pipeline.variables.shared_github_connector_ref>",
                             "value_type": "string"
                           },
                           "github_pat": {
@@ -1910,6 +1952,11 @@ pipeline:
                           "github_repo_name": {
                             "key": "github_repo_name",
                             "value": "<+pipeline.variables.source_github_repo>",
+                            "value_type": "string"
+                          },
+                          "github_connector_ref": {
+                            "key": "github_connector_ref",
+                            "value": "<+pipeline.variables.shared_github_connector_ref>",
                             "value_type": "string"
                           },
                           "github_pat": {

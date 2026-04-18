@@ -37,8 +37,11 @@ locals {
   app_host                   = "${var.owner}.harness-demo.dev"
   stage_host                 = "${var.owner}-stage.harness-demo.dev"
   harness_code_repo_name     = var.use_harness_code ? local.repo_name : ""
-  has_code_source            = var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != ""
-  pipeline_git_connector_ref = var.github_token_ref != "" ? local.github_connector_id : var.github_connector_ref
+  should_create_github_connector = var.github_connector_ref == "" && var.github_token_ref != ""
+  effective_aws_connector_id = var.aws_connector_ref != "" ? var.aws_connector_ref : (var.create_aws_connector ? local.aws_connector_id : "")
+  effective_github_connector_id = var.github_connector_ref != "" ? var.github_connector_ref : (local.should_create_github_connector ? local.github_connector_id : "")
+  has_code_source               = var.use_harness_code || local.should_create_github_connector || var.github_connector_ref != ""
+  pipeline_git_connector_ref    = local.should_create_github_connector ? local.github_connector_id : var.github_connector_ref
 
   common_tag_values          = module.sandbox_context.common_tag_values
   common_tags                = module.sandbox_context.common_tags
@@ -118,7 +121,7 @@ module "harness_connectors" {
   k8s_connector_name   = local.k8s_connector_name
 
   # AWS Connector (for ECR if needed)
-  create_aws_connector      = var.create_aws_connector
+  create_aws_connector      = var.aws_connector_ref == "" && var.create_aws_connector
   aws_connector_id          = local.aws_connector_id
   aws_connector_name        = local.aws_connector_name
   aws_connector_description = "AWS connector for ${local.owner_title} EKS stack"
@@ -127,7 +130,7 @@ module "harness_connectors" {
   aws_region                = var.aws_region
 
   # GitHub Connector
-  create_github_connector = var.github_token_ref != ""
+  create_github_connector = local.should_create_github_connector
   github_connector_id     = local.github_connector_id
   github_connector_name   = local.github_connector_name
   github_url              = var.github_url

@@ -108,11 +108,11 @@ output "k8s_connector_id" {
 }
 
 output "aws_connector_id" {
-  description = "Harness AWS connector ID"
-  value       = var.create_aws_connector ? module.harness_connectors.aws_connector_id : null
+  description = "Harness AWS connector ID in use (created by this stack or supplied as a shared connector ref)"
+  value       = local.effective_aws_connector_id
 }
 
 output "github_connector_id" {
-  description = "Harness GitHub connector ID when created from this stack"
-  value       = var.github_token_ref != "" ? module.harness_connectors.github_connector_id : null
+  description = "Harness GitHub connector ID in use when not using Harness Code"
+  value       = var.use_harness_code ? null : local.effective_github_connector_id
 }

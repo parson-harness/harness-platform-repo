@@ -85,7 +85,7 @@ module "harness_service" {
   # Manifest configuration
   manifest_type          = "K8sManifest"
   manifest_store_type    = var.use_harness_code ? "HarnessCode" : "Github"
-  git_connector_ref      = var.use_harness_code ? "" : local.github_connector_id
+  git_connector_ref      = var.use_harness_code ? "" : local.effective_github_connector_id
   git_repo_name          = var.use_harness_code ? "" : var.github_repo_name
   git_branch             = var.git_branch
   manifest_paths         = var.manifest_paths
@@ -97,7 +97,7 @@ module "harness_service" {
   har_image_path         = var.artifact_registry_type == "har" ? local.har_image_name : ""
 
   # ECR configuration (if using ECR)
-  artifact_connector_ref = var.artifact_registry_type == "ecr" ? local.aws_connector_id : ""
+  artifact_connector_ref = var.artifact_registry_type == "ecr" ? local.effective_aws_connector_id : ""
   ecr_image_path         = var.artifact_registry_type == "ecr" ? local.ecr_image_path : ""
   aws_region             = var.aws_region
 
@@ -196,7 +196,7 @@ module "harness_pipelines" {
   standard_ci_gradle_test_packages = var.standard_ci_gradle_test_packages
   har_base_image_registry          = var.artifact_registry_type == "har" ? "pkg.harness.io/${lower(var.harness_account_id)}/${local.har_registry_id}" : ""
   publish_coverage_report_artifact = var.publish_coverage_report_artifact
-  coverage_report_artifact_connector_ref = var.publish_coverage_report_artifact ? local.aws_connector_id : ""
+  coverage_report_artifact_connector_ref = var.publish_coverage_report_artifact ? local.effective_aws_connector_id : ""
   coverage_report_artifact_bucket        = var.coverage_report_artifact_bucket
   coverage_report_artifact_region        = var.coverage_report_artifact_region
   coverage_report_artifact_base_url      = var.coverage_report_artifact_base_url

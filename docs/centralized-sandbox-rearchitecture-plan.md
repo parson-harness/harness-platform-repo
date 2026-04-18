@@ -14,6 +14,7 @@ Move the repo from the legacy monolithic sandbox model toward a stack-based, cen
 - `b7a6284` - `Default helper scripts to stack-based tofu path`
 - `4681aaf` - `Add centralized sandbox rearchitecture plan`
 - `ff9b535` - `Retire legacy sandbox entrypoint`
+- `9dc4496` - `Document control plane factory boundary`
 - Current working tree: stack docs migration, EKS helper/output compatibility, and tracked legacy sandbox removal
 
 ## Key Direction
@@ -77,6 +78,16 @@ Removed the tracked legacy sandbox entrypoint files from git:
 
 Local state, backup, and cache artifacts under that directory were intentionally left alone because they are not part of the tracked repo source of truth.
 
+### 7. First connector factory move
+
+Implemented the first safe factory-oriented extraction as a reuse-first path for project-level connectors:
+
+- `tofu/stacks/eks` now accepts optional shared `aws_connector_ref` and `github_connector_ref`
+- `tofu/stacks/asg` now accepts optional shared `aws_connector_ref` and `github_connector_ref`
+- both stacks resolve effective connector refs and only create owner-scoped connectors when shared refs are not supplied
+- IACM templates and the IDP provisioner now pass those optional connector refs through create, reconcile, and recreate flows
+- stack outputs now expose the effective connector refs actually in use
+
 ## Important Findings
 
 ### Legacy sandbox usage
@@ -95,8 +106,8 @@ Operational docs and helper scripts now point at the stack-based paths, and the 
 ### Next slice
 
 - Boundary doc: `docs/control-plane-factory-boundary.md`
-- Design the control-plane / factory / workload boundary more explicitly
-- Decide which resources belong in project governance vs customer-project provisioning
+- Decide where shared project-level connectors should be created and reconciled permanently
+- Choose whether that permanent home belongs in project governance or a dedicated customer-project factory layer
 - Keep pushing shared management concerns toward persistent factory-style IACM workspaces and templates
 
 ### After that
@@ -116,7 +127,7 @@ Use docs/centralized-sandbox-rearchitecture-plan.md as the source of truth.
 Continue the next slice:
 1) review docs/centralized-sandbox-rearchitecture-plan.md,
 2) review docs/control-plane-factory-boundary.md,
-3) identify the first safe factory move candidate,
+3) decide where shared project-level connectors should be created and reconciled permanently,
 4) implement the next safe slice and commit/push.
 ```
 

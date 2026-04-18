@@ -97,6 +97,12 @@ template:
         status: manual
         locked: false
         type: String
+      - key: aws_connector_ref
+        value: <+pipeline.variables.shared_aws_connector_ref>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
       - key: artifact_registry_type
         value: <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>
         value_type: string
@@ -231,6 +237,12 @@ template:
         type: String
       - key: github_repo_name
         value: <+pipeline.variables.source_github_repo>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: github_connector_ref
+        value: <+pipeline.variables.shared_github_connector_ref>
         value_type: string
         status: manual
         locked: false

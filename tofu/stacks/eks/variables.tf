@@ -120,6 +120,12 @@ variable "create_aws_connector" {
   default     = true
 }
 
+variable "aws_connector_ref" {
+  description = "Existing AWS connector reference to reuse instead of creating an owner-scoped connector"
+  type        = string
+  default     = ""
+}
+
 variable "aws_auth_type" {
   description = "AWS connector auth type: 'irsa' or 'delegate'"
   type        = string

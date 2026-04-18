@@ -51,6 +51,9 @@ github_pat        = "your-github-pat"                   # PAT with repo read acc
 # Option 2: Use an existing GitHub connector
 # github_connector_ref = "account.parsongh"  # Account-level connector
 # github_connector_ref = "org.my_github"     # Org-level connector
+#
+# Optional: reuse a shared project-level AWS connector instead of creating an owner-scoped one
+# aws_connector_ref = "sandbox.parson.shared_aws"
 
 # Artifact Registry
 artifact_registry_type    = "har"

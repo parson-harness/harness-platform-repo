@@ -249,3 +249,15 @@ Start with Option A plus a small implementation probe:
 - move only that class if the blast radius is small
 
 The best first candidate appears to be project-level connectors, because they are highly reusable and their lifecycle often should not follow a single owner workspace.
+
+## First Implemented Factory Move
+
+The first low-risk factory move is now in place as an opt-in reuse path:
+
+- `tofu/stacks/eks` can reuse shared `aws_connector_ref` and `github_connector_ref`
+- `tofu/stacks/asg` can reuse shared `aws_connector_ref` and `github_connector_ref`
+- the workload stacks still preserve existing behavior when those refs are left empty
+- `.harness/templates/POV_Provisioner` and `.harness/templates/Sandbox_Provisioner_ASG` now accept those optional shared connector refs
+- `.harness/pipelines/idp_pov_provisioner.yaml` passes the optional refs through initial create, reconcile, and recreate workspace flows
+
+This is intentionally a reuse-first move, not a full connector factory stack yet. The next step is to decide where those shared project-level connectors should be created and reconciled permanently.

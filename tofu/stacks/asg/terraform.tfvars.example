@@ -49,6 +49,10 @@ route53_zone_name = "harness-demo.dev"
 
 # github_token_ref = "account.github_pat"
 # github_username  = "your-github-username"
+# github_connector_ref = "sandbox.parson.shared_github"
+
+# Optional: reuse a shared project-level AWS connector instead of creating an owner-scoped one
+# aws_connector_ref = "sandbox.parson.shared_aws"
 
 ################################################################################
 # Pipelines

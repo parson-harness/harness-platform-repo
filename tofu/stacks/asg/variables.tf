@@ -172,6 +172,12 @@ variable "new_harness_project_name" {
 # Connector Configuration
 ################################################################################
 
+variable "aws_connector_ref" {
+  description = "Existing AWS connector reference to reuse instead of creating an owner-scoped connector"
+  type        = string
+  default     = ""
+}
+
 variable "aws_auth_type" {
   description = "AWS connector auth type: 'irsa' or 'delegate'"
   type        = string

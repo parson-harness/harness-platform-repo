@@ -105,6 +105,7 @@ module "sandbox_context" {
 
 locals {
   name_prefix                            = module.sandbox_context.name_prefix
+  owner_title                            = module.sandbox_context.owner_title
   delegate_selector                      = module.sandbox_context.delegate_selector
   har_registry_id                        = "har-${var.owner}"
   har_upstream_proxy_id                  = "${var.owner}-dockerhub-proxy"
@@ -119,6 +120,13 @@ locals {
   common_tag_values          = module.sandbox_context.common_tag_values
   common_tags                = module.sandbox_context.common_tags
   common_tags_with_workspace = module.sandbox_context.common_tags_with_workspace
+  aws_connector_id           = "${var.owner}_aws_reference_architecture"
+  aws_connector_name         = "${local.owner_title} AWS Reference Architecture"
+  github_connector_id        = "${var.owner}_github_reference_architecture"
+  github_connector_name      = "${local.owner_title} GitHub Reference Architecture"
+  should_create_github_connector = var.github_connector_ref == "" && var.github_token_ref != ""
+  effective_aws_connector_id = var.aws_connector_ref != "" ? var.aws_connector_ref : local.aws_connector_id
+  effective_github_connector_id = var.github_connector_ref != "" ? var.github_connector_ref : (local.should_create_github_connector ? local.github_connector_id : "")
 
   asg_alb_name_source      = "${local.name_prefix}-asg-alb"
   asg_prod_tg_name_source  = "${local.name_prefix}-asg-prod-tg"
@@ -780,10 +788,10 @@ module "harness_connectors" {
   delegate_selectors = [local.delegate_selector]
 
   # AWS Connector (for AMI artifact resolution)
-  create_aws_connector        = true
-  aws_connector_id            = "${var.owner}_aws_reference_architecture"
-  aws_connector_name          = "${title(var.owner)} AWS Reference Architecture"
-  aws_connector_description   = "AWS connector for ${title(var.owner)} ASG stack"
+  create_aws_connector        = var.aws_connector_ref == ""
+  aws_connector_id            = local.aws_connector_id
+  aws_connector_name          = local.aws_connector_name
+  aws_connector_description   = "AWS connector for ${local.owner_title} ASG stack"
   connector_tags              = ["tofu-managed:true", "owner:${var.owner}", "stack:asg"]
   aws_auth_type               = var.aws_auth_type
   aws_region                  = var.aws_region
@@ -792,9 +800,9 @@ module "harness_connectors" {
   cross_account_external_id   = var.cross_account_external_id
 
   # GitHub Connector
-  create_github_connector = var.github_token_ref != ""
-  github_connector_id     = "${var.owner}_github_reference_architecture"
-  github_connector_name   = "${title(var.owner)} GitHub Reference Architecture"
+  create_github_connector = local.should_create_github_connector
+  github_connector_id     = local.github_connector_id
+  github_connector_name   = local.github_connector_name
   github_url              = var.github_url
   github_username         = var.github_username
   github_token_ref        = var.github_token_ref
@@ -846,7 +854,7 @@ module "harness_service_asg" {
 
   # ASG artifact = Packer-built AMI
   artifact_registry_type = "ecr" # Uses AWS connector for AMI resolution
-  artifact_connector_ref = "${var.owner}_aws_reference_architecture"
+  artifact_connector_ref = local.effective_aws_connector_id
   aws_region             = var.aws_region
   asg_ami_owner_tag      = var.owner
 
@@ -856,12 +864,12 @@ module "harness_service_asg" {
   asg_startup_script_local_file_path = "${path.root}/../../../asg/user-data.sh"
   manifest_store_type                = var.use_harness_code ? "HarnessCode" : "Github"
   git_connector_ref = var.use_harness_code ? "" : (
-    var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+    local.effective_github_connector_id
   )
   git_repo_name                        = var.use_harness_code ? "" : var.github_repo_name
   harness_code_repo_name               = var.use_harness_code ? "${var.owner}-demo-app" : ""
-  asg_startup_script_use_git           = var.github_token_ref != "" || var.github_connector_ref != ""
-  asg_startup_script_git_connector_ref = var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+  asg_startup_script_use_git           = !var.use_harness_code && local.effective_github_connector_id != ""
+  asg_startup_script_git_connector_ref = local.effective_github_connector_id
   asg_startup_script_git_repo_name     = var.github_repo_name
   git_branch                           = var.git_branch
 
@@ -920,8 +928,8 @@ module "harness_environment_dev" {
   # ASG infrastructure
   create_asg_infrastructure = true
   asg_infra_id              = "${var.owner}_asg_dev"
-  asg_infra_name            = "${title(var.owner)} ASG Dev"
-  aws_connector_ref         = "${var.owner}_aws_reference_architecture"
+  asg_infra_name            = "${local.owner_title} ASG Dev"
+  aws_connector_ref         = local.effective_aws_connector_id
   aws_region                = var.aws_region
   asg_base_asg_name         = module.asg.base_asg_name
   asg_load_balancer_name    = module.asg.alb_name
@@ -978,11 +986,11 @@ module "harness_pipelines_asg" {
   create_ci_pipeline         = false
 
   # ASG CI pipeline: Gradle + CI Intelligence + security scans → Packer AMI build
-  create_asg_ci_pipeline           = var.create_asg_ci_pipeline && (var.use_harness_code || var.github_token_ref != "" || var.github_connector_ref != "")
+  create_asg_ci_pipeline           = var.create_asg_ci_pipeline && (var.use_harness_code || local.effective_github_connector_id != "")
   asg_ci_pipeline_id               = "${var.owner}_asg_ci_build"
-  asg_ci_pipeline_name             = "${title(var.owner)} ASG CI Build"
+  asg_ci_pipeline_name             = "${local.owner_title} ASG CI Build"
   asg_ci_pipeline_description      = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning, and Packer AMI bake"
-  git_connector_ref                = var.github_token_ref != "" ? "${var.owner}_github_reference_architecture" : var.github_connector_ref
+  git_connector_ref                = local.effective_github_connector_id
   git_repo_name                    = var.github_repo_name
   use_harness_code                 = var.use_harness_code
   harness_code_repo_name           = var.use_harness_code ? "${var.owner}-demo-app" : ""
@@ -1067,6 +1075,16 @@ output "delegate_name" {
 output "delegate_irsa_role_arn" {
   description = "IRSA role ARN for the delegate"
   value       = var.create_delegate ? module.irsa_delegate_role[0].role_arn : null
+}
+
+output "aws_connector_id" {
+  description = "Harness AWS connector ID in use (created by this stack or supplied as a shared connector ref)"
+  value       = local.effective_aws_connector_id
+}
+
+output "github_connector_id" {
+  description = "Harness GitHub connector ID in use when not using Harness Code"
+  value       = var.use_harness_code ? null : local.effective_github_connector_id
 }
 
 ################################################################################
