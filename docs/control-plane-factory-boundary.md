@@ -271,3 +271,37 @@ Shared project-level AWS and GitHub connectors now belong in a separate `project
 - workload workspace create, reconcile, and recreate paths resolve effective shared connector refs from either explicit pipeline inputs or the predictable project-factory connector IDs
 
 The new path is deliberately opt-in so existing owner-scoped connector behavior remains unchanged until the shared factory workflow is enabled for a target project.
+
+## Local Validation for the Project-Factory Contract
+
+The safest fast-feedback loop for this slice is to validate the control-plane contract and the stack separately before attempting a live Harness run.
+
+### Level 1: Static contract validation
+
+Run the dependency-light validator from the repo root:
+
+```bash
+python3 scripts/validate_project_factory_contract.py
+```
+
+This validates the current `project-factory` contract across:
+
+- `.harness/workflows/pov_provisioner_workflow.yaml`
+- `.harness/workflows/se_sandbox_provisioner.yaml`
+- `.harness/pipelines/idp_pov_provisioner.yaml`
+- `.harness/templates/project_factory_workspace.yaml`
+- `tofu/stacks/project-factory/variables.tf`
+
+It is intended to catch contract drift where a shared project-factory stack input is added or changed without being carried through the workflow, pipeline, template, create flow, and reconcile flow.
+
+### Level 2: Stack validation
+
+From the repo root, run:
+
+```bash
+tofu fmt -check -recursive tofu/stacks/project-factory
+tofu -chdir=tofu/stacks/project-factory init -backend=false
+tofu -chdir=tofu/stacks/project-factory validate
+```
+
+This validates the OpenTofu stack structure, but it does not prove live IACM API behavior or actual Harness connector creation.

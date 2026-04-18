@@ -198,6 +198,16 @@ pipeline:
       description: AWS auth type for the shared project-level AWS connector.
       required: false
       value: <+input>.default(irsa).allowedValues(delegate,manual,irsa)
+    - name: project_factory_aws_access_key_ref
+      type: String
+      description: Optional Harness secret reference for the shared project-level AWS connector access key when using manual auth.
+      required: false
+      value: <+input>.default("")
+    - name: project_factory_aws_secret_key_ref
+      type: String
+      description: Optional Harness secret reference for the shared project-level AWS connector secret key when using manual auth.
+      required: false
+      value: <+input>.default("")
     - name: project_factory_enable_cross_account_access
       type: String
       description: Enable cross-account STS access on the shared project-level AWS connector.
@@ -844,6 +854,16 @@ pipeline:
                             "value": "<+pipeline.variables.project_factory_aws_auth_type>",
                             "value_type": "string"
                           },
+                          "shared_aws_access_key_ref": {
+                            "key": "shared_aws_access_key_ref",
+                            "value": "<+pipeline.variables.project_factory_aws_access_key_ref>",
+                            "value_type": "string"
+                          },
+                          "shared_aws_secret_key_ref": {
+                            "key": "shared_aws_secret_key_ref",
+                            "value": "<+pipeline.variables.project_factory_aws_secret_key_ref>",
+                            "value_type": "string"
+                          },
                           "shared_enable_cross_account_access": {
                             "key": "shared_enable_cross_account_access",
                             "value": "<+pipeline.variables.project_factory_enable_cross_account_access>",
@@ -1028,6 +1048,8 @@ pipeline:
                           update_tf_var "shared_aws_connector_name" "<+pipeline.variables.project_factory_aws_connector_name>" "string"
                           update_tf_var "shared_aws_region" "<+pipeline.variables.project_factory_aws_region>" "string"
                           update_tf_var "shared_aws_auth_type" "<+pipeline.variables.project_factory_aws_auth_type>" "string"
+                          update_tf_var "shared_aws_access_key_ref" "<+pipeline.variables.project_factory_aws_access_key_ref>" "string"
+                          update_tf_var "shared_aws_secret_key_ref" "<+pipeline.variables.project_factory_aws_secret_key_ref>" "string"
                           update_tf_var "shared_enable_cross_account_access" "<+pipeline.variables.project_factory_enable_cross_account_access>" "string"
                           update_tf_var "shared_cross_account_role_arn" "<+pipeline.variables.project_factory_cross_account_role_arn>" "string"
                           update_tf_var "shared_cross_account_external_id" "<+pipeline.variables.project_factory_cross_account_external_id>" "string"
@@ -2903,12 +2925,12 @@ pipeline:
                     shell: Bash
                     command: |
                       RESOLVED_PROFILE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
-                      RESOLVED_ARTIFACT_REGISTRY_TYPE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>"
-                      RESOLVED_CREATE_DOCKERHUB_UPSTREAM="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_dockerhub_upstream>"
-                      RESOLVED_CREATE_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>"
-                      RESOLVED_CREATE_STANDARD_CI_GRADLE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>"
-                      RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>"
-                      RESOLVED_CREATE_ASG_CI_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>"
+                      ARTIFACT_REGISTRY_TYPE="<+pipeline.variables.artifact_registry_type>"
+                      CREATE_DOCKERHUB_UPSTREAM="<+pipeline.variables.create_dockerhub_upstream>"
+                      CREATE_STRATEGY_PIPELINE="<+pipeline.variables.create_strategy_pipeline>"
+                      CREATE_STANDARD_CI_GRADLE="<+pipeline.variables.create_standard_ci_gradle>"
+                      CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.variables.create_asg_strategy_pipeline>"
+                      CREATE_ASG_CI_PIPELINE="<+pipeline.variables.create_asg_ci_pipeline>"
 
                       if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
                         echo "=== POV Provisioning Plan Summary (ASG Stack) ==="
@@ -2925,14 +2947,14 @@ pipeline:
                       echo "Org: <+pipeline.variables.harness_org_id>"
                       echo "Project: <+pipeline.variables.harness_project_id>"
                       echo "Harness Code Repo: true"
-                      echo "Artifact Registry Type: ${RESOLVED_ARTIFACT_REGISTRY_TYPE}"
-                      echo "DockerHub Upstream: ${RESOLVED_CREATE_DOCKERHUB_UPSTREAM}"
+                      echo "Artifact Registry Type: ${ARTIFACT_REGISTRY_TYPE}"
+                      echo "DockerHub Upstream: ${CREATE_DOCKERHUB_UPSTREAM}"
                       if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
-                        echo "ASG Strategy Pipeline: ${RESOLVED_CREATE_ASG_STRATEGY_PIPELINE}"
-                        echo "ASG CI Pipeline: ${RESOLVED_CREATE_ASG_CI_PIPELINE}"
+                        echo "ASG Strategy Pipeline: ${CREATE_ASG_STRATEGY_PIPELINE}"
+                        echo "ASG CI Pipeline: ${CREATE_ASG_CI_PIPELINE}"
                       else
-                        echo "K8s Strategy Pipeline: ${RESOLVED_CREATE_STRATEGY_PIPELINE}"
-                        echo "Gradle CI Pipeline: ${RESOLVED_CREATE_STANDARD_CI_GRADLE}"
+                        echo "K8s Strategy Pipeline: ${CREATE_STRATEGY_PIPELINE}"
+                        echo "Gradle CI Pipeline: ${CREATE_STANDARD_CI_GRADLE}"
                       fi
                       echo "================================================="
 
@@ -2969,11 +2991,11 @@ pipeline:
                     shell: Bash
                     command: |
                       RESOLVED_PROFILE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
-                      RESOLVED_ARTIFACT_REGISTRY_TYPE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>"
-                      RESOLVED_CREATE_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>"
-                      RESOLVED_CREATE_STANDARD_CI_GRADLE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>"
-                      RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>"
-                      RESOLVED_CREATE_ASG_CI_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>"
+                      ARTIFACT_REGISTRY_TYPE="<+pipeline.variables.artifact_registry_type>"
+                      CREATE_STRATEGY_PIPELINE="<+pipeline.variables.create_strategy_pipeline>"
+                      CREATE_STANDARD_CI_GRADLE="<+pipeline.variables.create_standard_ci_gradle>"
+                      CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.variables.create_asg_strategy_pipeline>"
+                      CREATE_ASG_CI_PIPELINE="<+pipeline.variables.create_asg_ci_pipeline>"
 
                       if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
                         echo "=============================================="
@@ -2993,10 +3015,10 @@ pipeline:
                         echo "Resources created:"
                         echo "  - Service: <+pipeline.variables.owner>_demo_app_asg"
                         echo "  - Environment: <+pipeline.variables.owner>_dev"
-                        if [ "$RESOLVED_CREATE_ASG_STRATEGY_PIPELINE" = "true" ]; then
+                        if [ "$CREATE_ASG_STRATEGY_PIPELINE" = "true" ]; then
                           echo "  - Pipeline: <+pipeline.variables.owner>_asg_strategy_deploy"
                         fi
-                        if [ "$RESOLVED_CREATE_ASG_CI_PIPELINE" = "true" ]; then
+                        if [ "$CREATE_ASG_CI_PIPELINE" = "true" ]; then
                           echo "  - Pipeline: <+pipeline.variables.owner>_asg_ci_build"
                         fi
                         echo "  - Delivery Mode: AMI-based blue/green-ready ASG deployment"
@@ -3023,13 +3045,13 @@ pipeline:
                         echo "  - K8s Namespace: harness-demo-<+pipeline.variables.owner>"
                         echo "  - Service: <+pipeline.variables.owner>_demo_app"
                         echo "  - Environment: <+pipeline.variables.owner>_dev"
-                        if [ "$RESOLVED_CREATE_STRATEGY_PIPELINE" = "true" ]; then
+                        if [ "$CREATE_STRATEGY_PIPELINE" = "true" ]; then
                           echo "  - Pipeline: <+pipeline.variables.owner>_k8s_strategy_deploy"
                         fi
-                        if [ "$RESOLVED_CREATE_STANDARD_CI_GRADLE" = "true" ]; then
+                        if [ "$CREATE_STANDARD_CI_GRADLE" = "true" ]; then
                           echo "  - Pipeline: <+pipeline.variables.owner>_standard_ci_gradle"
                         fi
-                        echo "  - Artifact Registry: ${RESOLVED_ARTIFACT_REGISTRY_TYPE}"
+                        echo "  - Artifact Registry: ${ARTIFACT_REGISTRY_TYPE}"
                         echo ""
                         echo "To destroy this POV, run the 'IDP POV Destroyer' pipeline"
                         echo "with owner: <+pipeline.variables.owner> and deployment_target: eks"
@@ -3078,7 +3100,7 @@ pipeline:
                   timeout: 2m
                   when:
                     stageStatus: Success
-                    condition: <+pipeline.variables.deployment_target> == "eks" && <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle> == "true"
+                    condition: <+pipeline.variables.deployment_target> == "eks" && <+pipeline.variables.create_standard_ci_gradle> == "true"
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -3115,7 +3137,7 @@ pipeline:
                   timeout: 2m
                   when:
                     stageStatus: Success
-                    condition: <+pipeline.variables.deployment_target> == "asg" && <+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline> == "true"
+                    condition: <+pipeline.variables.deployment_target> == "asg" && <+pipeline.variables.create_asg_ci_pipeline> == "true"
                   failureStrategies:
                     - onFailure:
                         errors:
@@ -3218,11 +3240,11 @@ pipeline:
                       spec:
                         script: |
                           RESOLVED_PROFILE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_profile>"
-                          RESOLVED_ARTIFACT_REGISTRY_TYPE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_artifact_registry_type>"
-                          RESOLVED_CREATE_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_strategy_pipeline>"
-                          RESOLVED_CREATE_STANDARD_CI_GRADLE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_standard_ci_gradle>"
-                          RESOLVED_CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>"
-                          RESOLVED_CREATE_ASG_CI_PIPELINE="<+pipeline.stages.create_workspace.spec.execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>"
+                          ARTIFACT_REGISTRY_TYPE="<+pipeline.variables.artifact_registry_type>"
+                          CREATE_STRATEGY_PIPELINE="<+pipeline.variables.create_strategy_pipeline>"
+                          CREATE_STANDARD_CI_GRADLE="<+pipeline.variables.create_standard_ci_gradle>"
+                          CREATE_ASG_STRATEGY_PIPELINE="<+pipeline.variables.create_asg_strategy_pipeline>"
+                          CREATE_ASG_CI_PIPELINE="<+pipeline.variables.create_asg_ci_pipeline>"
 
                           if [ "<+pipeline.variables.deployment_target>" = "asg" ]; then
                             echo "=============================================="
@@ -3239,7 +3261,7 @@ pipeline:
                             echo "All resources are managed by Terraform state."
                             echo "To destroy, run 'terraform destroy' or the POV Destroyer pipeline."
                             echo ""
-                            if [ "$RESOLVED_CREATE_ASG_CI_PIPELINE" = "true" ]; then
+                            if [ "$CREATE_ASG_CI_PIPELINE" = "true" ]; then
                               echo "The CI build will:"
                               echo "  1. Clone from Harness Code repo"
                               echo "  2. Build the application and bake a Packer AMI"
@@ -3249,10 +3271,10 @@ pipeline:
                             fi
                             echo ""
                             echo "Pipelines created:"
-                            if [ "$RESOLVED_CREATE_ASG_CI_PIPELINE" = "true" ]; then
+                            if [ "$CREATE_ASG_CI_PIPELINE" = "true" ]; then
                               echo "  - <+pipeline.variables.owner>_asg_ci_build (CI)"
                             fi
-                            if [ "$RESOLVED_CREATE_ASG_STRATEGY_PIPELINE" = "true" ]; then
+                            if [ "$CREATE_ASG_STRATEGY_PIPELINE" = "true" ]; then
                               echo "  - <+pipeline.variables.owner>_asg_strategy_deploy (CD)"
                             fi
                             echo ""
@@ -3269,18 +3291,18 @@ pipeline:
                             echo ""
                             echo "Harness Code Repo: <+pipeline.variables.owner>-demo-app"
                             echo "  (Terraform-managed, imported from: <+pipeline.variables.source_github_repo>)"
-                            echo "Artifact Registry: ${RESOLVED_ARTIFACT_REGISTRY_TYPE}"
+                            echo "Artifact Registry: ${ARTIFACT_REGISTRY_TYPE}"
                             echo ""
                             echo "All resources are managed by Terraform state."
                             echo "To destroy, run 'terraform destroy' or the POV Destroyer pipeline."
                             echo ""
-                            if [ "$RESOLVED_CREATE_STANDARD_CI_GRADLE" = "true" ]; then
+                            if [ "$CREATE_STANDARD_CI_GRADLE" = "true" ]; then
                               echo "The initial CI build will:"
                               echo "  1. Clone from Harness Code repo"
                               echo "  2. Run the recommended Gradle CI + intelligence flow"
                               echo "  3. Build the Docker image"
-                              echo "  4. Push to ${RESOLVED_ARTIFACT_REGISTRY_TYPE}"
-                              if [ "$RESOLVED_CREATE_STRATEGY_PIPELINE" = "true" ]; then
+                              echo "  4. Push to ${ARTIFACT_REGISTRY_TYPE}"
+                              if [ "$CREATE_STRATEGY_PIPELINE" = "true" ]; then
                                 echo "  5. Trigger deployment automatically"
                               fi
                             else
@@ -3288,10 +3310,10 @@ pipeline:
                             fi
                             echo ""
                             echo "Pipelines created:"
-                            if [ "$RESOLVED_CREATE_STANDARD_CI_GRADLE" = "true" ]; then
+                            if [ "$CREATE_STANDARD_CI_GRADLE" = "true" ]; then
                               echo "  - <+pipeline.variables.owner>_standard_ci_gradle (CI)"
                             fi
-                            if [ "$RESOLVED_CREATE_STRATEGY_PIPELINE" = "true" ]; then
+                            if [ "$CREATE_STRATEGY_PIPELINE" = "true" ]; then
                               echo "  - <+pipeline.variables.owner>_k8s_strategy_deploy (CD)"
                             fi
                             echo ""

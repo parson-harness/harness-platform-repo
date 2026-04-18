@@ -135,6 +135,16 @@ spec:
           type: string
           description: "Optional Harness secret reference for the project-scoped shared GitHub connector (for example account.github_pat). Leave empty to skip shared GitHub connector creation."
           default: ""
+        project_factory_aws_access_key_ref:
+          title: Shared AWS Access Key Ref
+          type: string
+          description: "Optional Harness secret reference for the project-scoped shared AWS connector access key when using manual auth."
+          default: ""
+        project_factory_aws_secret_key_ref:
+          title: Shared AWS Secret Key Ref
+          type: string
+          description: "Optional Harness secret reference for the project-scoped shared AWS connector secret key when using manual auth."
+          default: ""
 
   steps:
     - id: trigger
@@ -155,4 +165,6 @@ spec:
           create_opa_policies: ${{ parameters.create_opa_policies }}
           create_project_factory: ${{ parameters.create_project_factory }}
           project_factory_github_token_ref: ${{ parameters.project_factory_github_token_ref }}
+          project_factory_aws_access_key_ref: ${{ parameters.project_factory_aws_access_key_ref }}
+          project_factory_aws_secret_key_ref: ${{ parameters.project_factory_aws_secret_key_ref }}
         apikey: ${{ parameters.token }}

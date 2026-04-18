@@ -121,6 +121,18 @@ template:
         status: manual
         locked: false
         type: String
+      - key: shared_aws_access_key_ref
+        value: <+pipeline.variables.project_factory_aws_access_key_ref>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_aws_secret_key_ref
+        value: <+pipeline.variables.project_factory_aws_secret_key_ref>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
       - key: shared_enable_cross_account_access
         value: <+pipeline.variables.project_factory_enable_cross_account_access>
         value_type: string

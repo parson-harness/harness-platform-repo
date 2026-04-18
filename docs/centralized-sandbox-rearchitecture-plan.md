@@ -126,6 +126,8 @@ Operational docs and helper scripts now point at the stack-based paths, and the 
 - Refine project-governance and workspace-template ownership boundaries
 - Expand the factory model for reusable customer/demo project provisioning
 - Keep pushing management logic toward stack templates and centrally owned Terraform modules
+- Provide a docs menu/index of helpful architecture and deployment concept resources for sales engineers
+- Add a live Harness smoke test for `${project}_factory` bootstrap and shared connector reuse once the local validation contract settles
 
 ## Resume Prompt
 
