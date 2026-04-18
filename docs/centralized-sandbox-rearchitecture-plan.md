@@ -94,12 +94,14 @@ Operational docs and helper scripts now point at the stack-based paths, and the 
 
 ### Next slice
 
+- Boundary doc: `docs/control-plane-factory-boundary.md`
 - Design the control-plane / factory / workload boundary more explicitly
 - Decide which resources belong in project governance vs customer-project provisioning
 - Keep pushing shared management concerns toward persistent factory-style IACM workspaces and templates
 
 ### After that
 
+- Pick the first candidate factory move from `docs/control-plane-factory-boundary.md`
 - Refine project-governance and workspace-template ownership boundaries
 - Expand the factory model for reusable customer/demo project provisioning
 - Keep pushing management logic toward stack templates and centrally owned Terraform modules
@@ -113,8 +115,8 @@ Resume the re-architecture initiative on branch rearch/centralized-sandbox-manag
 Use docs/centralized-sandbox-rearchitecture-plan.md as the source of truth.
 Continue the next slice:
 1) review docs/centralized-sandbox-rearchitecture-plan.md,
-2) continue the control-plane / factory boundary design,
-3) identify which resources should move under project governance vs customer-project provisioning,
+2) review docs/control-plane-factory-boundary.md,
+3) identify the first safe factory move candidate,
 4) implement the next safe slice and commit/push.
 ```
 
