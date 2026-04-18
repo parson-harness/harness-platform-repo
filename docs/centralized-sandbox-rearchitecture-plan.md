@@ -15,7 +15,9 @@ Move the repo from the legacy monolithic sandbox model toward a stack-based, cen
 - `4681aaf` - `Add centralized sandbox rearchitecture plan`
 - `ff9b535` - `Retire legacy sandbox entrypoint`
 - `9dc4496` - `Document control plane factory boundary`
-- Current working tree: stack docs migration, EKS helper/output compatibility, and tracked legacy sandbox removal
+- `c51cabd` - `Filter bare tags from generated pipelines`
+- `fddbb00` - `Store workspace API key as secret ref`
+- Validated live checkpoint: `toddone` EKS provisioning now succeeds on the stack-first path with `${project}_governance`, optional `${project}_factory`, and `${owner}_pov` workspace layering behaving as expected
 
 ## Key Direction
 
@@ -111,23 +113,49 @@ Remaining references are now intentional architectural mentions only, such as:
 
 Operational docs and helper scripts now point at the stack-based paths, and the tracked legacy sandbox entrypoint has been removed from git.
 
+### Validated EKS control-plane checkpoint
+
+The current EKS path is now validated for a same-project sandbox owner:
+
+- `${project}_governance` bootstrap succeeds and remains policy-focused
+- `${project}_factory` shared connector bootstrap can run before workload provisioning
+- `${owner}_pov` workload provisioning succeeds through workspace create/reconcile plus IACM plan/apply
+- generated workload pipeline tags no longer fail Harness YAML/request matching
+- workspace `harness_api_key` variables now store Harness secret references instead of resolved secret values
+
+This gives the repo a credible validated baseline for the next shared-resource extraction.
+
+### Next shared resource class after connectors
+
+The clearest next candidate is project-scoped Harness Code repo wiring.
+
+Why this is next:
+
+- both workload stacks are now constrained to `use_harness_code = true`
+- both `tofu/stacks/eks` and `tofu/stacks/asg` still create `module "harness_code_repo"` inside owner-scoped workload stacks
+- repo import and project-scoped code wiring are more naturally reused across many owner workspaces than destroyed with a single owner sandbox
+
+For now, leave HAR ownership and Kubernetes connector ownership unchanged while this boundary is clarified.
+
 ## Next Planned Slices
 
 ### Next slice
 
-- Boundary doc: `docs/control-plane-factory-boundary.md`
-- Validate the new `${project}_factory` workspace flow in a target project
-- Decide when to flip shared connector creation on by default for specific sandbox profiles or projects
-- Keep pushing shared management concerns toward persistent factory-style IACM workspaces and templates while leaving Kubernetes connectors in workload stacks for now
+- Move project-scoped Harness Code repo wiring out of owner workload stacks and into the factory boundary
+- Decide whether `${project}_factory` should own a shared Harness Code repo outright or reconcile a predictable shared repo contract consumed by workload stacks
+- Keep shared connector reuse enabled and validate repo wiring plus connector reuse together in one target project
+- Keep HAR ownership and Kubernetes connector ownership unchanged for this slice to limit blast radius
 
 ### After that
 
-- Refine the project-factory contract for additional shared project-level resources beyond connectors
+- Evaluate whether HAR registry defaults/upstream policy belong in `project-factory` or should remain workload-scoped
+- Decide whether Kubernetes connector ownership should stay workload-scoped or move into a shared EKS substrate contract
+- Refine the project-factory contract for additional shared project-level resources beyond connectors and repo wiring
 - Refine project-governance and workspace-template ownership boundaries
 - Expand the factory model for reusable customer/demo project provisioning
 - Keep pushing management logic toward stack templates and centrally owned Terraform modules
 - Provide a docs menu/index of helpful architecture and deployment concept resources for sales engineers
-- Add a live Harness smoke test for `${project}_factory` bootstrap and shared connector reuse once the local validation contract settles
+- Add a live Harness smoke test for `${project}_factory` bootstrap and shared connector/repo reuse once the local validation contract settles
 
 ## Resume Prompt
 
@@ -140,7 +168,7 @@ Continue the next slice:
 1) review docs/centralized-sandbox-rearchitecture-plan.md,
 2) review docs/control-plane-factory-boundary.md,
 3) validate the `${project}_factory` shared connector bootstrap flow,
-4) decide the next shared resource class to move after connectors,
+4) move the next shared resource class after connectors (Harness Code repo wiring),
 5) implement the next safe slice and commit/push.
 ```
 
@@ -149,7 +177,7 @@ Continue the next slice:
 Include these if possible:
 
 - branch: `rearch/centralized-sandbox-management`
-- latest checkpoint commit: `ff9b535`
+- latest checkpoint commit: `fddbb00`
 - forward path: `tofu/stacks/*`
 - tracked legacy entrypoint retired from git: `tofu/environments/sandbox`
 

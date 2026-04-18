@@ -35,7 +35,8 @@ locals {
   har_image_name             = "${var.owner}demoapp"
   app_host                   = "${var.owner}.harness-demo.dev"
   stage_host                 = "${var.owner}-stage.harness-demo.dev"
-  harness_code_repo_name     = local.repo_name
+  should_create_harness_code_repo = var.shared_harness_code_repo_name == ""
+  harness_code_repo_name     = var.shared_harness_code_repo_name != "" ? var.shared_harness_code_repo_name : local.repo_name
   should_create_github_connector = var.github_connector_ref == "" && var.github_token_ref != ""
   effective_aws_connector_id = var.aws_connector_ref != "" ? var.aws_connector_ref : (var.create_aws_connector ? local.aws_connector_id : "")
   effective_github_connector_id = var.github_connector_ref != "" ? var.github_connector_ref : (local.should_create_github_connector ? local.github_connector_id : "")
@@ -81,13 +82,14 @@ locals {
 
 module "harness_code_repo" {
   source = "../../modules/harness-code-repo"
-  count  = 1
+  count  = local.should_create_harness_code_repo ? 1 : 0
 
+  create_repo        = local.should_create_harness_code_repo
   harness_account_id = var.harness_account_id
   org_id             = local.resolved_org_id
   project_id         = local.resolved_project_id
 
-  repo_identifier  = local.repo_name
+  repo_identifier  = local.harness_code_repo_name
   repo_description = "Demo app for ${var.owner} POV - imported from GitHub"
   default_branch   = "main"
 

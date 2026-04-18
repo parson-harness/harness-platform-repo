@@ -31,10 +31,16 @@ SURFACED_CONTRACT = [
     ("shared_github_validation_repo", "project_factory_github_validation_repo"),
     ("shared_github_token_ref", "project_factory_github_token_ref"),
     ("shared_github_username", "project_factory_github_username"),
+    ("create_shared_harness_code_repo", "create_project_shared_harness_code_repo"),
+    ("shared_harness_code_repo_identifier", "project_factory_harness_code_repo_identifier"),
+    ("shared_harness_code_source_repo", "source_github_repo"),
 ]
 
 WORKFLOW_SURFACED_INPUTS = [
+    "source_github_repo",
     "create_project_factory",
+    "create_project_shared_harness_code_repo",
+    "project_factory_harness_code_repo_identifier",
     "project_factory_github_token_ref",
     "project_factory_aws_access_key_ref",
     "project_factory_aws_secret_key_ref",
@@ -270,6 +276,13 @@ def main() -> int:
     ):
         errors.append("Shared connector resolution no longer falls back to the predictable project-factory GitHub connector ID")
 
+    if not step_contains(
+        pipeline_text,
+        "resolve_shared_connector_refs",
+        'RESOLVED_SHARED_HARNESS_CODE_REPO_NAME="${PROJECT_ID}-demo-app"',
+    ):
+        errors.append("Shared Harness Code repo resolution no longer falls back to the predictable project-factory repo identifier")
+
     unexpected_stack_vars = sorted(candidate_stack_vars - surfaced_stack_vars - INTENTIONALLY_UNSURFACED_STACK_VARS)
     if unexpected_stack_vars:
         errors.append(
@@ -321,6 +334,21 @@ def main() -> int:
 
     if not has_literal_template_binding(asg_template_text, "use_harness_code", '"true"'):
         errors.append("ASG template is not locked to use_harness_code=true")
+
+    if not has_template_binding(eks_template_text, "shared_harness_code_repo_name", "shared_harness_code_repo_name"):
+        errors.append("EKS template binding missing: shared_harness_code_repo_name <- shared_harness_code_repo_name")
+
+    if not has_template_binding(asg_template_text, "shared_harness_code_repo_name", "shared_harness_code_repo_name"):
+        errors.append("ASG template binding missing: shared_harness_code_repo_name <- shared_harness_code_repo_name")
+
+    shared_repo_payload_matches = count_matches(
+        pipeline_text,
+        r'"shared_harness_code_repo_name"\s*:\s*\{',
+    )
+    if shared_repo_payload_matches < 4:
+        errors.append(
+            f"Expected shared_harness_code_repo_name to be stamped in all workload create/recreate payloads, found {shared_repo_payload_matches} bindings"
+        )
 
     har_payload_matches = count_matches(
         pipeline_text,

@@ -26,8 +26,11 @@ locals {
   shared_github_connector_id = var.shared_github_connector_id != "" ? var.shared_github_connector_id : "${var.harness_project_id}_github_reference_architecture"
   shared_github_connector_name = var.shared_github_connector_name != "" ? var.shared_github_connector_name : "${local.project_title} GitHub Reference Architecture"
 
+  shared_harness_code_repo_identifier = var.shared_harness_code_repo_identifier != "" ? var.shared_harness_code_repo_identifier : "${var.harness_project_id}-demo-app"
+
   should_create_shared_aws_connector    = var.create_shared_aws_connector
   should_create_shared_github_connector = var.create_shared_github_connector && var.shared_github_token_ref != ""
+  should_create_shared_harness_code_repo = var.create_shared_harness_code_repo
 }
 
 module "harness_org_project" {
@@ -88,6 +91,28 @@ module "harness_connectors" {
   github_username         = var.shared_github_username
 
   create_prometheus_connector = false
+
+  depends_on = [module.harness_org_project]
+}
+
+module "shared_harness_code_repo" {
+  source = "../../modules/harness-code-repo"
+
+  create_repo        = local.should_create_shared_harness_code_repo
+  harness_account_id = var.harness_account_id
+  org_id             = local.resolved_org_id
+  project_id         = local.resolved_project_id
+
+  repo_identifier  = local.shared_harness_code_repo_identifier
+  repo_description = "${local.project_title} Demo App - shared Harness Code repository imported from GitHub"
+  default_branch   = "main"
+
+  import_from_scm = true
+  source_provider = "github"
+  source_host     = "https://github.com"
+  source_repo     = var.shared_harness_code_source_repo
+  source_username = "x-access-token"
+  source_password = var.github_repo_is_public ? "" : var.github_pat
 
   depends_on = [module.harness_org_project]
 }

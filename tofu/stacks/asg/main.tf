@@ -127,7 +127,8 @@ locals {
   should_create_github_connector = var.github_connector_ref == "" && var.github_token_ref != ""
   effective_aws_connector_id = var.aws_connector_ref != "" ? var.aws_connector_ref : local.aws_connector_id
   effective_github_connector_id = var.github_connector_ref != "" ? var.github_connector_ref : (local.should_create_github_connector ? local.github_connector_id : "")
-  harness_code_repo_name     = "${var.owner}-demo-app"
+  should_create_harness_code_repo = var.shared_harness_code_repo_name == ""
+  harness_code_repo_name     = var.shared_harness_code_repo_name != "" ? var.shared_harness_code_repo_name : "${var.owner}-demo-app"
 
   asg_alb_name_source      = "${local.name_prefix}-asg-alb"
   asg_prod_tg_name_source  = "${local.name_prefix}-asg-prod-tg"
@@ -166,13 +167,14 @@ locals {
 
 module "harness_code_repo" {
   source = "../../modules/harness-code-repo"
-  count  = 1
+  count  = local.should_create_harness_code_repo ? 1 : 0
 
+  create_repo        = local.should_create_harness_code_repo
   harness_account_id = var.harness_account_id
   org_id             = local.resolved_org_id
   project_id         = local.resolved_project_id
 
-  repo_identifier  = "${var.owner}-demo-app"
+  repo_identifier  = local.harness_code_repo_name
   repo_description = "Demo app for ${var.owner} POV - imported from GitHub"
   default_branch   = "main"
 
@@ -1084,6 +1086,11 @@ output "aws_connector_id" {
 output "github_connector_id" {
   description = "Harness GitHub connector ID used to import the sandbox repo into Harness Code when configured"
   value       = local.effective_github_connector_id != "" ? local.effective_github_connector_id : null
+}
+
+output "harness_code_repo_name" {
+  description = "Harness Code repository name used by the ASG sandbox stack"
+  value       = local.harness_code_repo_name
 }
 
 ################################################################################

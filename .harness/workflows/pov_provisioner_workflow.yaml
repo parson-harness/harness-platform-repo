@@ -189,11 +189,24 @@ spec:
         create_project_factory:
           title: Create Project Factory?
           type: string
-          description: "Create or reuse the project-scoped factory workspace for shared AWS and GitHub connectors. Leave false to keep connector ownership inside the workload workspace."
+          description: "Create or reuse the project-scoped factory workspace for shared AWS/GitHub connectors and an optional shared Harness Code repo. Leave false to keep those resources owned by the workload workspace."
           default: "false"
           enum:
             - "true"
             - "false"
+        create_project_shared_harness_code_repo:
+          title: Create Shared Harness Code Repo?
+          type: string
+          description: "Create the shared project-level Harness Code repo in the project factory workspace. Leave false to keep an owner-scoped Harness Code repo per workload workspace."
+          default: "false"
+          enum:
+            - "true"
+            - "false"
+        project_factory_harness_code_repo_identifier:
+          title: Shared Harness Code Repo Identifier
+          type: string
+          description: "Optional override for the shared project-level Harness Code repo identifier. Leave empty to use the predictable project-scoped default."
+          default: ""
         project_factory_github_token_ref:
           title: Shared GitHub Token Ref
           type: string
@@ -233,6 +246,8 @@ spec:
           create_opa_policies: ${{ parameters.create_opa_policies }}
           enable_change_governance: ${{ parameters.enable_change_governance }}
           create_project_factory: ${{ parameters.create_project_factory }}
+          create_project_shared_harness_code_repo: ${{ parameters.create_project_shared_harness_code_repo }}
+          project_factory_harness_code_repo_identifier: ${{ parameters.project_factory_harness_code_repo_identifier }}
           project_factory_github_token_ref: ${{ parameters.project_factory_github_token_ref }}
           project_factory_aws_access_key_ref: ${{ parameters.project_factory_aws_access_key_ref }}
           project_factory_aws_secret_key_ref: ${{ parameters.project_factory_aws_secret_key_ref }}

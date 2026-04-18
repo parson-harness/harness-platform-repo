@@ -281,6 +281,12 @@ variable "github_repo_name" {
   default     = "parson-harness/harness-demo-app"
 }
 
+variable "shared_harness_code_repo_name" {
+  description = "Optional shared Harness Code repository name to reuse instead of creating an owner-scoped repo"
+  type        = string
+  default     = ""
+}
+
 variable "github_pat" {
   description = "GitHub PAT for importing repo to Harness Code (needs repo read access). Only required for private repos."
   type        = string

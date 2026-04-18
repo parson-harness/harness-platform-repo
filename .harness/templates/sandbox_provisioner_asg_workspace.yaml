@@ -271,4 +271,10 @@ template:
         status: manual
         locked: true
         type: String
+      - key: shared_harness_code_repo_name
+        value: <+pipeline.variables.shared_harness_code_repo_name>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
     terraform_variable_files: []

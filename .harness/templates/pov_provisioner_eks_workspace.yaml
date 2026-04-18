@@ -163,6 +163,12 @@ template:
         status: manual
         locked: true
         type: String
+      - key: shared_harness_code_repo_name
+        value: <+pipeline.variables.shared_harness_code_repo_name>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
       - key: github_repo_name
         value: <+pipeline.variables.source_github_repo>
         value_type: string

@@ -111,3 +111,8 @@ output "github_connector_id" {
   description = "Harness GitHub connector ID used to import the sandbox repo into Harness Code when configured"
   value       = local.effective_github_connector_id != "" ? local.effective_github_connector_id : null
 }
+
+output "harness_code_repo_name" {
+  description = "Harness Code repository name used by the EKS sandbox stack"
+  value       = local.harness_code_repo_name
+}

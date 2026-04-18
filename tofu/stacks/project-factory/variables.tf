@@ -160,3 +160,34 @@ variable "shared_github_username" {
   type        = string
   default     = "x-access-token"
 }
+
+variable "create_shared_harness_code_repo" {
+  description = "Create the shared project-level Harness Code repository"
+  type        = bool
+  default     = false
+}
+
+variable "shared_harness_code_repo_identifier" {
+  description = "Identifier for the shared Harness Code repository"
+  type        = string
+  default     = ""
+}
+
+variable "shared_harness_code_source_repo" {
+  description = "Source GitHub repository imported into the shared Harness Code repository"
+  type        = string
+  default     = "parson-harness/harness-demo-app"
+}
+
+variable "github_pat" {
+  description = "GitHub PAT for importing the shared Harness Code repo when the source repo is private"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "github_repo_is_public" {
+  description = "Whether the shared Harness Code source repo is public"
+  type        = bool
+  default     = true
+}
