@@ -33,14 +33,13 @@ locals {
   har_registry_id            = "har-${var.owner}"
   har_upstream_proxy_id      = "${var.owner}-dockerhub-proxy"
   har_image_name             = "${var.owner}demoapp"
-  ecr_image_path             = "harness-demo-app-${var.owner}"
   app_host                   = "${var.owner}.harness-demo.dev"
   stage_host                 = "${var.owner}-stage.harness-demo.dev"
-  harness_code_repo_name     = var.use_harness_code ? local.repo_name : ""
+  harness_code_repo_name     = local.repo_name
   should_create_github_connector = var.github_connector_ref == "" && var.github_token_ref != ""
   effective_aws_connector_id = var.aws_connector_ref != "" ? var.aws_connector_ref : (var.create_aws_connector ? local.aws_connector_id : "")
   effective_github_connector_id = var.github_connector_ref != "" ? var.github_connector_ref : (local.should_create_github_connector ? local.github_connector_id : "")
-  has_code_source               = var.use_harness_code || local.should_create_github_connector || var.github_connector_ref != ""
+  has_code_source               = true
   pipeline_git_connector_ref    = local.should_create_github_connector ? local.github_connector_id : var.github_connector_ref
 
   common_tag_values          = module.sandbox_context.common_tag_values
@@ -82,7 +81,7 @@ locals {
 
 module "harness_code_repo" {
   source = "../../modules/harness-code-repo"
-  count  = var.use_harness_code ? 1 : 0
+  count  = 1
 
   harness_account_id = var.harness_account_id
   org_id             = local.resolved_org_id
@@ -120,7 +119,7 @@ module "harness_connectors" {
   k8s_connector_id     = local.k8s_connector_id
   k8s_connector_name   = local.k8s_connector_name
 
-  # AWS Connector (for ECR if needed)
+  # AWS Connector (for sandbox infrastructure and auxiliary artifact/reporting needs)
   create_aws_connector      = var.aws_connector_ref == "" && var.create_aws_connector
   aws_connector_id          = local.aws_connector_id
   aws_connector_name        = local.aws_connector_name
@@ -137,7 +136,7 @@ module "harness_connectors" {
   github_username         = var.github_username
   github_token_ref        = var.github_token_ref
 
-  # Docker connector disabled - use HAR or ECR via AWS connector
+  # Docker connector disabled - sandbox flows use HAR directly
   create_docker_connector = false
 
   depends_on = [module.harness_org_project]
@@ -149,7 +148,7 @@ module "harness_connectors" {
 
 module "har" {
   source = "../../modules/harness-artifact-registry"
-  count  = var.artifact_registry_type == "har" ? 1 : 0
+  count  = 1
 
   account_id = var.harness_account_id
   org_id     = local.resolved_org_id

@@ -164,12 +164,22 @@ variable "artifact_registry_type" {
   description = "Artifact registry type: 'har' (Harness Artifact Registry) or 'ecr'"
   type        = string
   default     = "har"
+
+  validation {
+    condition     = var.artifact_registry_type == "har"
+    error_message = "artifact_registry_type must remain 'har' for the EKS sandbox stack"
+  }
 }
 
 variable "create_dockerhub_upstream" {
   description = "Create DockerHub upstream proxy in HAR (required for pulling base images through HAR)"
   type        = bool
   default     = true
+
+  validation {
+    condition     = var.create_dockerhub_upstream == true
+    error_message = "create_dockerhub_upstream must remain true for the EKS sandbox stack"
+  }
 }
 
 variable "dockerhub_username" {
@@ -191,7 +201,12 @@ variable "dockerhub_password_secret_ref" {
 variable "use_harness_code" {
   description = "Use Harness Code Repository instead of GitHub. When true, creates a Harness Code repo and imports from GitHub."
   type        = bool
-  default     = false
+  default     = true
+
+  validation {
+    condition     = var.use_harness_code == true
+    error_message = "use_harness_code must remain true for the EKS sandbox stack"
+  }
 }
 
 variable "github_repo_name" {

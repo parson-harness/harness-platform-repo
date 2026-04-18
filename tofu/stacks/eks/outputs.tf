@@ -38,23 +38,18 @@ output "k8s_namespace" {
 }
 
 output "artifact_registry_type" {
-  description = "Artifact registry type (har or ecr)"
+  description = "Artifact registry type for the EKS sandbox stack"
   value       = var.artifact_registry_type
 }
 
 output "artifact_registry_url" {
-  description = "Artifact registry URL (HAR or ECR)"
-  value       = var.artifact_registry_type == "har" ? module.har[0].registry_url : "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${local.ecr_image_path}"
-}
-
-output "ecr_repository_url" {
-  description = "Derived ECR repository URL when artifact_registry_type=ecr"
-  value       = var.artifact_registry_type == "ecr" ? "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com/${local.ecr_image_path}" : null
+  description = "Harness Artifact Registry URL used by the EKS sandbox stack"
+  value       = module.har[0].registry_url
 }
 
 output "har_registry_id" {
-  description = "Harness Artifact Registry ID when artifact_registry_type=har"
-  value       = var.artifact_registry_type == "har" ? module.har[0].registry_id : null
+  description = "Harness Artifact Registry ID used by the EKS sandbox stack"
+  value       = module.har[0].registry_id
 }
 
 output "app_url" {
@@ -113,6 +108,6 @@ output "aws_connector_id" {
 }
 
 output "github_connector_id" {
-  description = "Harness GitHub connector ID in use when not using Harness Code"
-  value       = var.use_harness_code ? null : local.effective_github_connector_id
+  description = "Harness GitHub connector ID used to import the sandbox repo into Harness Code when configured"
+  value       = local.effective_github_connector_id != "" ? local.effective_github_connector_id : null
 }

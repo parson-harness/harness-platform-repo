@@ -38,7 +38,7 @@ locals {
 }
 
 resource "kubernetes_secret" "har_pull_secret" {
-  count = var.artifact_registry_type == "har" ? 1 : 0
+  count = 1
 
   metadata {
     name      = "${var.owner}demoapp-dockercfg"
@@ -84,21 +84,21 @@ module "harness_service" {
 
   # Manifest configuration
   manifest_type          = "K8sManifest"
-  manifest_store_type    = var.use_harness_code ? "HarnessCode" : "Github"
-  git_connector_ref      = var.use_harness_code ? "" : local.effective_github_connector_id
-  git_repo_name          = var.use_harness_code ? "" : var.github_repo_name
+  manifest_store_type    = "HarnessCode"
+  git_connector_ref      = ""
+  git_repo_name          = ""
   git_branch             = var.git_branch
   manifest_paths         = var.manifest_paths
   harness_code_repo_name = local.harness_code_repo_name
 
   # Artifact configuration - HAR
   artifact_registry_type = var.artifact_registry_type
-  har_registry_ref       = var.artifact_registry_type == "har" && length(module.har) > 0 ? module.har[0].registry_id : ""
-  har_image_path         = var.artifact_registry_type == "har" ? local.har_image_name : ""
+  har_registry_ref       = module.har[0].registry_id
+  har_image_path         = local.har_image_name
 
-  # ECR configuration (if using ECR)
-  artifact_connector_ref = var.artifact_registry_type == "ecr" ? local.effective_aws_connector_id : ""
-  ecr_image_path         = var.artifact_registry_type == "ecr" ? local.ecr_image_path : ""
+  # Artifact source remains HAR-only for sandbox flows
+  artifact_connector_ref = ""
+  ecr_image_path         = ""
   aws_region             = var.aws_region
 
   tags = local.common_tag_values
@@ -172,11 +172,11 @@ module "harness_pipelines" {
   strategy_pipeline_description = "Unified deployment pipeline with runtime strategy selection for customer demos"
   git_connector_ref       = local.pipeline_git_connector_ref
   git_repo_name           = var.github_repo_name
-  har_registry_ref        = var.artifact_registry_type == "har" ? local.har_registry_id : ""
-  har_upstream_proxy_ref  = var.artifact_registry_type == "har" && var.create_dockerhub_upstream ? local.har_upstream_proxy_id : ""
+  har_registry_ref        = local.har_registry_id
+  har_upstream_proxy_ref  = local.har_upstream_proxy_id
   har_image_name          = local.har_image_name
 
-  use_harness_code       = var.use_harness_code
+  use_harness_code       = true
   harness_code_repo_name = local.harness_code_repo_name
   harness_account_id     = var.harness_account_id
   harness_org_id         = local.resolved_org_id
@@ -194,7 +194,7 @@ module "harness_pipelines" {
   standard_ci_gradle_name          = "${local.owner_title} Standard CI - Gradle"
   standard_ci_gradle_description   = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
   standard_ci_gradle_test_packages = var.standard_ci_gradle_test_packages
-  har_base_image_registry          = var.artifact_registry_type == "har" ? "pkg.harness.io/${lower(var.harness_account_id)}/${local.har_registry_id}" : ""
+  har_base_image_registry          = "pkg.harness.io/${lower(var.harness_account_id)}/${local.har_registry_id}"
   publish_coverage_report_artifact = var.publish_coverage_report_artifact
   coverage_report_artifact_connector_ref = var.publish_coverage_report_artifact ? local.effective_aws_connector_id : ""
   coverage_report_artifact_bucket        = var.coverage_report_artifact_bucket
