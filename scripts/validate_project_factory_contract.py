@@ -40,6 +40,13 @@ WORKFLOW_SURFACED_INPUTS = [
     "project_factory_aws_secret_key_ref",
 ]
 
+REQUIRED_PROJECT_FACTORY_STEP_IDENTIFIERS = [
+    "check_project_factory_workspace_exists",
+    "create_project_factory_workspace",
+    "link_project_factory_workspace_template",
+    "reconcile_project_factory_workspace_variables",
+]
+
 GOVERNANCE_WORKFLOW_INPUTS = [
     "create_opa_policies",
     "enable_change_governance",
@@ -91,6 +98,18 @@ def has_workflow_inputset_binding(text: str, name: str) -> bool:
     return f"          {name}: ${{{{ parameters.{name} }}}}" in text
 
 
+def get_step_window(text: str, identifier: str, window: int = 5000) -> str:
+    anchor = text.find(f"identifier: {identifier}")
+    if anchor == -1:
+        return ""
+    start = max(0, anchor - 200)
+    return text[start:anchor + window]
+
+
+def step_contains(text: str, identifier: str, expected: str) -> bool:
+    return expected in get_step_window(text, identifier)
+
+
 def count_matches(text: str, pattern: str) -> int:
     return len(re.findall(pattern, text, re.DOTALL))
 
@@ -133,6 +152,55 @@ def main() -> int:
             errors.append(f"Project-factory create binding missing: {stack_var} <- {pipeline_var}")
         if not has_reconcile_binding(pipeline_text, stack_var, pipeline_var):
             errors.append(f"Project-factory reconcile binding missing: {stack_var} <- {pipeline_var}")
+
+    if not has_pipeline_input(pipeline_text, "create_project_factory"):
+        errors.append("Pipeline input missing: create_project_factory")
+
+    for identifier in REQUIRED_PROJECT_FACTORY_STEP_IDENTIFIERS:
+        if f"identifier: {identifier}" not in pipeline_text:
+            errors.append(f"Project-factory lifecycle step missing: {identifier}")
+
+    if not step_contains(
+        pipeline_text,
+        "create_project_factory_workspace",
+        '"repository_path": "tofu/stacks/project-factory"',
+    ):
+        errors.append("Project-factory create step is not pinned to repository_path=tofu/stacks/project-factory")
+
+    if not step_contains(
+        pipeline_text,
+        "create_project_factory_workspace",
+        '"identifier": "<+pipeline.variables.harness_project_id>_factory"',
+    ):
+        errors.append("Project-factory create step is not pinned to the expected workspace identifier")
+
+    if not step_contains(
+        pipeline_text,
+        "link_project_factory_workspace_template",
+        '"template_id": "Project_Factory"',
+    ):
+        errors.append("Project-factory template link step is not pinned to template_id=Project_Factory")
+
+    if not step_contains(
+        pipeline_text,
+        "link_project_factory_workspace_template",
+        '"workspace_id": "<+pipeline.variables.harness_project_id>_factory"',
+    ):
+        errors.append("Project-factory template link step is not pinned to the expected workspace identifier")
+
+    if not step_contains(
+        pipeline_text,
+        "resolve_shared_connector_refs",
+        'RESOLVED_SHARED_AWS_CONNECTOR_REF="${PROJECT_ID}_aws_reference_architecture"',
+    ):
+        errors.append("Shared connector resolution no longer falls back to the predictable project-factory AWS connector ID")
+
+    if not step_contains(
+        pipeline_text,
+        "resolve_shared_connector_refs",
+        'RESOLVED_SHARED_GITHUB_CONNECTOR_REF="${PROJECT_ID}_github_reference_architecture"',
+    ):
+        errors.append("Shared connector resolution no longer falls back to the predictable project-factory GitHub connector ID")
 
     unexpected_stack_vars = sorted(candidate_stack_vars - surfaced_stack_vars - INTENTIONALLY_UNSURFACED_STACK_VARS)
     if unexpected_stack_vars:
