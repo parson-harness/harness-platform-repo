@@ -127,6 +127,18 @@ template:
         status: manual
         locked: true
         type: String
+      - key: shared_har_registry_id
+        value: <+pipeline.variables.shared_har_registry_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: shared_har_upstream_proxy_id
+        value: <+pipeline.variables.shared_har_upstream_proxy_id>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
       - key: create_strategy_pipeline
         value: <+pipeline.variables.create_strategy_pipeline>
         value_type: string

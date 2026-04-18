@@ -127,6 +127,9 @@ locals {
   should_create_github_connector = var.github_connector_ref == "" && var.github_token_ref != ""
   effective_aws_connector_id = var.aws_connector_ref != "" ? var.aws_connector_ref : local.aws_connector_id
   effective_github_connector_id = var.github_connector_ref != "" ? var.github_connector_ref : (local.should_create_github_connector ? local.github_connector_id : "")
+  should_create_har          = var.shared_har_registry_id == ""
+  effective_har_registry_id  = var.shared_har_registry_id != "" ? var.shared_har_registry_id : local.har_registry_id
+  effective_har_upstream_proxy_id = var.shared_har_upstream_proxy_id != "" ? var.shared_har_upstream_proxy_id : local.har_upstream_proxy_id
   should_create_harness_code_repo = var.shared_harness_code_repo_name == ""
   harness_code_repo_name     = var.shared_harness_code_repo_name != "" ? var.shared_harness_code_repo_name : "${var.owner}-demo-app"
 
@@ -819,17 +822,17 @@ module "harness_connectors" {
 
 module "har" {
   source = "../../modules/harness-artifact-registry"
-  count  = 1
+  count  = local.should_create_har ? 1 : 0
 
   account_id = var.harness_account_id
   org_id     = local.resolved_org_id
   project_id = local.resolved_project_id
 
-  registry_id          = local.har_registry_id
+  registry_id          = local.effective_har_registry_id
   registry_description = "Docker registry for ${var.owner} demo app"
 
   create_dockerhub_upstream     = var.create_dockerhub_upstream
-  dockerhub_upstream_id         = local.har_upstream_proxy_id
+  dockerhub_upstream_id         = local.effective_har_upstream_proxy_id
   dockerhub_username            = var.dockerhub_username
   dockerhub_password_secret_ref = var.dockerhub_password_secret_ref
   dockerhub_secret_space_path   = var.harness_account_id
@@ -1012,8 +1015,8 @@ module "harness_pipelines_asg" {
   delegate_selector        = local.delegate_selector
   pipeline_tags            = ["tofu-managed:true", "owner:${var.owner}", "deployment-target:asg", "managed-by:provisioner"]
 
-  har_registry_ref       = local.har_registry_id
-  har_upstream_proxy_ref = local.har_upstream_proxy_id
+  har_registry_ref       = local.effective_har_registry_id
+  har_upstream_proxy_ref = local.effective_har_upstream_proxy_id
   har_image_name         = local.har_image_name
 
   depends_on = [module.harness_service_asg, module.harness_environment_dev, module.harness_code_repo, module.har]
@@ -1041,6 +1044,26 @@ output "service_id" {
 output "environment_id" {
   description = "Harness environment ID"
   value       = module.harness_environment_dev.environment_id
+}
+
+output "artifact_registry_type" {
+  description = "Artifact registry type for the ASG sandbox stack"
+  value       = var.artifact_registry_type
+}
+
+output "artifact_registry_url" {
+  description = "Harness Artifact Registry URL used by the ASG sandbox stack"
+  value       = "pkg.harness.io/${lower(var.harness_account_id)}/${local.effective_har_registry_id}"
+}
+
+output "har_registry_id" {
+  description = "Harness Artifact Registry ID used by the ASG sandbox stack"
+  value       = local.effective_har_registry_id
+}
+
+output "har_upstream_proxy_id" {
+  description = "DockerHub upstream proxy ID used by the ASG sandbox stack"
+  value       = local.effective_har_upstream_proxy_id
 }
 
 output "app_url" {

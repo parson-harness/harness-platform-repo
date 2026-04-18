@@ -260,6 +260,18 @@ variable "dockerhub_password_secret_ref" {
   default     = ""
 }
 
+variable "shared_har_registry_id" {
+  description = "Optional shared Harness Artifact Registry identifier to reuse instead of creating an owner-scoped HAR"
+  type        = string
+  default     = ""
+}
+
+variable "shared_har_upstream_proxy_id" {
+  description = "Optional shared DockerHub upstream proxy identifier to reuse instead of creating an owner-scoped HAR upstream"
+  type        = string
+  default     = ""
+}
+
 ################################################################################
 # Service Configuration
 ################################################################################

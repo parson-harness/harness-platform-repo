@@ -161,6 +161,24 @@ variable "shared_github_username" {
   default     = "x-access-token"
 }
 
+variable "create_shared_har_registry" {
+  description = "Create the shared project-level Harness Artifact Registry"
+  type        = bool
+  default     = false
+}
+
+variable "shared_har_registry_id" {
+  description = "Identifier for the shared project-level Harness Artifact Registry"
+  type        = string
+  default     = ""
+}
+
+variable "shared_har_dockerhub_upstream_id" {
+  description = "Identifier for the shared DockerHub upstream proxy used by the shared Harness Artifact Registry"
+  type        = string
+  default     = ""
+}
+
 variable "create_shared_harness_code_repo" {
   description = "Create the shared project-level Harness Code repository"
   type        = bool
