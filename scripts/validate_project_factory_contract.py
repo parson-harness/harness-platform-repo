@@ -188,6 +188,13 @@ def main() -> int:
     ):
         errors.append("Project-factory template link step is not pinned to the expected workspace identifier")
 
+    if step_contains(
+        pipeline_text,
+        "link_project_factory_workspace_template",
+        "type: MarkAsSuccess",
+    ):
+        errors.append("Project-factory template link step still masks all linkage failures with MarkAsSuccess")
+
     if not step_contains(
         pipeline_text,
         "resolve_shared_connector_refs",

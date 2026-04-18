@@ -955,12 +955,6 @@ pipeline:
                   when:
                     stageStatus: Success
                     condition: <+pipeline.variables.create_project_factory> == "true"
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
               - step:
                   type: ShellScript
                   name: Reconcile Project Factory Workspace Variables
