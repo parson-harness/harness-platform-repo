@@ -47,6 +47,8 @@ REQUIRED_PROJECT_FACTORY_STEP_IDENTIFIERS = [
     "reconcile_project_factory_workspace_variables",
 ]
 
+REQUIRED_TEMPLATE_PREFLIGHT_STEP_IDENTIFIER = "verify_required_workspace_templates"
+
 GOVERNANCE_WORKFLOW_INPUTS = [
     "create_opa_policies",
     "enable_change_governance",
@@ -103,7 +105,16 @@ def get_step_window(text: str, identifier: str, window: int = 5000) -> str:
     if anchor == -1:
         return ""
     start = max(0, anchor - 200)
-    return text[start:anchor + window]
+    next_step = text.find("\n              - step:", anchor + 1)
+    next_stage = text.find("\n    - stage:", anchor + 1)
+
+    candidates = [position for position in (next_step, next_stage) if position != -1]
+    if candidates:
+        end = min(candidates)
+    else:
+        end = min(len(text), anchor + window)
+
+    return text[start:end]
 
 
 def step_contains(text: str, identifier: str, expected: str) -> bool:
@@ -156,9 +167,40 @@ def main() -> int:
     if not has_pipeline_input(pipeline_text, "create_project_factory"):
         errors.append("Pipeline input missing: create_project_factory")
 
+    if f"identifier: {REQUIRED_TEMPLATE_PREFLIGHT_STEP_IDENTIFIER}" not in pipeline_text:
+        errors.append("Required template preflight step missing: verify_required_workspace_templates")
+
     for identifier in REQUIRED_PROJECT_FACTORY_STEP_IDENTIFIERS:
         if f"identifier: {identifier}" not in pipeline_text:
             errors.append(f"Project-factory lifecycle step missing: {identifier}")
+
+    if not step_contains(
+        pipeline_text,
+        "verify_required_workspace_templates",
+        'verify_template "$TARGET_TEMPLATE_ID"',
+    ):
+        errors.append("Template preflight step does not verify the target workload workspace template")
+
+    if not step_contains(
+        pipeline_text,
+        "verify_required_workspace_templates",
+        'verify_template "Project_Governance"',
+    ):
+        errors.append("Template preflight step does not verify Project_Governance when governance bootstrap is enabled")
+
+    if not step_contains(
+        pipeline_text,
+        "verify_required_workspace_templates",
+        'verify_template "Project_Factory"',
+    ):
+        errors.append("Template preflight step does not verify Project_Factory when project factory bootstrap is enabled")
+
+    if not step_contains(
+        pipeline_text,
+        "verify_required_workspace_templates",
+        '/template/api/templates/${template_id}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&versionLabel=1.0&getMetadataOnly=true',
+    ):
+        errors.append("Template preflight step is not pinned to the expected Harness template GET endpoint")
 
     if not step_contains(
         pipeline_text,
@@ -194,6 +236,27 @@ def main() -> int:
         "type: MarkAsSuccess",
     ):
         errors.append("Project-factory template link step still masks all linkage failures with MarkAsSuccess")
+
+    if step_contains(
+        pipeline_text,
+        "link_governance_workspace_template",
+        "type: MarkAsSuccess",
+    ):
+        errors.append("Governance template link step still masks all linkage failures with MarkAsSuccess")
+
+    if step_contains(
+        pipeline_text,
+        "link_workspace_template",
+        "type: MarkAsSuccess",
+    ):
+        errors.append("EKS workload template link step still masks all linkage failures with MarkAsSuccess")
+
+    if step_contains(
+        pipeline_text,
+        "link_workspace_template_asg",
+        "type: MarkAsSuccess",
+    ):
+        errors.append("ASG workload template link step still masks all linkage failures with MarkAsSuccess")
 
     if not step_contains(
         pipeline_text,

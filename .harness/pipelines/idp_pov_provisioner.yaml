@@ -489,6 +489,71 @@ pipeline:
                         value: RESOLVED_SHARED_GITHUB_CONNECTOR_REF
                   timeout: 2m
               - step:
+                  type: ShellScript
+                  name: Verify Required Workspace Templates Exist
+                  identifier: verify_required_workspace_templates
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set -euo pipefail
+
+                          ACCOUNT_ID="<+pipeline.variables.harness_account_id>"
+                          ENDPOINT="<+pipeline.variables.harness_endpoint>"
+                          ORG_ID="<+pipeline.variables.harness_org_id>"
+                          PROJECT_ID="<+pipeline.variables.harness_project_id>"
+                          DEPLOYMENT_TARGET="<+pipeline.variables.deployment_target>"
+                          CREATE_GOVERNANCE="<+pipeline.variables.create_opa_policies>"
+                          CREATE_PROJECT_FACTORY="<+pipeline.variables.create_project_factory>"
+                          TARGET_TEMPLATE_ID=$([ "$DEPLOYMENT_TARGET" = "asg" ] && echo "Sandbox_Provisioner_ASG" || echo "POV_Provisioner")
+
+                          verify_template() {
+                            local template_id="$1"
+                            local response_file
+                            local status_code
+                            local url
+
+                            url="${ENDPOINT}/template/api/templates/${template_id}?accountIdentifier=${ACCOUNT_ID}&orgIdentifier=${ORG_ID}&projectIdentifier=${PROJECT_ID}&versionLabel=1.0&getMetadataOnly=true"
+                            response_file=$(mktemp)
+
+                            status_code=$(curl -s -o "$response_file" -w "%{http_code}" \
+                              -H "Harness-Account: ${ACCOUNT_ID}" \
+                              -H "x-api-key: ${PROVISIONER_API_KEY}" \
+                              "$url")
+
+                            if [ "$status_code" != "200" ]; then
+                              echo "ERROR: Required Harness template '${template_id}' version '1.0' is not available in ${ORG_ID}/${PROJECT_ID} (HTTP ${status_code})."
+                              echo "Sync or create the template in Harness before running this provisioner."
+                              cat "$response_file"
+                              rm -f "$response_file"
+                              exit 1
+                            fi
+
+                            rm -f "$response_file"
+                            echo "Verified template ${template_id}@1.0"
+                          }
+
+                          verify_template "$TARGET_TEMPLATE_ID"
+
+                          if [ "$CREATE_GOVERNANCE" = "true" ]; then
+                            verify_template "Project_Governance"
+                          fi
+
+                          if [ "$CREATE_PROJECT_FACTORY" = "true" ]; then
+                            verify_template "Project_Factory"
+                          fi
+
+                          echo "All required Harness workspace templates are present."
+                    environmentVariables:
+                      - name: PROVISIONER_API_KEY
+                        type: String
+                        value: <+pipeline.variables.provisioner_api_key>
+                    outputVariables: []
+                  timeout: 2m
+              - step:
                   type: Http
                   name: Check Governance Workspace Exists
                   identifier: check_governance_workspace_exists
@@ -624,12 +689,6 @@ pipeline:
                   when:
                     stageStatus: Success
                     condition: <+pipeline.variables.create_opa_policies> == "true"
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
               - step:
                   type: ShellScript
                   name: Reconcile Governance Workspace Variables
@@ -1580,12 +1639,6 @@ pipeline:
                   when:
                     stageStatus: Success
                     condition: <+pipeline.variables.deployment_target> == "eks"
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
               - step:
                   type: Http
                   name: Link Workspace to ASG Template
@@ -1611,12 +1664,6 @@ pipeline:
                   when:
                     stageStatus: Success
                     condition: <+pipeline.variables.deployment_target> == "asg"
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - AllErrors
-                        action:
-                          type: MarkAsSuccess
               - step:
                   type: Http
                   name: Update eks_cluster_name Variable
