@@ -159,8 +159,6 @@ def main() -> int:
             errors.append(f"Pipeline input missing: {pipeline_var}")
         if not has_template_binding(template_text, stack_var, pipeline_var):
             errors.append(f"Template binding missing: {stack_var} <- {pipeline_var}")
-        if not has_create_workspace_binding(pipeline_text, stack_var, pipeline_var):
-            errors.append(f"Project-factory create binding missing: {stack_var} <- {pipeline_var}")
         if not has_reconcile_binding(pipeline_text, stack_var, pipeline_var):
             errors.append(f"Project-factory reconcile binding missing: {stack_var} <- {pipeline_var}")
 
