@@ -107,10 +107,9 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
               cloneCodebase: true
               caching:
                 enabled: true
-                paths: []
               sharedPaths:
                 - /var/run
-                - /root/.gradle
+                - /harness/.gradle
               platform:
                 os: Linux
                 arch: Amd64
@@ -144,7 +143,7 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                                 name: Test Intelligence
                                 identifier: test_intelligence
                                 spec:
-                                  command: gradle test --build-cache
+                                  command: gradle test --build-cache --profile
                                   shell: Sh
                                   connectorRef: account.harnessImage
                                   image: gradle:8.5-jdk17
@@ -159,7 +158,7 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                                   shell: Sh
                                   command: |
                                     echo "=== GRADLE BUILD INTELLIGENCE ==="
-                                    gradle build -x test --build-cache --parallel
+                                    gradle build -x test --build-cache --parallel --profile
                                     echo "Build artifacts:"
                                     ls -la build/libs/
                   - step:

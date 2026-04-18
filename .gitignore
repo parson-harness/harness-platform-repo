@@ -21,6 +21,7 @@ buildNumber.properties
 .vscode/
 *.swp
 *.swo
+.vscode/mcp.json
 
 # OS
 .DS_Store
