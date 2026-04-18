@@ -91,11 +91,24 @@ def fetch_template(endpoint: str, account_id: str, org_id: str, project_id: str,
     return harness_request("GET", url, api_key, account_id)
 
 
+def is_missing_template_response(status: int, payload) -> bool:
+    if status == 404:
+        return True
+    if status != 400 or not isinstance(payload, dict):
+        return False
+    if payload.get("code") == "RESOURCE_NOT_FOUND_EXCEPTION":
+        return True
+    message = str(payload.get("message", ""))
+    return "does not exist" in message or "has been deleted" in message
+
+
 def update_template(endpoint: str, account_id: str, org_id: str, project_id: str, api_key: str, template_id: str, version_label: str, yaml_text: str):
     query = build_base_query(account_id, org_id, project_id)
     candidate_urls = [
         f"{endpoint}/template/api/templates/{template_id}?{query}&versionLabel={urllib.parse.quote(version_label)}&isStableTemplate=true",
+        f"{endpoint}/template/api/templates/{template_id}/{urllib.parse.quote(version_label)}?{query}&isStableTemplate=true",
         f"{endpoint}/template/api/templates/update/{template_id}?{query}&versionLabel={urllib.parse.quote(version_label)}&isStableTemplate=true",
+        f"{endpoint}/template/api/templates/update/{template_id}/{urllib.parse.quote(version_label)}?{query}&isStableTemplate=true",
         f"{endpoint}/v1/orgs/{org_id}/projects/{project_id}/templates/{template_id}?version={urllib.parse.quote(version_label)}&is_stable=true",
     ]
 
@@ -147,7 +160,7 @@ def sync_template(endpoint: str, account_id: str, org_id: str, project_id: str, 
             return f"UPDATED {template_id}@{version_label} ({template_name}) - {detail}"
         raise RuntimeError(format_attempts(template_id, version_label, "update", detail))
 
-    if status == 404:
+    if is_missing_template_response(status, payload):
         created, detail = create_template(endpoint, account_id, org_id, project_id, api_key, scoped_yaml)
         if created:
             return f"CREATED {template_id}@{version_label} ({template_name}) - {detail}"
