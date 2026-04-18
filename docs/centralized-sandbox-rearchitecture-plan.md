@@ -13,6 +13,7 @@ Move the repo from the legacy monolithic sandbox model toward a stack-based, cen
 - `8760356` - `Centralize sandbox workspace context metadata`
 - `b7a6284` - `Default helper scripts to stack-based tofu path`
 - `4681aaf` - `Add centralized sandbox rearchitecture plan`
+- `ff9b535` - `Retire legacy sandbox entrypoint`
 - Current working tree: stack docs migration, EKS helper/output compatibility, and tracked legacy sandbox removal
 
 ## Key Direction
@@ -122,7 +123,7 @@ Continue the next slice:
 Include these if possible:
 
 - branch: `rearch/centralized-sandbox-management`
-- latest checkpoint commit: `4681aaf`
+- latest checkpoint commit: `ff9b535`
 - forward path: `tofu/stacks/*`
 - tracked legacy entrypoint retired from git: `tofu/environments/sandbox`
 
