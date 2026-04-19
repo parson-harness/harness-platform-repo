@@ -71,6 +71,35 @@ locals {
                           endField: end_date
     EOT
   ) : ""
+  strategy_servicenow_approval_governance_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
+                            - step:
+                                type: ServiceNowApproval
+                                name: ServiceNow Approval
+                                identifier: servicenow_approval
+                                timeout: 1d
+                                spec:
+                                  connectorRef: ${var.servicenow_connector_ref}
+                                  ticketType: change_request
+                                  ticketNumber: ${local.strategy_servicenow_ticket_number}
+                                  retryInterval: 1m
+                                  approvalCriteria:
+                                    type: KeyValues
+                                    spec:
+                                      matchAnyCondition: true
+                                      conditions:
+                                        - key: state
+                                          operator: equals
+                                          value: Implement
+                                  rejectionCriteria:
+                                    type: KeyValues
+                                    spec:
+                                      matchAnyCondition: true
+                                      conditions: []
+                                  changeWindow:
+                                    startField: work_start
+                                    endField: end_date
+    EOT
+  ) : ""
   strategy_servicenow_mark_implement_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
                   - step:
                       type: ServiceNowUpdate
@@ -103,6 +132,38 @@ locals {
                             value: ${var.servicenow_assignment_group}
     EOT
   ) : ""
+  strategy_servicenow_mark_implement_governance_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
+                            - step:
+                                type: ServiceNowUpdate
+                                name: Move Change Request to Implement
+                                identifier: servicenow_move_to_implement
+                                timeout: 10m
+                                spec:
+                                  useServiceNowTemplate: false
+                                  connectorRef: ${var.servicenow_connector_ref}
+                                  ticketType: change_request
+                                  ticketNumber: ${local.strategy_servicenow_ticket_number}
+                                  fields:
+                                    - name: state
+                                      value: Implement
+                                    - name: implementation_plan
+                                      value: |-
+                                        Harness deployment starting.
+                                        Service: ${var.service_ref}
+                                        Environment: ${var.environment_name}
+                                        Strategy: <+pipeline.variables.deployment_strategy>
+                                        Artifact: <+artifacts.primary.image>
+                                        Execution URL: <+pipeline.executionUrl>
+                                    - name: backout_plan
+                                      value: Harness automated rollback.
+                                    - name: work_notes
+                                      value: |-
+                                        Starting deployment of <+artifacts.primary.image> for ${var.service_ref} to ${var.environment_name}.
+                                        Pipeline execution: <+pipeline.executionUrl>
+                                    - name: assignment_group
+                                      value: ${var.servicenow_assignment_group}
+    EOT
+  ) : ""
   strategy_servicenow_approval_stage_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s\n", <<-EOT
         - stage:
             name: Approval
@@ -125,7 +186,7 @@ ${local.strategy_servicenow_create_yaml}
 
     EOT
   ) : ""
-  strategy_governance_manual_approval_yaml = var.enable_change_governance ? (var.enable_servicenow ? local.strategy_servicenow_approval_yaml : format("%s", <<-EOT
+  strategy_governance_manual_approval_yaml = var.enable_change_governance ? (var.enable_servicenow ? local.strategy_servicenow_approval_governance_yaml : format("%s", <<-EOT
                   - step:
                       type: HarnessApproval
                       name: Governance Approval
@@ -165,7 +226,7 @@ ${local.strategy_servicenow_create_yaml}
                         stageStatus: All
     EOT
   )) : ""
-  strategy_governance_auto_path_yaml = var.enable_change_governance ? (var.enable_servicenow ? local.strategy_servicenow_mark_implement_yaml : format("%s", <<-EOT
+  strategy_governance_auto_path_yaml = var.enable_change_governance ? (var.enable_servicenow ? local.strategy_servicenow_mark_implement_governance_yaml : format("%s", <<-EOT
                   - step:
                       type: ShellScript
                       name: Record Auto Approval
