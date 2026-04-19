@@ -108,7 +108,7 @@ locals {
             name: Approval
             identifier: approval
             description: Create the ServiceNow change record before governance evaluation
-            type: Approval
+            type: Custom
             when:
               pipelineStatus: Success
             spec:
@@ -116,6 +116,12 @@ locals {
                 steps:
 ${local.strategy_servicenow_create_yaml}
             tags: {}
+            failureStrategies:
+              - onFailure:
+                  errors:
+                    - AllErrors
+                  action:
+                    type: StageRollback
 
     EOT
   ) : ""
@@ -167,7 +173,7 @@ ${local.strategy_servicenow_create_yaml}
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -177,7 +183,7 @@ ${local.strategy_servicenow_create_yaml}
                               echo "Strategy: <+pipeline.variables.deployment_strategy>"
                         environmentVariables: []
                         outputVariables: []
-${local.strategy_shell_step_delegate_yaml}                      timeout: 10m
+                      timeout: 10m
                       when:
                         stageStatus: All
     EOT
@@ -253,7 +259,7 @@ ${local.strategy_shell_step_delegate_yaml}                      timeout: 10m
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -299,7 +305,7 @@ ${local.strategy_shell_step_delegate_yaml}                      timeout: 10m
                           - name: change_context
                             type: String
                             value: change_context
-${local.strategy_shell_step_delegate_yaml}                      timeout: 10m
+                      timeout: 10m
                   - stepGroup:
                       name: Governance
                       identifier: governance
