@@ -1,0 +1,1290 @@
+pipeline:
+  projectIdentifier: parson
+  orgIdentifier: sandbox
+  tags:
+    owner: toddfour
+    security-scanning: enabled
+    managed-by: provisioner
+    build: gradle
+    harness-intelligence: enabled
+    standard-template: "true"
+    workspace-id: toddfour_pov
+    deployment-target: eks
+    workspace-template-id: POV_Provisioner
+    deployment-type: kubernetes
+    strategy: multi-strategy
+    tofu-managed: "true"
+  variables:
+    - name: auto_deploy
+      type: String
+      description: Automatically trigger CD pipeline after successful build
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
+    - name: harness_endpoint
+      type: String
+      description: Harness API endpoint
+      required: false
+      value: <+input>.default(https://app.harness.io/gratis)
+    - name: change_blast_radius
+      type: String
+      description: Expected blast radius for the release governance evaluation
+      required: false
+      value: <+input>.default(low).allowedValues(low,medium,high)
+    - name: rollback_ready
+      type: String
+      description: Whether rollback readiness has been verified for release governance
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
+    - name: open_change_failures
+      type: String
+      description: Demo-time count of unresolved change failures for release governance; typically sourced from ITSM in production
+      required: false
+      value: <+input>.default(0)
+    - name: change_freeze_active
+      type: String
+      description: Whether a release freeze is active for this deployment
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
+    - name: requires_data_migration
+      type: String
+      description: Whether the release includes a database or data migration
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
+    - name: test_pass_rate
+      type: String
+      description: Aggregated automated test pass rate percentage; auto-populated from CI on webhook runs or entered manually for demo/manual runs
+      required: false
+      value: <+input>.default(100)
+    - name: critical_vulnerabilities
+      type: String
+      description: Critical vulnerability count; auto-populated from CI on webhook runs or entered manually for demo/manual runs
+      required: false
+      value: <+input>.default(0)
+    - name: high_vulnerabilities
+      type: String
+      description: High vulnerability count; auto-populated from CI on webhook runs or entered manually for demo/manual runs
+      required: false
+      value: <+input>.default(0)
+    - name: release_candidate_evidence
+      type: String
+      description: JSON release-candidate evidence bundle; auto-populated from CI on webhook runs or entered manually for demo/manual runs
+      required: false
+      value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})
+  properties:
+    ci:
+      codebase:
+        repoName: harness-demo-app
+        build: <+input>
+        sparseCheckout: []
+  stages:
+    - stage:
+        name: Build - Test - Scan - Push
+        identifier: build_test_scan_push
+        description: CI Intelligence + Security Scanning + Supply Chain
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+          sharedPaths:
+            - /var/run
+            - /harness/.gradle
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          buildIntelligence:
+            enabled: true
+          execution:
+            steps:
+              - step:
+                  type: Gitleaks
+                  name: Gitleaks Secret Scan
+                  identifier: gitleaks
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: repository
+                      detection: auto
+                    advanced:
+                      log:
+                        level: info
+              - stepGroup:
+                  name: Build and Test
+                  identifier: build_and_test
+                  steps:
+                    - parallel:
+                        - step:
+                            type: Test
+                            name: Test Intelligence
+                            identifier: test_intelligence
+                            spec:
+                              command: gradle test --build-cache --profile
+                              shell: Sh
+                              connectorRef: account.harnessImage
+                              image: gradle:8.5-jdk17
+                              intelligenceMode: true
+                        - step:
+                            type: Run
+                            name: Build Intelligence
+                            identifier: build_intelligence
+                            spec:
+                              registryRef: har-docker-shared
+                              image: gradle:8.5-jdk17
+                              shell: Sh
+                              command: |-
+                                echo "=== GRADLE BUILD INTELLIGENCE ==="
+                                gradle build -x test --build-cache --parallel --profile
+                                echo "Build artifacts:"
+                                ls -la build/libs/
+              - step:
+                  type: Run
+                  name: Upload Code Coverage
+                  identifier: upload_code_coverage
+                  spec:
+                    registryRef: har-docker-shared
+                    image: gradle:8.5-jdk17
+                    shell: Sh
+                    command: |-
+                      set -e
+                      /tmp/harness/bin/auto-injection || true
+                      $HARNESS_WORKSPACE/bi/auto-injection || true
+
+                      echo "=== GENERATING CODE COVERAGE REPORT ==="
+                      gradle clean test jacocoTestReport bootJar --no-build-cache --rerun-tasks
+
+                      if ! ls build/test-results/test/*.xml >/dev/null 2>&1; then
+                        echo "JUnit test reports not found at build/test-results/test/*.xml"
+                        exit 1
+                      fi
+
+                      echo ""
+                      echo "=== UPLOADING TEST REPORTS TO HARNESS ==="
+                      hcli --verbose test-reports upload "build/test-results/test/*.xml"
+
+                      COVERAGE_FILE="build/reports/jacoco/test/jacocoTestReport.xml"
+
+                      if [ ! -s "$COVERAGE_FILE" ]; then
+                        echo "Coverage report not found at $COVERAGE_FILE"
+                        exit 1
+                      fi
+
+                      if [ "$COVERAGE_PROVIDER" = "github" ]; then
+                        COVERAGE_OWNER="${COVERAGE_REPO_NAME%%/*}"
+                        COVERAGE_IDENTIFIER="${COVERAGE_REPO_NAME##*/}"
+                      else
+                        COVERAGE_OWNER="$HARNESS_COVERAGE_OWNER"
+                        COVERAGE_IDENTIFIER="$COVERAGE_REPO_NAME"
+                      fi
+
+                      mkdir -p jacoco
+                      cp "$COVERAGE_FILE" jacoco/jacoco.xml
+                      UPLOAD_COVERAGE_FILE="$(pwd)/jacoco/jacoco.xml"
+
+                      echo ""
+                      echo "=== COVERAGE FILE DETAILS ==="
+                      ls -lah build/reports/jacoco/test || true
+                      ls -lah jacoco || true
+                      echo "=== JAR FILE DETAILS ==="
+                      ls -lah build/libs || true
+                      find build/libs -maxdepth 1 -name '*.jar' | sort || true
+                      wc -c "$UPLOAD_COVERAGE_FILE" || true
+
+                      hcli cov analyze --file "$UPLOAD_COVERAGE_FILE" || true
+
+                      echo ""
+                      echo "=== UPLOADING COVERAGE TO HARNESS ==="
+
+                      hcli --verbose cov upload \
+                        --file "$UPLOAD_COVERAGE_FILE" \
+                        --provider "$COVERAGE_PROVIDER" \
+                        --owner "$COVERAGE_OWNER" \
+                        --identifier "$COVERAGE_IDENTIFIER" \
+                        -- sh -c "test -s '$UPLOAD_COVERAGE_FILE'"
+
+                      echo "Full report: build/reports/jacoco/test/html/index.html"
+                    envVariables:
+                      CI_ENABLE_HCLI_FOR_TESTS: "true"
+                      CI_ENABLE_QUARANTINED_TEST_SKIP: "true"
+              - stepGroup:
+                  name: SAST Scans
+                  identifier: sast_scans
+                  steps:
+                    - parallel:
+                        - step:
+                            type: HarnessSAST
+                            name: Harness SAST
+                            identifier: harness_sast
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: repository
+                                detection: auto
+                              advanced:
+                                log:
+                                  level: info
+                        - step:
+                            type: Semgrep
+                            name: Semgrep
+                            identifier: semgrep
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: repository
+                                detection: auto
+                              advanced:
+                                log:
+                                  level: info
+                            failureStrategies:
+                              - onFailure:
+                                  errors:
+                                    - AllErrors
+                                  action:
+                                    type: Ignore
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Push to HAR
+                  identifier: push_to_har
+                  spec:
+                    repo: toddfourdemoapp
+                    tags:
+                      - 1.0.<+pipeline.sequenceId>
+                      - latest
+                    caching: true
+                    labels:
+                      org.opencontainers.image.title: toddfourdemoapp
+                      org.opencontainers.image.version: 1.0.<+pipeline.sequenceId>
+                      org.opencontainers.image.revision: <+codebase.commitSha>
+                      org.opencontainers.image.source: <+codebase.repoUrl>
+                      org.opencontainers.image.created: <+pipeline.startTs>
+                      io.harness.pipeline.id: <+pipeline.identifier>
+                      io.harness.pipeline.execution_id: <+pipeline.executionId>
+                      io.harness.build.number: <+pipeline.sequenceId>
+                      io.harness.supply_chain.sbom: spdx-json
+                      io.harness.supply_chain.provenance: slsa
+                    buildArgs:
+                      JAR_PATH: build/libs/*.jar
+                      BUILD_COMMIT_SHA: <+codebase.commitSha>
+                      BUILD_REPO_URL: <+codebase.repoUrl>
+                      IMAGE_TAG: 1.0.<+pipeline.sequenceId>
+                      PIPELINE_EXECUTION_ID: <+pipeline.executionId>
+                      PIPELINE_ID: <+pipeline.identifier>
+                      BUILD_TIMESTAMP: <+pipeline.startTs>
+                      BASE_IMAGE_REGISTRY: pkg.harness.io/eerjnxtns4grlg5vnnjzuw/har-toddfour
+                    optimize: true
+                    registryRef: har-docker-shared
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 2
+                            retryIntervals:
+                              - 2m
+                            onRetryFailure:
+                              action:
+                                type: Abort
+              - stepGroup:
+                  name: Supply Chain Security
+                  identifier: supply_chain_security
+                  steps:
+                    - step:
+                        type: SscaOrchestration
+                        name: SBOM Generation
+                        identifier: sbom_generation
+                        spec:
+                          mode: generation
+                          tool:
+                            type: Syft
+                            spec:
+                              format: spdx-json
+                          source:
+                            type: har
+                            spec:
+                              registry: har-docker-shared
+                              image: toddfourdemoapp:1.0.<+pipeline.sequenceId>
+                          sbom_drift:
+                            base: last_generated_sbom
+                          resources:
+                            limits:
+                              memory: 500Mi
+                              cpu: "0.5"
+                    - step:
+                        type: provenance
+                        name: SLSA Provenance
+                        identifier: slsa_provenance
+                        spec:
+                          source:
+                            type: har
+                            spec:
+                              registry: har-docker-shared
+                              image: toddfourdemoapp:1.0.<+pipeline.sequenceId>
+              - stepGroup:
+                  name: Container Scans
+                  identifier: container_scans
+                  steps:
+                    - parallel:
+                        - step:
+                            type: HarnessSCA
+                            name: Harness SCA
+                            identifier: harness_sca
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: container
+                                detection: auto
+                              advanced:
+                                log:
+                                  level: info
+                              privileged: true
+                              image:
+                                type: harness
+                                tag: 1.0.<+pipeline.sequenceId>
+                                registry: har-docker-shared
+                                image_path: toddfourdemoapp:1.0.<+pipeline.sequenceId>
+                            when:
+                              stageStatus: Success
+                              condition: "\"true\" == \"false\""
+                        - step:
+                            type: AquaTrivy
+                            name: Aqua Trivy
+                            identifier: aqua_trivy
+                            spec:
+                              mode: orchestration
+                              config: default
+                              target:
+                                type: container
+                                detection: auto
+                              advanced:
+                                log:
+                                  level: info
+                                args:
+                                  cli: "--scanners vuln"
+                              privileged: false
+                              image:
+                                type: harness
+                                registry: har-docker-shared
+                                image_path: toddfourdemoapp:1.0.<+pipeline.sequenceId>
+                              sbom:
+                                format: spdx-json
+                            failureStrategies:
+                              - onFailure:
+                                  errors:
+                                    - AllErrors
+                                  action:
+                                    type: Ignore
+              - step:
+                  type: Run
+                  name: Prepare Governance Inputs
+                  identifier: prepare_governance_inputs
+                  spec:
+                    shell: Sh
+                    command: |-
+                      TEST_PASS_RATE=100
+                      if ls build/test-results/test/*.xml >/dev/null 2>&1; then
+                        TOTAL_TESTS=0
+                        TOTAL_FAILURES=0
+                        TOTAL_ERRORS=0
+
+                        for REPORT in build/test-results/test/*.xml; do
+                          TESTS=$(grep -o 'tests="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+                          FAILURES=$(grep -o 'failures="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+                          ERRORS=$(grep -o 'errors="[0-9][0-9]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
+
+                          TOTAL_TESTS=$((TOTAL_TESTS + ${TESTS:-0}))
+                          TOTAL_FAILURES=$((TOTAL_FAILURES + ${FAILURES:-0}))
+                          TOTAL_ERRORS=$((TOTAL_ERRORS + ${ERRORS:-0}))
+                        done
+
+                        if [ "$TOTAL_TESTS" -gt 0 ]; then
+                          PASSED_TESTS=$((TOTAL_TESTS - TOTAL_FAILURES - TOTAL_ERRORS))
+                          TEST_PASS_RATE=$((PASSED_TESTS * 100 / TOTAL_TESTS))
+                        fi
+                      fi
+
+                      CRITICAL_VULNERABILITIES="${TRIVY_CRITICAL:-0}"
+                      HIGH_VULNERABILITIES="${TRIVY_HIGH:-0}"
+                      CHANGE_BLAST_RADIUS="${CHANGE_BLAST_RADIUS_INPUT:-low}"
+                      ROLLBACK_READY="${ROLLBACK_READY_INPUT:-true}"
+                      OPEN_CHANGE_FAILURES="${OPEN_CHANGE_FAILURES_INPUT:-0}"
+                      CHANGE_FREEZE_ACTIVE="${CHANGE_FREEZE_ACTIVE_INPUT:-false}"
+                      REQUIRES_DATA_MIGRATION="${REQUIRES_DATA_MIGRATION_INPUT:-false}"
+                      AUTO_DEPLOY="${AUTO_DEPLOY_INPUT:-true}"
+                      COMMIT_SHA="${COMMIT_SHA_INPUT}"
+                      BRANCH_NAME="${BRANCH_NAME_INPUT}"
+                      REPO_URL="${REPO_URL_INPUT}"
+
+                      export TEST_PASS_RATE
+                      export CRITICAL_VULNERABILITIES
+                      export HIGH_VULNERABILITIES
+                      export CHANGE_BLAST_RADIUS
+                      export ROLLBACK_READY
+                      export OPEN_CHANGE_FAILURES
+                      export CHANGE_FREEZE_ACTIVE
+                      export REQUIRES_DATA_MIGRATION
+                      export AUTO_DEPLOY
+                      export COMMIT_SHA
+                      export BRANCH_NAME
+                      export REPO_URL
+
+                      echo "Computed test pass rate: $TEST_PASS_RATE%"
+                      echo "Computed critical vulnerabilities: $CRITICAL_VULNERABILITIES"
+                      echo "Computed high vulnerabilities: $HIGH_VULNERABILITIES"
+                    envVariables:
+                      TRIVY_CRITICAL: <+pipeline.stages.build_test_scan_push.spec.execution.steps.container_scans.steps.aqua_trivy.output.outputVariables.CRITICAL>
+                      TRIVY_HIGH: <+pipeline.stages.build_test_scan_push.spec.execution.steps.container_scans.steps.aqua_trivy.output.outputVariables.HIGH>
+                      CHANGE_BLAST_RADIUS_INPUT: <+pipeline.variables.change_blast_radius>
+                      ROLLBACK_READY_INPUT: <+pipeline.variables.rollback_ready>
+                      OPEN_CHANGE_FAILURES_INPUT: <+pipeline.variables.open_change_failures>
+                      CHANGE_FREEZE_ACTIVE_INPUT: <+pipeline.variables.change_freeze_active>
+                      REQUIRES_DATA_MIGRATION_INPUT: <+pipeline.variables.requires_data_migration>
+                      AUTO_DEPLOY_INPUT: <+pipeline.variables.auto_deploy>
+                      COMMIT_SHA_INPUT: <+codebase.commitSha>
+                      BRANCH_NAME_INPUT: <+codebase.branch>
+                      REPO_URL_INPUT: <+codebase.repoUrl>
+                    outputVariables:
+                      - name: TEST_PASS_RATE
+                        type: String
+                        value: TEST_PASS_RATE
+                      - name: CRITICAL_VULNERABILITIES
+                        type: String
+                        value: CRITICAL_VULNERABILITIES
+                      - name: HIGH_VULNERABILITIES
+                        type: String
+                        value: HIGH_VULNERABILITIES
+                      - name: CHANGE_BLAST_RADIUS
+                        type: String
+                        value: CHANGE_BLAST_RADIUS
+                      - name: ROLLBACK_READY
+                        type: String
+                        value: ROLLBACK_READY
+                      - name: OPEN_CHANGE_FAILURES
+                        type: String
+                        value: OPEN_CHANGE_FAILURES
+                      - name: CHANGE_FREEZE_ACTIVE
+                        type: String
+                        value: CHANGE_FREEZE_ACTIVE
+                      - name: REQUIRES_DATA_MIGRATION
+                        type: String
+                        value: REQUIRES_DATA_MIGRATION
+                      - name: AUTO_DEPLOY
+                        type: String
+                        value: AUTO_DEPLOY
+                      - name: COMMIT_SHA
+                        type: String
+                        value: COMMIT_SHA
+                      - name: BRANCH_NAME
+                        type: String
+                        value: BRANCH_NAME
+                      - name: REPO_URL
+                        type: String
+                        value: REPO_URL
+              - step:
+                  type: Run
+                  name: Assemble Release Candidate Evidence
+                  identifier: assemble_release_candidate_evidence
+                  spec:
+                    shell: Sh
+                    command: |
+                      SERVICE_NAME="toddfour_demo_app"
+                      IMAGE_NAME="toddfourdemoapp"
+                      IMAGE_TAG="1.0.<+pipeline.sequenceId>"
+                      IMAGE_PATH="$IMAGE_NAME"
+                      ARTIFACT="$IMAGE_PATH:$IMAGE_TAG"
+                      IMAGE_REFERENCE="$ARTIFACT"
+                      RELEASE_EVIDENCE_JSON=$(printf '{"artifact":{"service":"%s","image":"%s","tag":"%s","commit":"%s","branch":"%s","repository":"%s"},"build":{"pipeline_identifier":"%s","execution_id":"%s","sequence_id":"%s"},"attestations":{"sbom":"spdx-json","slsa_provenance":"generated"},"governance_inputs":{"test_pass_rate":%s,"critical_vulnerabilities":%s,"high_vulnerabilities":%s,"change_blast_radius":"%s","rollback_ready":"%s","open_change_failures":"%s","change_freeze_active":"%s","requires_data_migration":"%s"}}' \
+                        "$SERVICE_NAME" \
+                        "$IMAGE_REFERENCE" \
+                        "$IMAGE_TAG" \
+                        "$COMMIT_SHA" \
+                        "$BRANCH_NAME" \
+                        "$REPO_URL" \
+                        "<+pipeline.identifier>" \
+                        "<+pipeline.executionId>" \
+                        "<+pipeline.sequenceId>" \
+                        "$TEST_PASS_RATE" \
+                        "$CRITICAL_VULNERABILITIES" \
+                        "$HIGH_VULNERABILITIES" \
+                        "$CHANGE_BLAST_RADIUS" \
+                        "$ROLLBACK_READY" \
+                        "$OPEN_CHANGE_FAILURES" \
+                        "$CHANGE_FREEZE_ACTIVE" \
+                        "$REQUIRES_DATA_MIGRATION")
+
+                      export SERVICE_NAME
+                      export IMAGE_NAME
+                      export IMAGE_TAG
+                      export IMAGE_PATH
+                      export ARTIFACT
+                      export IMAGE_REFERENCE
+                      export RELEASE_EVIDENCE_JSON
+
+                      echo "Release candidate service: $SERVICE_NAME"
+                      echo "Release candidate artifact: $IMAGE_REFERENCE"
+                      echo "$RELEASE_EVIDENCE_JSON"
+                    envVariables:
+                      TEST_PASS_RATE: <+execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>
+                      CRITICAL_VULNERABILITIES: <+execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>
+                      HIGH_VULNERABILITIES: <+execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>
+                      CHANGE_BLAST_RADIUS: <+execution.steps.prepare_governance_inputs.output.outputVariables.CHANGE_BLAST_RADIUS>
+                      ROLLBACK_READY: <+execution.steps.prepare_governance_inputs.output.outputVariables.ROLLBACK_READY>
+                      OPEN_CHANGE_FAILURES: <+execution.steps.prepare_governance_inputs.output.outputVariables.OPEN_CHANGE_FAILURES>
+                      CHANGE_FREEZE_ACTIVE: <+execution.steps.prepare_governance_inputs.output.outputVariables.CHANGE_FREEZE_ACTIVE>
+                      REQUIRES_DATA_MIGRATION: <+execution.steps.prepare_governance_inputs.output.outputVariables.REQUIRES_DATA_MIGRATION>
+                      COMMIT_SHA: <+execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>
+                      BRANCH_NAME: <+execution.steps.prepare_governance_inputs.output.outputVariables.BRANCH_NAME>
+                      REPO_URL: <+execution.steps.prepare_governance_inputs.output.outputVariables.REPO_URL>
+                    outputVariables:
+                      - name: SERVICE_NAME
+                        type: String
+                        value: SERVICE_NAME
+                      - name: IMAGE_NAME
+                        type: String
+                        value: IMAGE_NAME
+                      - name: IMAGE_TAG
+                        type: String
+                        value: IMAGE_TAG
+                      - name: IMAGE_PATH
+                        type: String
+                        value: IMAGE_PATH
+                      - name: ARTIFACT
+                        type: String
+                        value: ARTIFACT
+                      - name: IMAGE_REFERENCE
+                        type: String
+                        value: IMAGE_REFERENCE
+                      - name: RELEASE_EVIDENCE_JSON
+                        type: String
+                        value: RELEASE_EVIDENCE_JSON
+              - step:
+                  type: Run
+                  name: Build Summary
+                  identifier: build_summary
+                  spec:
+                    shell: Sh
+                    command: |-
+                      echo "=== BUILD SUMMARY ==="
+                      echo "Pipeline: <+pipeline.name>"
+                      echo "Build Number: <+pipeline.sequenceId>"
+                      echo "Commit: <+execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>"
+                      echo "Branch: <+execution.steps.prepare_governance_inputs.output.outputVariables.BRANCH_NAME>"
+                      echo "Artifact: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>"
+                      echo "Image Tag: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>"
+                      echo ""
+                      echo "=== HARNESS CI INTELLIGENCE FEATURES ==="
+                      echo "- Test Intelligence: Runs only affected tests"
+                      echo "- Test Splitting: Parallelizes test execution"
+                      echo "- Build Intelligence: Caches compiled classes"
+                      echo "- Cache Intelligence: Auto-caches dependencies"
+                      echo "- Docker Layer Caching: Reuses image layers"
+                      echo ""
+                      echo "=== SECURITY SCANNING ==="
+                      echo "- Gitleaks: Secret detection"
+                      echo "- Harness SAST: Static analysis"
+                      echo "- Semgrep: Code patterns"
+                      echo "- Harness SCA: Configured but temporarily skipped"
+                      echo "- Aqua Trivy: Container vulnerabilities"
+                      echo ""
+                      echo "=== SUPPLY CHAIN SECURITY ==="
+                      echo "- SBOM Generation: SPDX-JSON format"
+                      echo "- SLSA Provenance: Build attestation"
+                      echo "- OCI Image Metadata: Commit, source, version, and Harness execution labels embedded in image"
+                      echo "- Release Candidate Evidence: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>"
+                      echo "- Evidence Bundle: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>"
+                      echo ""
+                      echo "=== GOVERNANCE INPUTS ==="
+                      echo "- Test Pass Rate: <+execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>%"
+                      echo "- Critical Vulnerabilities: <+execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>"
+                      echo "- High Vulnerabilities: <+execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>"
+                      echo "- Blast Radius: <+execution.steps.prepare_governance_inputs.output.outputVariables.CHANGE_BLAST_RADIUS>"
+                      echo "- Rollback Ready: <+execution.steps.prepare_governance_inputs.output.outputVariables.ROLLBACK_READY>"
+                      echo "- Open Change Failures: <+execution.steps.prepare_governance_inputs.output.outputVariables.OPEN_CHANGE_FAILURES>"
+                      echo "- Change Freeze Active: <+execution.steps.prepare_governance_inputs.output.outputVariables.CHANGE_FREEZE_ACTIVE>"
+                      echo "- Requires Data Migration: <+execution.steps.prepare_governance_inputs.output.outputVariables.REQUIRES_DATA_MIGRATION>"
+                      echo "- Auto-deploy: <+execution.steps.prepare_governance_inputs.output.outputVariables.AUTO_DEPLOY>"
+              - step:
+                  type: Run
+                  name: Prepare Artifact Links
+                  identifier: prepare_artifact_links
+                  spec:
+                    shell: Sh
+                    command: |
+                      HARNESS_UI_BASE="$HARNESS_ENDPOINT"
+                      HARNESS_UI_BASE="${HARNESS_UI_BASE%/gratis}"
+                      HARNESS_UI_BASE="${HARNESS_UI_BASE%/}"
+                      ACCOUNT_SLUG=$(echo "$ACCOUNT_ID" | tr '[:upper:]' '[:lower:]')
+
+                      PUBLISHED_IMAGE_URL="https://pkg.harness.io/$ACCOUNT_SLUG/$HAR_REGISTRY_REF/$HAR_IMAGE_NAME:$IMAGE_TAG"
+                      BUILD_EXECUTION_URL="$HARNESS_UI_BASE/ng/account/$ACCOUNT_ID/all/orgs/$ORG_ID/projects/$PROJECT_ID/pipelines/$PIPELINE_ID/executions/$PIPELINE_EXECUTION_ID/pipeline?storeType=INLINE"
+
+                      export PUBLISHED_IMAGE_URL
+                      export BUILD_EXECUTION_URL
+
+                      echo "Published image URL: $PUBLISHED_IMAGE_URL"
+                      echo "Build execution URL: $BUILD_EXECUTION_URL"
+                    envVariables:
+                      HAR_IMAGE_NAME: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_NAME>
+                      HAR_REGISTRY_REF: har-toddfour
+                      IMAGE_TAG: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                      HARNESS_ENDPOINT: <+pipeline.variables.harness_endpoint>
+                      ACCOUNT_ID: <+account.identifier>
+                      ORG_ID: <+org.identifier>
+                      PROJECT_ID: <+project.identifier>
+                      PIPELINE_ID: <+pipeline.identifier>
+                      PIPELINE_EXECUTION_ID: <+pipeline.executionId>
+                    outputVariables:
+                      - name: PUBLISHED_IMAGE_URL
+                        type: String
+                        value: PUBLISHED_IMAGE_URL
+                      - name: BUILD_EXECUTION_URL
+                        type: String
+                        value: BUILD_EXECUTION_URL
+              - step:
+                  type: Plugin
+                  name: Publish Artifact Links
+                  identifier: publish_artifact_links
+                  spec:
+                    registryRef: har-docker-shared
+                    image: plugins/artifact-metadata-publisher
+                    settings:
+                      artifact_file: artifact-links.txt
+                      file_urls:
+                        - Published Image:::<+execution.steps.prepare_artifact_links.output.outputVariables.PUBLISHED_IMAGE_URL>
+                        - Build Execution:::<+execution.steps.prepare_artifact_links.output.outputVariables.BUILD_EXECUTION_URL>
+              - step:
+                  type: Run
+                  name: Trigger CD Pipeline
+                  identifier: trigger_cd
+                  spec:
+                    shell: Sh
+                    command: |-
+                      # if [ "$AUTO_DEPLOY" = "true" ]; then
+                        echo "=== AUTO-DEPLOYING TO DEV (Canary Strategy) ==="
+                        echo "Triggering deployment with image tag: $IMAGE_TAG"
+                        echo "Using test pass rate: $TEST_PASS_RATE%"
+                        echo "Using critical vulnerabilities: $CRITICAL_VULNERABILITIES"
+                        echo "Using high vulnerabilities: $HIGH_VULNERABILITIES"
+                        echo "Using blast radius: $CHANGE_BLAST_RADIUS"
+                        echo "Using rollback ready: $ROLLBACK_READY"
+                        echo "Using open change failures: $OPEN_CHANGE_FAILURES"
+                        echo "Using change freeze active: $CHANGE_FREEZE_ACTIVE"
+                        echo "Using requires data migration: $REQUIRES_DATA_MIGRATION"
+                        echo "Using release candidate evidence bundle from CI"
+
+                      #  WEBHOOK_URL="$HARNESS_ENDPOINT/pipeline/api/webhook/custom/v2?accountIdentifier=$ACCOUNT_ID&orgIdentifier=$ORG_ID&projectIdentifier=$PROJECT_ID&pipelineIdentifier=toddfour_k8s_strategy_deploy&triggerIdentifier=auto_deploy_webhook"
+
+                      #  response=$(curl -s -w "\n%{http_code}" -X POST "$WEBHOOK_URL" \
+                      #    -H "Content-Type: application/json" \
+                      #    -d "{\"image_tag\": \"$IMAGE_TAG\", \"deployment_strategy\": \"canary\", \"test_pass_rate\": \"$TEST_PASS_RATE\", \"critical_vulnerabilities\": \"$CRITICAL_VULNERABILITIES\", \"high_vulnerabilities\": \"$HIGH_VULNERABILITIES\", \"change_blast_radius\": \"$CHANGE_BLAST_RADIUS\", \"rollback_ready\": \"$ROLLBACK_READY\", \"open_change_failures\": \"$OPEN_CHANGE_FAILURES\", \"change_freeze_active\": \"$CHANGE_FREEZE_ACTIVE\", \"requires_data_migration\": \"$REQUIRES_DATA_MIGRATION\", \"release_candidate_evidence\": $RELEASE_CANDIDATE_EVIDENCE}")
+
+                      #  http_code=$(echo "$response" | tail -n1)
+                      #  body=$(echo "$response" | sed '$d')
+
+                      #  echo "Response code: $http_code"
+                      #  echo "Response: $body"
+
+                      #  if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
+                      #    echo "CD pipeline triggered successfully!"
+                      #  else
+                      #    echo "CD pipeline trigger returned: $http_code"
+                      #    echo "Deployment can still be triggered manually."
+                      #  fi
+                      # else
+                      #  echo "Auto-deploy is disabled. To deploy, run the strategy pipeline manually."
+                      # fi
+                    envVariables:
+                      IMAGE_TAG: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                      TEST_PASS_RATE: <+execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>
+                      CRITICAL_VULNERABILITIES: <+execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>
+                      HIGH_VULNERABILITIES: <+execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>
+                      CHANGE_BLAST_RADIUS: <+execution.steps.prepare_governance_inputs.output.outputVariables.CHANGE_BLAST_RADIUS>
+                      ROLLBACK_READY: <+execution.steps.prepare_governance_inputs.output.outputVariables.ROLLBACK_READY>
+                      OPEN_CHANGE_FAILURES: <+execution.steps.prepare_governance_inputs.output.outputVariables.OPEN_CHANGE_FAILURES>
+                      CHANGE_FREEZE_ACTIVE: <+execution.steps.prepare_governance_inputs.output.outputVariables.CHANGE_FREEZE_ACTIVE>
+                      REQUIRES_DATA_MIGRATION: <+execution.steps.prepare_governance_inputs.output.outputVariables.REQUIRES_DATA_MIGRATION>
+                      RELEASE_CANDIDATE_EVIDENCE: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>
+                      AUTO_DEPLOY: <+execution.steps.prepare_governance_inputs.output.outputVariables.AUTO_DEPLOY>
+                      HARNESS_ENDPOINT: <+pipeline.variables.harness_endpoint>
+                      ACCOUNT_ID: <+account.identifier>
+                      ORG_ID: <+org.identifier>
+                      PROJECT_ID: <+project.identifier>
+                  when:
+                    stageStatus: Success
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: MarkAsSuccess
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    - stage:
+        name: ITSM
+        identifier: ITSM
+        description: ""
+        type: Approval
+        spec:
+          execution:
+            steps:
+              - step:
+                  name: Open Change Request
+                  identifier: Open_Change_Request
+                  type: ServiceNowCreate
+                  timeout: 5m
+                  spec:
+                    connectorRef: account.ServiceNow_Dev
+                    ticketType: change_request
+                    fields:
+                      - name: description
+                        value: |-
+                          Harness automated change management.
+                          Service: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME>
+                          Pipeline Name: <+pipeline.name> 
+                          Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT> 
+                          Build URL: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_artifact_links.output.outputVariables.BUILD_EXECUTION_URL> 
+                          Requested by <+pipeline.triggeredBy.name>
+                      - name: short_description
+                        value: Begin deployment of <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME> to QA
+                    createType: Normal
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - Timeout
+                        action:
+                          type: MarkAsSuccess
+        tags: {}
+    - stage:
+        name: Deploy to QA
+        identifier: deploy_to_qa
+        description: Blue-Green deployment with instant traffic swap
+        type: Deployment
+        when:
+          pipelineStatus: Success
+        delegateSelectors:
+          - delegate-toddfour
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: toddfour_demo_app
+          environment:
+            environmentRef: Toddfour_K8s_QA
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: toddfour_k8s_qa
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Pipeline Context
+                  identifier: pipeline_context
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "========================================"
+                          echo "  HARNESS PIPELINE CONTEXT"
+                          echo "========================================"
+                          echo "Pipeline: <+pipeline.name> | Execution: <+pipeline.executionId>"
+                          echo "Stage: <+stage.name> | Service: <+service.name>"
+                          echo "Environment: <+env.name> (<+env.type>)"
+                          echo "Infrastructure: <+infra.name> | Namespace: <+infra.namespace>"
+                          echo "Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>"
+                          echo "Primary URL: https://<+serviceVariables.ingressHost>"
+                          echo "Stage URL:   https://<+serviceVariables.ingressStageHost>"
+                          echo "========================================"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 10m
+              - step:
+                  name: Stage Deployment
+                  identifier: stage_deployment
+                  type: K8sBlueGreenDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+              - step:
+                  name: Approval
+                  identifier: bg_approval
+                  type: HarnessApproval
+                  timeout: 1d
+                  spec:
+                    approvalMessage: |
+                      Blue/Green deployment staged successfully.
+
+                      Artifact:
+                        Image tag: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+
+                      Validate the new version on the Stage environment:
+                        Stage URL:   https://<+serviceVariables.ingressStageHost>
+
+                      Current production traffic continues to:
+                        Primary URL: https://<+serviceVariables.ingressHost>
+
+                      Approve to swap traffic to the new version. Reject to abort.
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      userGroups:
+                        - _project_all_users
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+              - step:
+                  name: Swap Primary
+                  identifier: swap_primary
+                  type: K8sBGSwapServices
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+              - step:
+                  name: Scale Down Old Version
+                  identifier: scale_down_old
+                  type: K8sBlueGreenStageScaleDown
+                  timeout: 10m
+                  spec: {}
+              - parallel:
+                  - step:
+                      type: ShellScript
+                      name: Deployment Complete
+                      identifier: deployment_complete
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              echo "========================================"
+                              echo "  BLUE-GREEN DEPLOYMENT COMPLETE"
+                              echo "========================================"
+                              echo ""
+                              echo "Production URL: https://<+serviceVariables.ingressHost>"
+                              echo "Stage URL:      https://<+serviceVariables.ingressStageHost>"
+                              echo ""
+                              echo "Traffic has been swapped to the new version."
+                              echo "The old version has been scaled down."
+                              echo "========================================"
+
+                              export SERVICE_NAME="<+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME>"
+                              export ARTIFACT="<+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>"
+                        environmentVariables: []
+                        outputVariables:
+                          - name: SERVICE_NAME
+                            type: String
+                            value: SERVICE_NAME
+                          - name: ARTIFACT
+                            type: String
+                            value: ARTIFACT
+                      timeout: 1m
+                  - step:
+                      type: ServiceNowUpdate
+                      name: Update Change Record
+                      identifier: Update_Change_Record
+                      spec:
+                        useServiceNowTemplate: false
+                        connectorRef: account.ServiceNow_Dev
+                        ticketType: change_request
+                        ticketNumber: <+pipeline.stages.ITSM.spec.execution.steps.Open_Change_Request.ticket.ticketNumber>
+                        fields:
+                          - name: state
+                            value: "-1"
+                          - name: work_notes
+                            value: |-
+                              <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME> service passed <+env.name> security and quality gates. Ready to release <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>.
+                              Pipeline Execution: <+pipeline.executionUrl>.
+                      timeout: 5m
+            rollbackSteps: []
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    - stage:
+        name: Release Governance
+        identifier: release_governance
+        description: Policy-driven approval gate for deployment risk evaluation
+        type: Custom
+        when:
+          pipelineStatus: Success
+        delegateSelectors:
+          - delegate-toddfour
+        spec:
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Assemble Release Context
+                  identifier: assemble_release_context
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          cat <<'EOF' > change_context.json
+                          {
+                            "pipeline": {
+                              "identifier": "<+pipeline.identifier>",
+                              "execution_id": "<+pipeline.executionId>",
+                              "sequence_id": "<+pipeline.sequenceId>"
+                            },
+                            "change": {
+                              "request_id": "<+pipeline.identifier>-<+pipeline.sequenceId>",
+                              "service": "<+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME>",
+                              "environment": "Toddfour_Prod",
+                              "environment_type": "Production",
+                              "blast_radius": "<+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.CHANGE_BLAST_RADIUS>",
+                              "freeze_window_active": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.CHANGE_FREEZE_ACTIVE>,
+                              "requires_data_migration": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.REQUIRES_DATA_MIGRATION>
+                            },
+                            "validation": {
+                              "tests": {
+                                "pass_rate": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>
+                              },
+                              "security": {
+                                "critical_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>,
+                                "high_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>
+                              },
+                              "operations": {
+                                "open_failures": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.OPEN_CHANGE_FAILURES>,
+                                "rollback_ready": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.ROLLBACK_READY>
+                              }
+                            },
+                            "release_candidate": <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>
+                          }
+                          EOF
+
+                          change_context="$(tr -d '\n' < change_context.json)"
+                          export change_context
+                          echo "$change_context"
+                    environmentVariables: []
+                    outputVariables:
+                      - name: change_context
+                        type: String
+                        value: change_context
+                  timeout: 10m
+              - stepGroup:
+                  name: Governance
+                  identifier: governance
+                  steps:
+                    - step:
+                        type: Policy
+                        name: Evaluate Change Risk
+                        identifier: evaluate_change_risk
+                        spec:
+                          policySets:
+                            - change_risk_guardrails
+                          type: Custom
+                          policySpec:
+                            payload: <+execution.steps.assemble_release_context.output.outputVariables.change_context>
+                        timeout: 10m
+                        failureStrategies:
+                          - onFailure:
+                              errors:
+                                - PolicyEvaluationFailure
+                              action:
+                                type: MarkAsSuccess
+              - step:
+                  type: ServiceNowUpdate
+                  name: Update Change Record
+                  identifier: update_change_record
+                  spec:
+                    useServiceNowTemplate: false
+                    connectorRef: account.ServiceNow_Dev
+                    ticketType: change_request
+                    ticketNumber: <+pipeline.stages.ITSM.spec.execution.steps.Open_Change_Request.ticket.ticketNumber>
+                    fields:
+                      - name: test_plan
+                        value: |-
+                          Harness production deployment ready for release.
+                          Service: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME>
+                          Environment: Production
+                          Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>
+                          Execution URL: <+pipeline.executionUrl>
+                      - name: backout_plan
+                        value: Harness Automatic Rollback.
+                      - name: risk_impact_analysis
+                        value: |-
+                          Test coverage: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>
+
+                          Critical Vulnerabilities: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>
+
+                          High Vulnerabilities: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>
+
+                          Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>
+
+                          Commit SHA: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>
+
+                          Change Risk Guard Rails: <+pipeline.stages.release_governance.spec.execution.steps.governance.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.status>
+
+                          Change Risk Score: <+pipeline.stages.release_governance.spec.execution.steps.governance.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.policyDetails.change_risk_score.status>
+
+                          Change Readiness Guardrails: <+pipeline.stages.release_governance.spec.execution.steps.governance.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.policyDetails.change_readiness_guardrails.status>
+
+                          Change Validation Quality: <+pipeline.stages.release_governance.spec.execution.steps.governance.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.policyDetails.change_validation_quality.status>
+                  timeout: 5m
+                contextType: Pipeline
+              - parallel:
+                  - stepGroup:
+                      name: Manual Approval Required
+                      identifier: manual_approval_required
+                      steps:
+                        - step:
+                            type: ServiceNowApproval
+                            name: ServiceNow Approval
+                            identifier: ServiceNow_Approval
+                            spec:
+                              connectorRef: account.ServiceNow_Dev
+                              ticketNumber: <+pipeline.stages.ITSM.spec.execution.steps.Open_Change_Request.ticket.ticketNumber>
+                              retryInterval: 1m
+                              ticketType: change_request
+                              approvalCriteria:
+                                type: KeyValues
+                                spec:
+                                  matchAnyCondition: true
+                                  conditions:
+                                    - key: state
+                                      operator: equals
+                                      value: Review
+                              rejectionCriteria:
+                                type: KeyValues
+                                spec:
+                                  matchAnyCondition: true
+                                  conditions: []
+                            timeout: 5m
+                            failureStrategies:
+                              - onFailure:
+                                  errors:
+                                    - Timeout
+                                  action:
+                                    type: MarkAsSuccess
+                      when:
+                        stageStatus: All
+                        condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> == "error"
+                  - stepGroup:
+                      name: Auto Approval Path
+                      identifier: auto_approval_path
+                      steps:
+                        - step:
+                            type: ServiceNowUpdate
+                            name: Approve Standard Change Request
+                            identifier: approve_standard_change_request
+                            spec:
+                              useServiceNowTemplate: false
+                              connectorRef: account.ServiceNow_Dev
+                              ticketType: change_request
+                              ticketNumber: <+pipeline.stages.ITSM.spec.execution.steps.Open_Change_Request.ticket.ticketNumber>
+                              fields:
+                                - name: state
+                                  value: "0"
+                            timeout: 5m
+                      when:
+                        stageStatus: All
+                        condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> != "error"
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+    - stage:
+        name: Deploy to Prod
+        identifier: deploy_to_prod
+        description: Canary deployment with gradual traffic shift
+        type: Deployment
+        when:
+          pipelineStatus: Success
+        delegateSelectors:
+          - delegate-toddfour
+        spec:
+          deploymentType: Kubernetes
+          environment:
+            environmentRef: Toddfour_Prod
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: toddfour_k8s_prod
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Pipeline Context
+                  identifier: pipeline_context
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "========================================"
+                          echo "  HARNESS PIPELINE CONTEXT"
+                          echo "========================================"
+                          echo "Pipeline: <+pipeline.name> | Execution: <+pipeline.executionId>"
+                          echo "Stage: <+stage.name> | Service: <+service.name>"
+                          echo "Environment: <+env.name> (<+env.type>)"
+                          echo "Infrastructure: <+infra.name> | Namespace: <+infra.namespace>"
+                          echo "Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>"
+                          echo "App URL: https://<+serviceVariables.ingressHost>"
+                          echo "========================================"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 10m
+              - step:
+                  name: Canary Deployment
+                  identifier: canary_deploy
+                  type: K8sCanaryDeploy
+                  timeout: 10m
+                  spec:
+                    instanceSelection:
+                      type: Count
+                      spec:
+                        count: 1
+                    skipDryRun: false
+              - step:
+                  type: ShellScript
+                  name: Get Canary Traffic Split
+                  identifier: get_validation_urls
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          #!/bin/bash
+                          NAMESPACE="<+infra.namespace>"
+                          CANARY_PODS=$(kubectl get pods -n $NAMESPACE -l harness.io/track=canary --no-headers 2>/dev/null | wc -l | tr -d ' ')
+                          STABLE_PODS=$(kubectl get pods -n $NAMESPACE -l harness.io/track=stable --no-headers 2>/dev/null | wc -l | tr -d ' ')
+                          TOTAL=$((CANARY_PODS + STABLE_PODS))
+                          if [ $TOTAL -gt 0 ]; then
+                            CANARY_PCT=$((CANARY_PODS * 100 / TOTAL))
+                            STABLE_PCT=$((STABLE_PODS * 100 / TOTAL))
+                          else
+                            CANARY_PCT=0
+                            STABLE_PCT=100
+                          fi
+                          echo "App URL: https://<+serviceVariables.ingressHost>"
+                          echo "Traffic: ~${CANARY_PCT}% canary (${CANARY_PODS} pods), ~${STABLE_PCT}% stable (${STABLE_PODS} pods)"
+                    environmentVariables: []
+                    outputVariables:
+                      - name: CANARY_PCT
+                        type: String
+                        value: CANARY_PCT
+                      - name: STABLE_PCT
+                        type: String
+                        value: STABLE_PCT
+                  timeout: 10m
+              - step:
+                  name: Approval
+                  identifier: canary_approval
+                  type: HarnessApproval
+                  timeout: 1d
+                  spec:
+                    approvalMessage: |
+                      Canary deployment complete.
+
+                      Artifact:
+                        Image tag: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+
+                      Validation target:
+                        App URL: https://<+serviceVariables.ingressHost>
+                      Traffic split: ~<+execution.steps.get_validation_urls.output.outputVariables.CANARY_PCT>% canary, ~<+execution.steps.get_validation_urls.output.outputVariables.STABLE_PCT>% stable
+
+                      Approve to promote canary to 100% of pods. Reject to roll back.
+                    includePipelineExecutionHistory: true
+                    approvers:
+                      userGroups:
+                        - _project_all_users
+                      minimumCount: 1
+                      disallowPipelineExecutor: false
+              - step:
+                  name: Canary Delete
+                  identifier: canary_delete
+                  type: K8sCanaryDelete
+                  timeout: 10m
+                  spec: {}
+              - step:
+                  name: Rolling Deployment
+                  identifier: rolling_deploy
+                  type: K8sRollingDeploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+              - step:
+                  type: ServiceNowUpdate
+                  name: Close ServiceNow
+                  identifier: Close_ServiceNow
+                  spec:
+                    useServiceNowTemplate: false
+                    connectorRef: account.ServiceNow_Dev
+                    ticketType: change_request
+                    ticketNumber: <+pipeline.stages.ITSM.spec.execution.steps.Open_Change_Request.ticket.ticketNumber>
+                    fields:
+                      - name: state
+                        value: "3"
+                      - name: close_code
+                        value: successful
+                      - name: close_notes
+                        value: |-
+                          Deployment successful for <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT> for the <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME> service to <+env.name> 
+                          Pipeline Execution: <+pipeline.executionUrl> 
+                  timeout: 5m
+              - step:
+                  type: ShellScript
+                  name: Deployment Complete
+                  identifier: deployment_complete
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "========================================"
+                          echo "  CANARY DEPLOYMENT COMPLETE"
+                          echo "========================================"
+                          echo ""
+                          echo "App URL: https://<+serviceVariables.ingressHost>"
+                          echo ""
+                          echo "Canary validated and promoted to 100%."
+                          echo "All pods now running the new version."
+                          echo "========================================"
+                    environmentVariables: []
+                    outputVariables: []
+                  timeout: 1m
+            rollbackSteps:
+              - step:
+                  name: Canary Delete
+                  identifier: strategy_rollback_canary_delete
+                  type: K8sCanaryDelete
+                  timeout: 10m
+                  spec: {}
+          service:
+            useFromStage:
+              stage: deploy_to_qa
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
+        tags: {}
+  identifier: E2E_Enterprise_Pipeline_Toddfour
+  description: "End-to-end enterprise CI/CD pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA), Change Management, QA B/G deploy, Prod Canary deploy"
+  name: E2E Enterprise Pipeline - Toddfour
