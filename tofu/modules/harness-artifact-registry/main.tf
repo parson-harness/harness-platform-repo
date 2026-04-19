@@ -67,24 +67,6 @@ JSON
     }
   }
 
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<-EOT
-      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_API_ENDPOINT/har/api/v1/registry/${var.account_id}/${var.org_id}/${var.project_id}/${var.dockerhub_upstream_id}/%2B" -H "x-api-key: $HARNESS_API_KEY" -H "Content-Type: application/json")
-      HTTP_CODE=$(echo "$RESP" | tail -n1)
-
-      case "$HTTP_CODE" in
-        200|204|404) exit 0 ;;
-        *) echo "$RESP"; exit 1 ;;
-      esac
-    EOT
-
-    environment = {
-      HARNESS_API_ENDPOINT = local.harness_api_endpoint
-      HARNESS_API_KEY      = var.harness_api_key
-    }
-  }
-
   input = {
     identifier = var.dockerhub_upstream_id
   }
@@ -152,24 +134,6 @@ JSON
 
       case "$HTTP_CODE" in
         200|201|409) exit 0 ;;
-        *) echo "$RESP"; exit 1 ;;
-      esac
-    EOT
-
-    environment = {
-      HARNESS_API_ENDPOINT = local.harness_api_endpoint
-      HARNESS_API_KEY      = var.harness_api_key
-    }
-  }
-
-  provisioner "local-exec" {
-    when    = destroy
-    command = <<-EOT
-      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_API_ENDPOINT/har/api/v1/registry/${var.account_id}/${var.org_id}/${var.project_id}/${var.registry_id}/%2B" -H "x-api-key: $HARNESS_API_KEY" -H "Content-Type: application/json")
-      HTTP_CODE=$(echo "$RESP" | tail -n1)
-
-      case "$HTTP_CODE" in
-        200|204|404) exit 0 ;;
         *) echo "$RESP"; exit 1 ;;
       esac
     EOT
