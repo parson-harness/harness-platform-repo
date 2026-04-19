@@ -135,7 +135,7 @@
             <div class="inline-block gradient-border float-animation">
                 <div class="gradient-border-inner px-8 py-6">
                     <div class="text-sm text-gray-400 uppercase tracking-wider mb-2">Current Deployment</div>
-                    <div class="text-4xl font-bold gradient-text mb-2" th:text="${config.effectiveVariant}">stable</div>
+                    <div class="text-4xl font-bold mb-2 uppercase" th:style="'color: ' + ${config.variantColor}" th:text="${config.effectiveVariant}">stable</div>
                     <div class="text-lg text-white/80 mb-3" th:text="${config.deploymentNarrative}">You are viewing the live production release</div>
                     <div class="flex items-center justify-center space-x-4">
                         <span class="variant-badge px-3 py-1 rounded-full text-sm font-medium" th:text="${config.displayVersion}">1.0.0</span>

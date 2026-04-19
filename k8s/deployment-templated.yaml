@@ -82,6 +82,10 @@ spec:
               value: "kubernetes"
             - name: DEPLOYMENT_STRATEGY
               value: "{{ .Values.deploymentStrategy }}"
+            - name: PUBLIC_URL
+              value: "{{ .Values.publicUrl }}"
+            - name: STAGE_URL
+              value: "{{ .Values.stageUrl }}"
             - name: NAMESPACE
               valueFrom:
                 fieldRef:
