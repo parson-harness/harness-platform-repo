@@ -21,7 +21,7 @@ appName: "Harness Demo Application"
 appVersion: <+artifact.tag>
 customerName: "Harness Customer"
 customerLogo: "https://developer.harness.io/img/logo_harness.svg"
-deploymentStrategy: <+pipeline.variables.deployment_strategy>
+deploymentStrategy: ""
 servicePort: 80
 serviceType: ClusterIP
 
@@ -31,6 +31,8 @@ serviceType: ClusterIP
 # Ingress configuration (set via Harness service variables by Terraform)
 ingressHost: <+serviceVariables.ingressHost>
 ingressStageHost: <+serviceVariables.ingressStageHost>
+publicUrl: https://<+serviceVariables.ingressHost>
+stageUrl: https://<+serviceVariables.ingressStageHost>
 certArn: <+serviceVariables.certArn>
 
 # Resource limits
