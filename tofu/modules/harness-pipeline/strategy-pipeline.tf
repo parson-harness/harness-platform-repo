@@ -13,6 +13,7 @@ locals {
       value = regex("^([^:]+):(.*)$", one([for tag in local.explicit_pipeline_tags : tag if regex("^([^:]+):(.*)$", tag)[0] == key]))[1]
     }
   ]
+  strategy_pipeline_provider_tags  = [for tag in local.strategy_pipeline_tag_objects : "${tag.key}:${tag.value}"]
   strategy_pipeline_yaml_tags       = join("\n", [for tag in local.strategy_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
   strategy_servicenow_ticket_number = "<+pipeline.stages.approval.spec.execution.steps.servicenow_create_ticket.ticket.ticketNumber>"
   strategy_servicenow_create_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
@@ -425,7 +426,7 @@ resource "harness_platform_pipeline" "k8s_strategy" {
   org_id      = var.org_id
   project_id  = var.project_id
   description = var.strategy_pipeline_description
-  tags        = concat(["deployment-type:kubernetes", "strategy:multi-strategy"], local.explicit_pipeline_tags)
+  tags        = concat(["deployment-type:kubernetes", "strategy:multi-strategy"], local.strategy_pipeline_provider_tags)
 
   yaml = <<-STRATEGY_EOT
     pipeline:
