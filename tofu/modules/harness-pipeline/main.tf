@@ -25,8 +25,8 @@ locals {
   k8s_pipeline_yaml_tags = join("\n", [for tag in local.k8s_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
   pipeline_change_governance_dev_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
                   - stepGroup:
-                      name: Change Governance
-                      identifier: change_governance
+                      name: Release Governance
+                      identifier: release_governance
                       steps:
                         - step:
                             type: ShellScript
@@ -92,7 +92,7 @@ locals {
                                 - ${var.change_governance_policy_set}
                               type: Custom
                               policySpec:
-                                payload: <+execution.steps.change_governance.steps.assemble_change_context.output.outputVariables.change_context>
+                                payload: <+execution.steps.release_governance.steps.assemble_change_context.output.outputVariables.change_context>
                             failureStrategies:
                               - onFailure:
                                   errors:
@@ -108,7 +108,7 @@ locals {
                               approvalMessage: |
                                 Change governance policies flagged this deployment for manual approval.
 
-                                Policy evaluation status: <+execution.steps.change_governance.steps.evaluate_change_risk.output.status>
+                                Policy evaluation status: <+execution.steps.release_governance.steps.evaluate_change_risk.output.status>
                                 Review the Evaluate Change Risk step for the full policy decision details.
 
                                 Release summary:
@@ -134,13 +134,13 @@ locals {
                               approverInputs: []
                             when:
                               stageStatus: All
-                              condition: <+execution.steps.change_governance.steps.evaluate_change_risk.output.status> == "error"
+                              condition: <+execution.steps.release_governance.steps.evaluate_change_risk.output.status> == "error"
     EOT
   ) : ""
   pipeline_change_governance_prod_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
                   - stepGroup:
-                      name: Change Governance
-                      identifier: change_governance
+                      name: Release Governance
+                      identifier: release_governance
                       steps:
                         - step:
                             type: ShellScript
@@ -205,7 +205,7 @@ locals {
                                 - ${var.change_governance_policy_set}
                               type: Custom
                               policySpec:
-                                payload: <+execution.steps.change_governance.steps.assemble_change_context.output.outputVariables.change_context>
+                                payload: <+execution.steps.release_governance.steps.assemble_change_context.output.outputVariables.change_context>
                             failureStrategies:
                               - onFailure:
                                   errors:
@@ -221,7 +221,7 @@ locals {
                               approvalMessage: |
                                 Change governance policies flagged this deployment for manual approval.
 
-                                Policy evaluation status: <+execution.steps.change_governance.steps.evaluate_change_risk.output.status>
+                                Policy evaluation status: <+execution.steps.release_governance.steps.evaluate_change_risk.output.status>
                                 Review the Evaluate Change Risk step for the full policy decision details.
 
                                 Release summary:
@@ -247,7 +247,7 @@ locals {
                               approverInputs: []
                             when:
                               stageStatus: All
-                              condition: <+execution.steps.change_governance.steps.evaluate_change_risk.output.status> == "error"
+                              condition: <+execution.steps.release_governance.steps.evaluate_change_risk.output.status> == "error"
     EOT
   ) : ""
 }
