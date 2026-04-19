@@ -20,7 +20,7 @@ terraform {
   required_providers {
     harness = {
       source  = "harness/harness"
-      version = "~> 0.30"
+      version = "~> 0.38.0"
     }
     aws = {
       source  = "hashicorp/aws"

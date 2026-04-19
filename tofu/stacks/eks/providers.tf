@@ -22,11 +22,11 @@ terraform {
   required_providers {
     harness = {
       source  = "harness/harness"
-      version = "~> 0.30"
+      version = "~> 0.38.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
-      version = "~> 2.25"
+      version = ">= 2.20"
     }
     aws = {
       source  = "hashicorp/aws"
