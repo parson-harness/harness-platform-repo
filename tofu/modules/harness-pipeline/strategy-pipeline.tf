@@ -6,10 +6,11 @@
 locals {
   # Emits a delegateSelectors YAML block for ShellScript steps that must run on the shared EKS delegate.
   strategy_shell_step_delegate_yaml = var.delegate_selector != "" ? "                        delegateSelectors:\n                          - ${var.delegate_selector}\n" : ""
+  strategy_pipeline_tag_keys = distinct([for tag in local.explicit_pipeline_tags : regex("^([^:]+):(.*)$", tag)[0]])
   strategy_pipeline_tag_objects = [
-    for tag in local.explicit_pipeline_tags : {
-      key   = regex("^([^:]+):(.*)$", tag)[0]
-      value = regex("^([^:]+):(.*)$", tag)[1]
+    for key in local.strategy_pipeline_tag_keys : {
+      key   = key
+      value = regex("^([^:]+):(.*)$", one([for tag in local.explicit_pipeline_tags : tag if regex("^([^:]+):(.*)$", tag)[0] == key]))[1]
     }
   ]
   strategy_pipeline_yaml_tags       = join("\n", [for tag in local.strategy_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
