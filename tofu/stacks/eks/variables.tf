@@ -328,7 +328,7 @@ variable "coverage_report_artifact_path_prefix" {
 ################################################################################
 
 variable "delegate_selector" {
-  description = "Optional delegate selector override for workload connectors and generated pipelines. Leave empty to derive delegate-${owner}; set to a stable shared delegate selector for shared-cluster sandboxes."
+  description = "Optional delegate selector override for workload connectors and generated pipelines. Leave empty to derive delegate-<owner>; set to a stable shared delegate selector for shared-cluster sandboxes."
   type        = string
   default     = ""
 }
