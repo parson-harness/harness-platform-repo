@@ -163,10 +163,10 @@ ${local.standard_ci_gradle_yaml_tags != "" ? "${local.standard_ci_gradle_yaml_ta
                                     ls -la build/libs/
                   - step:
                       type: Run
-                      name: Upload Code Coverage
+                      name: Code Coverage
                       identifier: upload_code_coverage
                       spec:
-                        connectorRef: account.harnessImage
+                        registryRef: ${var.har_registry_ref}
                         image: gradle:8.5-jdk17
                         shell: Sh
                         command: |
