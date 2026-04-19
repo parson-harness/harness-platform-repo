@@ -4,9 +4,8 @@
 ################################################################################
 
 locals {
-  # Emits a delegateSelectors YAML block when delegate_selector is set.
-  # Placed at the stage level to pin ALL steps (K8sDelete, deploy, shell) to the right delegate.
-  strategy_delegate_yaml = var.delegate_selector != "" ? "            delegateSelectors:\n              - ${var.delegate_selector}\n" : ""
+  # Emits a delegateSelectors YAML block for ShellScript steps that must run on the shared EKS delegate.
+  strategy_shell_step_delegate_yaml = var.delegate_selector != "" ? "                        delegateSelectors:\n                          - ${var.delegate_selector}\n" : ""
   strategy_pipeline_tag_objects = [
     for tag in local.explicit_pipeline_tags : {
       key   = regex("^([^:]+):(.*)$", tag)[0]
@@ -14,7 +13,7 @@ locals {
     }
   ]
   strategy_pipeline_yaml_tags       = join("\n", [for tag in local.strategy_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
-  strategy_servicenow_ticket_number = "<+pipeline.stages.change_governance.spec.execution.steps.servicenow_create_ticket.ticket.ticketNumber>"
+  strategy_servicenow_ticket_number = "<+pipeline.stages.approval.spec.execution.steps.servicenow_create_ticket.ticket.ticketNumber>"
   strategy_servicenow_create_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
                   - step:
                       type: ServiceNowCreate
@@ -52,7 +51,7 @@ locals {
                       spec:
                         connectorRef: ${var.servicenow_connector_ref}
                         ticketType: change_request
-                        ticketNumber: <+execution.steps.servicenow_create_ticket.ticket.ticketNumber>
+                        ticketNumber: ${local.strategy_servicenow_ticket_number}
                         retryInterval: 1m
                         approvalCriteria:
                           type: KeyValues
@@ -72,11 +71,11 @@ locals {
                           endField: end_date
     EOT
   ) : ""
-  strategy_servicenow_update_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
+  strategy_servicenow_mark_implement_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
                   - step:
                       type: ServiceNowUpdate
-                      name: Update Change Request
-                      identifier: servicenow_update_ticket
+                      name: Move Change Request to Implement
+                      identifier: servicenow_move_to_implement
                       timeout: 10m
                       spec:
                         useServiceNowTemplate: false
@@ -84,6 +83,8 @@ locals {
                         ticketType: change_request
                         ticketNumber: ${local.strategy_servicenow_ticket_number}
                         fields:
+                          - name: state
+                            value: Implement
                           - name: implementation_plan
                             value: |-
                               Harness deployment starting.
@@ -102,6 +103,85 @@ locals {
                             value: ${var.servicenow_assignment_group}
     EOT
   ) : ""
+  strategy_servicenow_approval_stage_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s\n", <<-EOT
+        - stage:
+            name: Approval
+            identifier: approval
+            description: Create the ServiceNow change record before governance evaluation
+            type: Approval
+            when:
+              pipelineStatus: Success
+            spec:
+              execution:
+                steps:
+${local.strategy_servicenow_create_yaml}
+            tags: {}
+
+    EOT
+  ) : ""
+  strategy_governance_manual_approval_yaml = var.enable_change_governance ? (var.enable_servicenow ? local.strategy_servicenow_approval_yaml : format("%s", <<-EOT
+                  - step:
+                      type: HarnessApproval
+                      name: Governance Approval
+                      identifier: governance_approval
+                      spec:
+                        approvalMessage: |
+                          Release governance policies flagged this deployment for manual approval.
+
+                          Policy evaluation status: <+execution.steps.governance.steps.evaluate_change_risk.output.status>
+                          Review the Evaluate Change Risk step for the full policy decision details.
+
+                          Release summary:
+                          - Service: ${var.service_ref}
+                          - Environment: ${var.environment_name}
+                          - Strategy: <+pipeline.variables.deployment_strategy>
+                          - Image tag: <+pipeline.variables.image_tag>
+                          - Test pass rate: <+pipeline.variables.test_pass_rate>
+                          - Critical vulnerabilities: <+pipeline.variables.critical_vulnerabilities>
+                          - High vulnerabilities: <+pipeline.variables.high_vulnerabilities>
+                          - Rollback ready: <+pipeline.variables.rollback_ready>
+                          - Open change failures: <+pipeline.variables.open_change_failures>
+                          - Change freeze active: <+pipeline.variables.change_freeze_active>
+                          - Requires data migration: <+pipeline.variables.requires_data_migration>
+
+                          Release candidate evidence:
+                          <+pipeline.variables.release_candidate_evidence>
+                        includePipelineExecutionHistory: true
+                        isAutoRejectEnabled: false
+                        approvers:
+                          userGroups:
+                            - ${var.change_governance_approver_group}
+                          minimumCount: 1
+                          disallowPipelineExecutor: false
+                        approverInputs: []
+                      timeout: 10m
+                      when:
+                        stageStatus: All
+    EOT
+  )) : ""
+  strategy_governance_auto_path_yaml = var.enable_change_governance ? (var.enable_servicenow ? local.strategy_servicenow_mark_implement_yaml : format("%s", <<-EOT
+                  - step:
+                      type: ShellScript
+                      name: Record Auto Approval
+                      identifier: record_auto_approval
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              echo "Policy evaluation passed."
+                              echo "Service: ${var.service_ref}"
+                              echo "Environment: ${var.environment_name}"
+                              echo "Strategy: <+pipeline.variables.deployment_strategy>"
+                        environmentVariables: []
+                        outputVariables: []
+${local.strategy_shell_step_delegate_yaml}                      timeout: 10m
+                      when:
+                        stageStatus: All
+    EOT
+  )) : ""
   strategy_servicenow_close_success_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
                   - step:
                       type: ServiceNowUpdate
@@ -163,10 +243,9 @@ locals {
             type: Custom
             when:
               pipelineStatus: Success
-${local.strategy_delegate_yaml}            spec:
+            spec:
               execution:
                 steps:
-${local.strategy_servicenow_create_yaml}
                   - step:
                       type: ShellScript
                       name: Assemble Change Context
@@ -220,7 +299,7 @@ ${local.strategy_servicenow_create_yaml}
                           - name: change_context
                             type: String
                             value: change_context
-                      timeout: 10m
+${local.strategy_shell_step_delegate_yaml}                      timeout: 10m
                   - stepGroup:
                       name: Governance
                       identifier: governance
@@ -247,43 +326,7 @@ ${local.strategy_servicenow_create_yaml}
                           name: Manual Approval Required
                           identifier: manual_approval_required
                           steps:
-                            - step:
-                                type: HarnessApproval
-                                name: Governance Approval
-                                identifier: governance_approval
-                                spec:
-                                  approvalMessage: |
-                                    Release governance policies flagged this deployment for manual approval.
-
-                                    Policy evaluation status: <+execution.steps.governance.steps.evaluate_change_risk.output.status>
-                                    Review the Evaluate Change Risk step for the full policy decision details.
-
-                                    Release summary:
-                                    - Service: ${var.service_ref}
-                                    - Environment: ${var.environment_name}
-                                    - Strategy: <+pipeline.variables.deployment_strategy>
-                                    - Image tag: <+pipeline.variables.image_tag>
-                                    - Test pass rate: <+pipeline.variables.test_pass_rate>
-                                    - Critical vulnerabilities: <+pipeline.variables.critical_vulnerabilities>
-                                    - High vulnerabilities: <+pipeline.variables.high_vulnerabilities>
-                                    - Rollback ready: <+pipeline.variables.rollback_ready>
-                                    - Open change failures: <+pipeline.variables.open_change_failures>
-                                    - Change freeze active: <+pipeline.variables.change_freeze_active>
-                                    - Requires data migration: <+pipeline.variables.requires_data_migration>
-
-                                    Release candidate evidence:
-                                    <+pipeline.variables.release_candidate_evidence>
-                                  includePipelineExecutionHistory: true
-                                  isAutoRejectEnabled: false
-                                  approvers:
-                                    userGroups:
-                                      - ${var.change_governance_approver_group}
-                                    minimumCount: 1
-                                    disallowPipelineExecutor: false
-                                  approverInputs: []
-                                timeout: 10m
-                                when:
-                                  stageStatus: All
+${local.strategy_governance_manual_approval_yaml}
                           when:
                             stageStatus: All
                             condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> == "error"
@@ -291,30 +334,10 @@ ${local.strategy_servicenow_create_yaml}
                           name: Auto Approval Path
                           identifier: auto_approval_path
                           steps:
-                            - step:
-                                type: ShellScript
-                                name: Record Auto Approval
-                                identifier: record_auto_approval
-                                spec:
-                                  shell: Bash
-                                  executionTarget: {}
-                                  source:
-                                    type: Inline
-                                    spec:
-                                      script: |
-                                        echo "Policy evaluation passed."
-                                        echo "Service: ${var.service_ref}"
-                                        echo "Environment: ${var.environment_name}"
-                                        echo "Strategy: <+pipeline.variables.deployment_strategy>"
-                                  environmentVariables: []
-                                  outputVariables: []
-                                timeout: 10m
-                                when:
-                                  stageStatus: All
+${local.strategy_governance_auto_path_yaml}
                           when:
                             stageStatus: All
                             condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> != "error"
-${local.strategy_servicenow_approval_yaml}
             tags: {}
             failureStrategies:
               - onFailure:
@@ -404,6 +427,7 @@ ${local.strategy_pipeline_yaml_tags != "" ? "${local.strategy_pipeline_yaml_tags
           required: false
           value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})
       stages:
+${local.strategy_servicenow_approval_stage_yaml}
 ${local.strategy_governance_stage_yaml}
         - stage:
             name: Blue-Green Deployment
@@ -413,7 +437,7 @@ ${local.strategy_governance_stage_yaml}
             when:
               pipelineStatus: Success
               condition: <+pipeline.variables.deployment_strategy> == "blue-green"
-${local.strategy_delegate_yaml}            spec:
+            spec:
               deploymentType: Kubernetes
               service:
                 serviceRef: ${var.service_ref}
@@ -432,7 +456,7 @@ ${local.strategy_delegate_yaml}            spec:
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -459,10 +483,11 @@ ${local.strategy_delegate_yaml}            spec:
                       type: ShellScript
                       name: Print Variables
                       identifier: print_variables
+                      timeout: 10m
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -480,8 +505,6 @@ ${local.strategy_delegate_yaml}            spec:
                               echo "========================================"
                         environmentVariables: []
                         outputVariables: []
-                      timeout: 10m
-${local.strategy_servicenow_update_yaml}
                   - step:
                       name: Stage Deployment
                       identifier: stage_deployment
@@ -531,10 +554,11 @@ ${local.strategy_servicenow_update_yaml}
                       type: ShellScript
                       name: Deployment Complete
                       identifier: deployment_complete
+                      timeout: 1m
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -550,7 +574,6 @@ ${local.strategy_servicenow_update_yaml}
                               echo "========================================"
                         environmentVariables: []
                         outputVariables: []
-                      timeout: 1m
 ${local.strategy_servicenow_close_success_yaml}
                 rollbackSteps:
 ${local.strategy_servicenow_close_failure_yaml}
@@ -568,7 +591,7 @@ ${local.strategy_servicenow_close_failure_yaml}
             when:
               pipelineStatus: Success
               condition: <+pipeline.variables.deployment_strategy> == "canary"
-${local.strategy_delegate_yaml}            spec:
+            spec:
               deploymentType: Kubernetes
               service:
                 serviceRef: ${var.service_ref}
@@ -587,7 +610,7 @@ ${local.strategy_delegate_yaml}            spec:
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -608,10 +631,11 @@ ${local.strategy_delegate_yaml}            spec:
                       type: ShellScript
                       name: Print Variables
                       identifier: print_variables
+                      timeout: 10m
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -628,7 +652,6 @@ ${local.strategy_delegate_yaml}            spec:
                               echo "========================================"
                         environmentVariables: []
                         outputVariables: []
-                      timeout: 10m
                   - step:
                       name: Canary Deployment
                       identifier: canary_deploy
@@ -644,10 +667,11 @@ ${local.strategy_delegate_yaml}            spec:
                       type: ShellScript
                       name: Get Canary Traffic Split
                       identifier: get_validation_urls
+                      timeout: 10m
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -673,7 +697,6 @@ ${local.strategy_delegate_yaml}            spec:
                           - name: STABLE_PCT
                             type: String
                             value: STABLE_PCT
-                      timeout: 10m
                   - step:
                       name: Approval
                       identifier: canary_approval
@@ -697,7 +720,6 @@ ${local.strategy_delegate_yaml}            spec:
                             - ${var.change_governance_approver_group}
                           minimumCount: 1
                           disallowPipelineExecutor: false
-${local.strategy_servicenow_update_yaml}
                   - step:
                       name: Canary Delete
                       identifier: canary_delete
@@ -715,10 +737,11 @@ ${local.strategy_servicenow_update_yaml}
                       type: ShellScript
                       name: Deployment Complete
                       identifier: deployment_complete
+                      timeout: 1m
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -733,7 +756,6 @@ ${local.strategy_servicenow_update_yaml}
                               echo "========================================"
                         environmentVariables: []
                         outputVariables: []
-                      timeout: 1m
 ${local.strategy_servicenow_close_success_yaml}
                 rollbackSteps:
                   - step:
@@ -757,7 +779,7 @@ ${local.strategy_servicenow_close_failure_yaml}
             when:
               pipelineStatus: Success
               condition: <+pipeline.variables.deployment_strategy> == "rolling"
-${local.strategy_delegate_yaml}            spec:
+            spec:
               deploymentType: Kubernetes
               service:
                 serviceRef: ${var.service_ref}
@@ -776,7 +798,7 @@ ${local.strategy_delegate_yaml}            spec:
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -797,10 +819,11 @@ ${local.strategy_delegate_yaml}            spec:
                       type: ShellScript
                       name: Print Variables
                       identifier: print_variables
+                      timeout: 10m
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -817,8 +840,6 @@ ${local.strategy_delegate_yaml}            spec:
                               echo "========================================"
                         environmentVariables: []
                         outputVariables: []
-                      timeout: 10m
-${local.strategy_servicenow_update_yaml}
                   - step:
                       name: Rolling Deployment
                       identifier: rolling_deploy
@@ -830,10 +851,11 @@ ${local.strategy_servicenow_update_yaml}
                       type: ShellScript
                       name: Deployment Complete
                       identifier: get_validation_urls
+                      timeout: 10m
                       spec:
                         shell: Bash
                         executionTarget: {}
-                        source:
+${local.strategy_shell_step_delegate_yaml}                        source:
                           type: Inline
                           spec:
                             script: |
@@ -843,7 +865,6 @@ ${local.strategy_servicenow_update_yaml}
                               echo "========================================"
                         environmentVariables: []
                         outputVariables: []
-                      timeout: 10m
 ${local.strategy_servicenow_close_success_yaml}
                 rollbackSteps:
                   - step:

@@ -229,8 +229,14 @@ template:
         status: manual
         locked: true
         type: String
+      - key: delegate_selector
+        value: <+pipeline.variables.project_factory_delegate_selector>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
       - key: create_delegate
-        value: "true"
+        value: "false"
         value_type: string
         status: manual
         locked: false

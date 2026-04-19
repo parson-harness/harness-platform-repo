@@ -1341,9 +1341,14 @@ pipeline:
                             "value": "true",
                             "value_type": "string"
                           },
+                          "delegate_selector": {
+                            "key": "delegate_selector",
+                            "value": "<+pipeline.variables.project_factory_delegate_selector>",
+                            "value_type": "string"
+                          },
                           "create_delegate": {
                             "key": "create_delegate",
-                            "value": "true",
+                            "value": "false",
                             "value_type": "string"
                           },
                           "manage_dns": {
@@ -1926,7 +1931,8 @@ pipeline:
                             update_tf_var "servicenow_assignment_group" "$SERVICENOW_ASSIGNMENT_GROUP" "string"
                             update_tf_var "create_opa_policies" "false" "string"
                             update_tf_var "acm_cert_arn" "$ACM_CERT_ARN" "string"
-                            update_tf_var "create_delegate" "true" "string"
+                            update_tf_var "delegate_selector" "<+pipeline.variables.project_factory_delegate_selector>" "string"
+                            update_tf_var "create_delegate" "false" "string"
                             update_tf_var "manage_dns" "true" "string"
                             update_tf_var "shared_alb_dns_name" "$SHARED_ALB_DNS_NAME" "string"
                           fi
@@ -2391,9 +2397,14 @@ pipeline:
                             "value": "true",
                             "value_type": "string"
                           },
+                          "delegate_selector": {
+                            "key": "delegate_selector",
+                            "value": "<+pipeline.variables.project_factory_delegate_selector>",
+                            "value_type": "string"
+                          },
                           "create_delegate": {
                             "key": "create_delegate",
-                            "value": "true",
+                            "value": "false",
                             "value_type": "string"
                           },
                           "manage_dns": {

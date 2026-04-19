@@ -349,6 +349,9 @@ def main() -> int:
         if not has_template_binding(eks_template_text, stack_var, pipeline_var):
             errors.append(f"EKS template binding missing: {stack_var} <- {pipeline_var}")
 
+    if not has_template_binding(eks_template_text, "delegate_selector", "project_factory_delegate_selector"):
+        errors.append("EKS template binding missing: delegate_selector <- project_factory_delegate_selector")
+
     if not has_template_binding(asg_template_text, "enable_change_governance", "enable_change_governance"):
         errors.append("ASG template binding missing: enable_change_governance <- enable_change_governance")
 
@@ -366,6 +369,9 @@ def main() -> int:
 
     if not has_literal_template_binding(eks_template_text, "use_harness_code", '"true"'):
         errors.append("EKS template is not locked to use_harness_code=true")
+
+    if not has_literal_template_binding(eks_template_text, "create_delegate", '"false"'):
+        errors.append("EKS template is not locked to create_delegate=false for shared-cluster sandboxes")
 
     if not has_literal_template_binding(asg_template_text, "use_harness_code", '"true"'):
         errors.append("ASG template is not locked to use_harness_code=true")
@@ -487,6 +493,24 @@ def main() -> int:
             f"Expected servicenow_assignment_group to be passed in both EKS create/recreate payloads, found {servicenow_assignment_payload_matches} bindings"
         )
 
+    delegate_selector_payload_matches = count_matches(
+        pipeline_text,
+        r'"delegate_selector"\s*:\s*\{[^}]*"value"\s*:\s*"<\+pipeline\.variables\.project_factory_delegate_selector>"',
+    )
+    if delegate_selector_payload_matches < 2:
+        errors.append(
+            f"Expected delegate_selector to be passed in both EKS create/recreate payloads, found {delegate_selector_payload_matches} bindings"
+        )
+
+    create_delegate_false_payload_matches = count_matches(
+        pipeline_text,
+        r'"create_delegate"\s*:\s*\{[^}]*"value"\s*:\s*"false"',
+    )
+    if create_delegate_false_payload_matches < 2:
+        errors.append(
+            f"Expected create_delegate=false in both EKS create/recreate payloads, found {create_delegate_false_payload_matches} bindings"
+        )
+
     for stack_var, env_var in (
         ("enable_servicenow", "ENABLE_SERVICENOW"),
         ("servicenow_connector_ref", "SERVICENOW_CONNECTOR_REF"),
@@ -498,6 +522,24 @@ def main() -> int:
         )
         if reconcile_count < 1:
             errors.append(f"Expected EKS reconcile update for {stack_var}, found {reconcile_count}")
+
+    delegate_selector_reconcile_matches = count_matches(
+        pipeline_text,
+        r'update_tf_var "delegate_selector" "<\+pipeline\.variables\.project_factory_delegate_selector>" "string"',
+    )
+    if delegate_selector_reconcile_matches < 1:
+        errors.append(
+            f"Expected EKS reconcile update for delegate_selector, found {delegate_selector_reconcile_matches}"
+        )
+
+    create_delegate_false_reconcile_matches = count_matches(
+        pipeline_text,
+        r'update_tf_var "create_delegate" "false" "string"',
+    )
+    if create_delegate_false_reconcile_matches < 1:
+        errors.append(
+            f"Expected EKS reconcile update for create_delegate=false, found {create_delegate_false_reconcile_matches}"
+        )
 
     if errors:
         print("Provisioner contract validation failed:")

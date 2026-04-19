@@ -13,38 +13,38 @@ module "sandbox_context" {
 }
 
 locals {
-  owner_title                = module.sandbox_context.owner_title
-  name_prefix                = module.sandbox_context.name_prefix
-  delegate_selector          = module.sandbox_context.delegate_selector
-  k8s_namespace              = "harness-demo-${var.owner}"
-  repo_name                  = "${var.owner}-demo-app"
-  service_id                 = "${var.owner}_demo_app"
-  service_name               = "${local.owner_title} Demo App"
-  dev_environment_id         = "${var.owner}_dev"
-  dev_environment_name       = "${local.owner_title} Dev"
-  k8s_infra_id               = "${var.owner}_k8s_dev"
-  k8s_infra_name             = "${local.owner_title} K8s Dev"
-  k8s_connector_id           = "${var.owner}_k8s_reference_architecture"
-  k8s_connector_name         = "${local.owner_title} K8s Reference Architecture"
-  aws_connector_id           = "${var.owner}_aws_reference_architecture"
-  aws_connector_name         = "${local.owner_title} AWS Reference Architecture"
-  github_connector_id        = "${var.owner}_github_reference_architecture"
-  github_connector_name      = "${local.owner_title} GitHub Reference Architecture"
-  har_registry_id            = "har-${var.owner}"
-  har_upstream_proxy_id      = "${var.owner}-dockerhub-proxy"
-  har_image_name             = "${var.owner}demoapp"
-  app_host                   = "${var.owner}.harness-demo.dev"
-  stage_host                 = "${var.owner}-stage.harness-demo.dev"
-  should_create_har          = var.shared_har_registry_id == ""
-  effective_har_registry_id  = var.shared_har_registry_id != "" ? var.shared_har_registry_id : local.har_registry_id
+  owner_title                     = module.sandbox_context.owner_title
+  name_prefix                     = module.sandbox_context.name_prefix
+  delegate_selector               = var.delegate_selector != "" ? var.delegate_selector : module.sandbox_context.delegate_selector
+  k8s_namespace                   = "harness-demo-${var.owner}"
+  repo_name                       = "${var.owner}-demo-app"
+  service_id                      = "${var.owner}_demo_app"
+  service_name                    = "${local.owner_title} Demo App"
+  dev_environment_id              = "${var.owner}_dev"
+  dev_environment_name            = "${local.owner_title} Dev"
+  k8s_infra_id                    = "${var.owner}_k8s_dev"
+  k8s_infra_name                  = "${local.owner_title} K8s Dev"
+  k8s_connector_id                = "${var.owner}_k8s_reference_architecture"
+  k8s_connector_name              = "${local.owner_title} K8s Reference Architecture"
+  aws_connector_id                = "${var.owner}_aws_reference_architecture"
+  aws_connector_name              = "${local.owner_title} AWS Reference Architecture"
+  github_connector_id             = "${var.owner}_github_reference_architecture"
+  github_connector_name           = "${local.owner_title} GitHub Reference Architecture"
+  har_registry_id                 = "har-${var.owner}"
+  har_upstream_proxy_id           = "${var.owner}-dockerhub-proxy"
+  har_image_name                  = "${var.owner}demoapp"
+  app_host                        = "${var.owner}.harness-demo.dev"
+  stage_host                      = "${var.owner}-stage.harness-demo.dev"
+  should_create_har               = var.shared_har_registry_id == ""
+  effective_har_registry_id       = var.shared_har_registry_id != "" ? var.shared_har_registry_id : local.har_registry_id
   effective_har_upstream_proxy_id = var.shared_har_upstream_proxy_id != "" ? var.shared_har_upstream_proxy_id : local.har_upstream_proxy_id
   should_create_harness_code_repo = var.shared_harness_code_repo_name == ""
-  harness_code_repo_name     = var.shared_harness_code_repo_name != "" ? var.shared_harness_code_repo_name : local.repo_name
-  should_create_github_connector = var.github_connector_ref == "" && var.github_token_ref != ""
-  effective_aws_connector_id = var.aws_connector_ref != "" ? var.aws_connector_ref : (var.create_aws_connector ? local.aws_connector_id : "")
-  effective_github_connector_id = var.github_connector_ref != "" ? var.github_connector_ref : (local.should_create_github_connector ? local.github_connector_id : "")
-  has_code_source               = true
-  pipeline_git_connector_ref    = local.should_create_github_connector ? local.github_connector_id : var.github_connector_ref
+  harness_code_repo_name          = var.shared_harness_code_repo_name != "" ? var.shared_harness_code_repo_name : local.repo_name
+  should_create_github_connector  = var.github_connector_ref == "" && var.github_token_ref != ""
+  effective_aws_connector_id      = var.aws_connector_ref != "" ? var.aws_connector_ref : (var.create_aws_connector ? local.aws_connector_id : "")
+  effective_github_connector_id   = var.github_connector_ref != "" ? var.github_connector_ref : (local.should_create_github_connector ? local.github_connector_id : "")
+  has_code_source                 = true
+  pipeline_git_connector_ref      = local.should_create_github_connector ? local.github_connector_id : var.github_connector_ref
 
   common_tag_values          = module.sandbox_context.common_tag_values
   common_tags                = module.sandbox_context.common_tags

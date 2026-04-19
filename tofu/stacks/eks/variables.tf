@@ -327,6 +327,12 @@ variable "coverage_report_artifact_path_prefix" {
 # Delegate Configuration
 ################################################################################
 
+variable "delegate_selector" {
+  description = "Optional delegate selector override for workload connectors and generated pipelines. Leave empty to derive delegate-${owner}; set to a stable shared delegate selector for shared-cluster sandboxes."
+  type        = string
+  default     = ""
+}
+
 variable "create_delegate" {
   description = "Create a Harness delegate for this POV"
   type        = bool
