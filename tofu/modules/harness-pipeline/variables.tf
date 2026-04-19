@@ -246,6 +246,24 @@ variable "change_governance_approver_group" {
   default     = "_project_all_users"
 }
 
+variable "enable_servicenow" {
+  description = "Enable ServiceNow change-management steps in generated deployment pipelines"
+  type        = bool
+  default     = false
+}
+
+variable "servicenow_connector_ref" {
+  description = "Account-level ServiceNow connector reference used by generated deployment pipelines"
+  type        = string
+  default     = "account.ServiceNow_Dev"
+}
+
+variable "servicenow_assignment_group" {
+  description = "ServiceNow assignment group applied to generated change requests"
+  type        = string
+  default     = "CAB Approval"
+}
+
 ################################################################################
 # Trigger Variables
 ################################################################################

@@ -170,11 +170,11 @@ module "harness_pipelines" {
   strategy_pipeline_id          = "${var.owner}_k8s_strategy_deploy"
   strategy_pipeline_name        = "${local.owner_title} Application Delivery"
   strategy_pipeline_description = "Unified deployment pipeline with runtime strategy selection for customer demos"
-  git_connector_ref       = local.pipeline_git_connector_ref
-  git_repo_name           = var.github_repo_name
-  har_registry_ref        = local.effective_har_registry_id
-  har_upstream_proxy_ref  = local.effective_har_upstream_proxy_id
-  har_image_name          = local.har_image_name
+  git_connector_ref             = local.pipeline_git_connector_ref
+  git_repo_name                 = var.github_repo_name
+  har_registry_ref              = local.effective_har_registry_id
+  har_upstream_proxy_ref        = local.effective_har_upstream_proxy_id
+  har_image_name                = local.har_image_name
 
   use_harness_code       = true
   harness_code_repo_name = local.harness_code_repo_name
@@ -183,19 +183,22 @@ module "harness_pipelines" {
   harness_project_id     = local.resolved_project_id
   harness_api_key        = var.harness_api_key
 
-  delegate_selector        = local.delegate_selector
-  pipeline_tags            = concat(["tofu-managed:true", "owner:${var.owner}", "deployment-target:eks", "managed-by:provisioner"], local.common_tag_values)
-  enable_change_governance = var.enable_change_governance
+  delegate_selector           = local.delegate_selector
+  pipeline_tags               = concat(["tofu-managed:true", "owner:${var.owner}", "deployment-target:eks", "managed-by:provisioner"], local.common_tag_values)
+  enable_change_governance    = var.enable_change_governance
+  enable_servicenow           = var.enable_servicenow
+  servicenow_connector_ref    = var.servicenow_connector_ref
+  servicenow_assignment_group = var.servicenow_assignment_group
 
   # Standard CI Gradle pipeline (with security scanning and supply chain)
   # Include owner prefix for multi-sandbox support in same project
-  create_standard_ci_gradle        = coalesce(var.create_standard_ci_gradle, false) && local.has_code_source
-  standard_ci_gradle_id            = "${var.owner}_standard_ci_gradle"
-  standard_ci_gradle_name          = "${local.owner_title} Standard CI - Gradle"
-  standard_ci_gradle_description   = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
-  standard_ci_gradle_test_packages = var.standard_ci_gradle_test_packages
-  har_base_image_registry          = "pkg.harness.io/${lower(var.harness_account_id)}/${local.effective_har_registry_id}"
-  publish_coverage_report_artifact = var.publish_coverage_report_artifact
+  create_standard_ci_gradle              = coalesce(var.create_standard_ci_gradle, false) && local.has_code_source
+  standard_ci_gradle_id                  = "${var.owner}_standard_ci_gradle"
+  standard_ci_gradle_name                = "${local.owner_title} Standard CI - Gradle"
+  standard_ci_gradle_description         = "Enterprise CI pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA)"
+  standard_ci_gradle_test_packages       = var.standard_ci_gradle_test_packages
+  har_base_image_registry                = "pkg.harness.io/${lower(var.harness_account_id)}/${local.effective_har_registry_id}"
+  publish_coverage_report_artifact       = var.publish_coverage_report_artifact
   coverage_report_artifact_connector_ref = var.publish_coverage_report_artifact ? local.effective_aws_connector_id : ""
   coverage_report_artifact_bucket        = var.coverage_report_artifact_bucket
   coverage_report_artifact_region        = var.coverage_report_artifact_region

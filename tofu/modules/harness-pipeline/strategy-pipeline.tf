@@ -13,7 +13,148 @@ locals {
       value = regex("^([^:]+):(.*)$", tag)[1]
     }
   ]
-  strategy_pipeline_yaml_tags = join("\n", [for tag in local.strategy_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
+  strategy_pipeline_yaml_tags       = join("\n", [for tag in local.strategy_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
+  strategy_servicenow_ticket_number = "<+pipeline.stages.change_governance.spec.execution.steps.servicenow_create_ticket.ticket.ticketNumber>"
+  strategy_servicenow_create_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
+                  - step:
+                      type: ServiceNowCreate
+                      name: Open Change Request
+                      identifier: servicenow_create_ticket
+                      timeout: 10m
+                      spec:
+                        connectorRef: ${var.servicenow_connector_ref}
+                        ticketType: change_request
+                        createType: Normal
+                        fields:
+                          - name: short_description
+                            value: "Begin deployment of ${var.service_ref} to ${var.environment_name}"
+                          - name: description
+                            value: |-
+                              Harness automated deployment initiated.
+                              Service: ${var.service_ref}
+                              Environment: ${var.environment_name} (${var.environment_type})
+                              Strategy: <+pipeline.variables.deployment_strategy>
+                              Image tag: <+pipeline.variables.image_tag>
+                              Pipeline: <+pipeline.name>
+                              Execution URL: <+pipeline.executionUrl>
+                          - name: assignment_group
+                            value: ${var.servicenow_assignment_group}
+                          - name: justification
+                            value: Standard change requested by Harness deployment automation.
+    EOT
+  ) : ""
+  strategy_servicenow_approval_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
+                  - step:
+                      type: ServiceNowApproval
+                      name: ServiceNow Approval
+                      identifier: servicenow_approval
+                      timeout: 1d
+                      spec:
+                        connectorRef: ${var.servicenow_connector_ref}
+                        ticketType: change_request
+                        ticketNumber: <+execution.steps.servicenow_create_ticket.ticket.ticketNumber>
+                        retryInterval: 1m
+                        approvalCriteria:
+                          type: KeyValues
+                          spec:
+                            matchAnyCondition: true
+                            conditions:
+                              - key: state
+                                operator: equals
+                                value: Implement
+                        rejectionCriteria:
+                          type: KeyValues
+                          spec:
+                            matchAnyCondition: true
+                            conditions: []
+                        changeWindow:
+                          startField: work_start
+                          endField: end_date
+    EOT
+  ) : ""
+  strategy_servicenow_update_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
+                  - step:
+                      type: ServiceNowUpdate
+                      name: Update Change Request
+                      identifier: servicenow_update_ticket
+                      timeout: 10m
+                      spec:
+                        useServiceNowTemplate: false
+                        connectorRef: ${var.servicenow_connector_ref}
+                        ticketType: change_request
+                        ticketNumber: ${local.strategy_servicenow_ticket_number}
+                        fields:
+                          - name: implementation_plan
+                            value: |-
+                              Harness deployment starting.
+                              Service: ${var.service_ref}
+                              Environment: ${var.environment_name}
+                              Strategy: <+pipeline.variables.deployment_strategy>
+                              Artifact: <+artifacts.primary.image>
+                              Execution URL: <+pipeline.executionUrl>
+                          - name: backout_plan
+                            value: Harness automated rollback.
+                          - name: work_notes
+                            value: |-
+                              Starting deployment of <+artifacts.primary.image> for ${var.service_ref} to ${var.environment_name}.
+                              Pipeline execution: <+pipeline.executionUrl>
+                          - name: assignment_group
+                            value: ${var.servicenow_assignment_group}
+    EOT
+  ) : ""
+  strategy_servicenow_close_success_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
+                  - step:
+                      type: ServiceNowUpdate
+                      name: Close Change Request
+                      identifier: servicenow_close_ticket
+                      timeout: 10m
+                      spec:
+                        useServiceNowTemplate: false
+                        connectorRef: ${var.servicenow_connector_ref}
+                        ticketType: change_request
+                        ticketNumber: ${local.strategy_servicenow_ticket_number}
+                        fields:
+                          - name: state
+                            value: "3"
+                          - name: close_code
+                            value: successful
+                          - name: close_notes
+                            value: |-
+                              Deployment successful for <+artifacts.primary.image> to ${var.environment_name}.
+                              Pipeline execution: <+pipeline.executionUrl>
+                          - name: work_notes
+                            value: |-
+                              Deployment completed successfully.
+                              Strategy: <+pipeline.variables.deployment_strategy>
+    EOT
+  ) : ""
+  strategy_servicenow_close_failure_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
+                  - step:
+                      type: ServiceNowUpdate
+                      name: Close Change Request
+                      identifier: servicenow_close_ticket
+                      timeout: 10m
+                      spec:
+                        useServiceNowTemplate: false
+                        connectorRef: ${var.servicenow_connector_ref}
+                        ticketType: change_request
+                        ticketNumber: ${local.strategy_servicenow_ticket_number}
+                        fields:
+                          - name: state
+                            value: "3"
+                          - name: close_code
+                            value: unsuccessful
+                          - name: close_notes
+                            value: |-
+                              Deployment failed for <+artifacts.primary.image> to ${var.environment_name}.
+                              Harness initiated rollback.
+                              Pipeline execution: <+pipeline.executionUrl>
+                          - name: work_notes
+                            value: |-
+                              Deployment failed and rollback was triggered.
+                              Strategy: <+pipeline.variables.deployment_strategy>
+    EOT
+  ) : ""
   strategy_governance_stage_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
         - stage:
             name: Release Governance
@@ -25,6 +166,7 @@ locals {
 ${local.strategy_delegate_yaml}            spec:
               execution:
                 steps:
+${local.strategy_servicenow_create_yaml}
                   - step:
                       type: ShellScript
                       name: Assemble Change Context
@@ -172,6 +314,7 @@ ${local.strategy_delegate_yaml}            spec:
                           when:
                             stageStatus: All
                             condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> != "error"
+${local.strategy_servicenow_approval_yaml}
             tags: {}
             failureStrategies:
               - onFailure:
@@ -338,6 +481,7 @@ ${local.strategy_delegate_yaml}            spec:
                         environmentVariables: []
                         outputVariables: []
                       timeout: 10m
+${local.strategy_servicenow_update_yaml}
                   - step:
                       name: Stage Deployment
                       identifier: stage_deployment
@@ -407,7 +551,9 @@ ${local.strategy_delegate_yaml}            spec:
                         environmentVariables: []
                         outputVariables: []
                       timeout: 1m
-                rollbackSteps: []
+${local.strategy_servicenow_close_success_yaml}
+                rollbackSteps:
+${local.strategy_servicenow_close_failure_yaml}
             failureStrategies:
               - onFailure:
                   errors:
@@ -551,6 +697,7 @@ ${local.strategy_delegate_yaml}            spec:
                             - ${var.change_governance_approver_group}
                           minimumCount: 1
                           disallowPipelineExecutor: false
+${local.strategy_servicenow_update_yaml}
                   - step:
                       name: Canary Delete
                       identifier: canary_delete
@@ -587,6 +734,7 @@ ${local.strategy_delegate_yaml}            spec:
                         environmentVariables: []
                         outputVariables: []
                       timeout: 1m
+${local.strategy_servicenow_close_success_yaml}
                 rollbackSteps:
                   - step:
                       name: Canary Delete
@@ -594,6 +742,7 @@ ${local.strategy_delegate_yaml}            spec:
                       type: K8sCanaryDelete
                       timeout: 10m
                       spec: {}
+${local.strategy_servicenow_close_failure_yaml}
             failureStrategies:
               - onFailure:
                   errors:
@@ -669,6 +818,7 @@ ${local.strategy_delegate_yaml}            spec:
                         environmentVariables: []
                         outputVariables: []
                       timeout: 10m
+${local.strategy_servicenow_update_yaml}
                   - step:
                       name: Rolling Deployment
                       identifier: rolling_deploy
@@ -694,6 +844,7 @@ ${local.strategy_delegate_yaml}            spec:
                         environmentVariables: []
                         outputVariables: []
                       timeout: 10m
+${local.strategy_servicenow_close_success_yaml}
                 rollbackSteps:
                   - step:
                       name: Rolling Rollback
@@ -701,6 +852,7 @@ ${local.strategy_delegate_yaml}            spec:
                       type: K8sRollingRollback
                       timeout: 10m
                       spec: {}
+${local.strategy_servicenow_close_failure_yaml}
             failureStrategies:
               - onFailure:
                   errors:

@@ -186,6 +186,24 @@ spec:
           enum:
             - "true"
             - "false"
+        enable_servicenow:
+          title: Enable ServiceNow Change Mgmt?
+          type: string
+          description: "Enable ServiceNow change-management steps in the generated EKS deployment pipeline."
+          default: "false"
+          enum:
+            - "true"
+            - "false"
+        servicenow_connector_ref:
+          title: ServiceNow Connector Ref
+          type: string
+          description: "Account-level ServiceNow connector reference reused by the generated EKS deployment pipeline."
+          default: "account.ServiceNow_Dev"
+        servicenow_assignment_group:
+          title: ServiceNow Assignment Group
+          type: string
+          description: "Assignment group set on generated ServiceNow change requests."
+          default: "CAB Approval"
         create_project_factory:
           title: Create Project Factory?
           type: string
@@ -263,6 +281,9 @@ spec:
           force_recreate: ${{ parameters.force_recreate }}
           create_opa_policies: ${{ parameters.create_opa_policies }}
           enable_change_governance: ${{ parameters.enable_change_governance }}
+          enable_servicenow: ${{ parameters.enable_servicenow }}
+          servicenow_connector_ref: ${{ parameters.servicenow_connector_ref }}
+          servicenow_assignment_group: ${{ parameters.servicenow_assignment_group }}
           create_project_factory: ${{ parameters.create_project_factory }}
           create_project_shared_har_registry: ${{ parameters.create_project_shared_har_registry }}
           project_factory_har_registry_id: ${{ parameters.project_factory_har_registry_id }}

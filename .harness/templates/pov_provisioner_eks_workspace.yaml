@@ -157,6 +157,24 @@ template:
         status: manual
         locked: false
         type: String
+      - key: enable_servicenow
+        value: <+pipeline.variables.enable_servicenow>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: servicenow_connector_ref
+        value: <+pipeline.variables.servicenow_connector_ref>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
+      - key: servicenow_assignment_group
+        value: <+pipeline.variables.servicenow_assignment_group>
+        value_type: string
+        status: manual
+        locked: false
+        type: String
       - key: create_opa_policies
         value: "false"
         value_type: string

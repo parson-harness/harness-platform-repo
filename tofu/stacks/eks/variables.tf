@@ -441,6 +441,24 @@ variable "enable_change_governance" {
   default     = true
 }
 
+variable "enable_servicenow" {
+  description = "Enable ServiceNow change-management steps in generated EKS deployment pipelines"
+  type        = bool
+  default     = false
+}
+
+variable "servicenow_connector_ref" {
+  description = "Account-level ServiceNow connector reference reused by generated EKS deployment pipelines"
+  type        = string
+  default     = "account.ServiceNow_Dev"
+}
+
+variable "servicenow_assignment_group" {
+  description = "ServiceNow assignment group set on generated EKS change requests"
+  type        = string
+  default     = "CAB Approval"
+}
+
 variable "manage_shared_change_governance" {
   description = "Manage shared change-governance policies and policy set from this stack. Leave false for sandbox workspaces that should reuse project-level governance assets."
   type        = bool

@@ -138,6 +138,21 @@ pipeline:
       description: Enable policy-driven change governance gates in generated workload deployment pipelines. Leave true to use project-level governance when available.
       required: false
       value: <+input>.default(true).allowedValues(true,false)
+    - name: enable_servicenow
+      type: String
+      description: Enable ServiceNow change-management steps in generated EKS deployment pipelines.
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
+    - name: servicenow_connector_ref
+      type: String
+      description: Account-level ServiceNow connector reference reused by generated EKS deployment pipelines.
+      required: false
+      value: <+input>.default(account.ServiceNow_Dev)
+    - name: servicenow_assignment_group
+      type: String
+      description: Assignment group set on generated ServiceNow change requests for EKS delivery.
+      required: false
+      value: <+input>.default(CAB Approval)
     - name: create_asg_strategy_pipeline
       type: String
       description: Advanced override when use_profile_defaults is false. Create the ASG strategy deployment pipeline.
@@ -1271,6 +1286,21 @@ pipeline:
                             "value": "<+pipeline.variables.enable_change_governance>",
                             "value_type": "string"
                           },
+                          "enable_servicenow": {
+                            "key": "enable_servicenow",
+                            "value": "<+pipeline.variables.enable_servicenow>",
+                            "value_type": "string"
+                          },
+                          "servicenow_connector_ref": {
+                            "key": "servicenow_connector_ref",
+                            "value": "<+pipeline.variables.servicenow_connector_ref>",
+                            "value_type": "string"
+                          },
+                          "servicenow_assignment_group": {
+                            "key": "servicenow_assignment_group",
+                            "value": "<+pipeline.variables.servicenow_assignment_group>",
+                            "value_type": "string"
+                          },
                           "create_opa_policies": {
                             "key": "create_opa_policies",
                             "value": "false",
@@ -1748,6 +1778,9 @@ pipeline:
                           CREATE_ASG_STRATEGY_PIPELINE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_strategy_pipeline>"
                           CREATE_ASG_CI_PIPELINE="<+execution.steps.resolve_sandbox_profile.output.outputVariables.resolved_create_asg_ci_pipeline>"
                           ENABLE_CHANGE_GOVERNANCE="<+pipeline.variables.enable_change_governance>"
+                          ENABLE_SERVICENOW="<+pipeline.variables.enable_servicenow>"
+                          SERVICENOW_CONNECTOR_REF="<+pipeline.variables.servicenow_connector_ref>"
+                          SERVICENOW_ASSIGNMENT_GROUP="<+pipeline.variables.servicenow_assignment_group>"
                           ACM_CERT_ARN="<+pipeline.variables.acm_cert_arn>"
                           SHARED_ALB_DNS_NAME="<+pipeline.variables.shared_alb_dns_name>"
                           RESOLVED_SHARED_AWS_CONNECTOR_REF="<+execution.steps.resolve_shared_connector_refs.output.outputVariables.resolved_shared_aws_connector_ref>"
@@ -1888,6 +1921,9 @@ pipeline:
                             update_tf_var "create_strategy_pipeline" "$CREATE_STRATEGY_PIPELINE" "string"
                             update_tf_var "create_standard_ci_gradle" "$CREATE_STANDARD_CI_GRADLE" "string"
                             update_tf_var "enable_change_governance" "$ENABLE_CHANGE_GOVERNANCE" "string"
+                            update_tf_var "enable_servicenow" "$ENABLE_SERVICENOW" "string"
+                            update_tf_var "servicenow_connector_ref" "$SERVICENOW_CONNECTOR_REF" "string"
+                            update_tf_var "servicenow_assignment_group" "$SERVICENOW_ASSIGNMENT_GROUP" "string"
                             update_tf_var "create_opa_policies" "false" "string"
                             update_tf_var "acm_cert_arn" "$ACM_CERT_ARN" "string"
                             update_tf_var "create_delegate" "true" "string"
@@ -2298,6 +2334,21 @@ pipeline:
                           "enable_change_governance": {
                             "key": "enable_change_governance",
                             "value": "<+pipeline.variables.enable_change_governance>",
+                            "value_type": "string"
+                          },
+                          "enable_servicenow": {
+                            "key": "enable_servicenow",
+                            "value": "<+pipeline.variables.enable_servicenow>",
+                            "value_type": "string"
+                          },
+                          "servicenow_connector_ref": {
+                            "key": "servicenow_connector_ref",
+                            "value": "<+pipeline.variables.servicenow_connector_ref>",
+                            "value_type": "string"
+                          },
+                          "servicenow_assignment_group": {
+                            "key": "servicenow_assignment_group",
+                            "value": "<+pipeline.variables.servicenow_assignment_group>",
                             "value_type": "string"
                           },
                           "create_opa_policies": {

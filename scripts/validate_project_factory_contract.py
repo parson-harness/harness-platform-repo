@@ -64,6 +64,9 @@ REQUIRED_TEMPLATE_PREFLIGHT_STEP_IDENTIFIER = "verify_required_workspace_templat
 GOVERNANCE_WORKFLOW_INPUTS = [
     "create_opa_policies",
     "enable_change_governance",
+    "enable_servicenow",
+    "servicenow_connector_ref",
+    "servicenow_assignment_group",
 ]
 
 INTENTIONALLY_UNSURFACED_STACK_VARS = {
@@ -325,6 +328,10 @@ def main() -> int:
     if not has_pipeline_input(pipeline_text, "enable_change_governance"):
         errors.append("Pipeline input missing: enable_change_governance")
 
+    for name in ("enable_servicenow", "servicenow_connector_ref", "servicenow_assignment_group"):
+        if not has_pipeline_input(pipeline_text, name):
+            errors.append(f"Pipeline input missing: {name}")
+
     if 'value: <+input>.default(har).allowedValues(har)' not in pipeline_text:
         errors.append("Pipeline input artifact_registry_type is not locked to HAR-only")
 
@@ -333,6 +340,14 @@ def main() -> int:
 
     if not has_template_binding(eks_template_text, "enable_change_governance", "enable_change_governance"):
         errors.append("EKS template binding missing: enable_change_governance <- enable_change_governance")
+
+    for stack_var, pipeline_var in (
+        ("enable_servicenow", "enable_servicenow"),
+        ("servicenow_connector_ref", "servicenow_connector_ref"),
+        ("servicenow_assignment_group", "servicenow_assignment_group"),
+    ):
+        if not has_template_binding(eks_template_text, stack_var, pipeline_var):
+            errors.append(f"EKS template binding missing: {stack_var} <- {pipeline_var}")
 
     if not has_template_binding(asg_template_text, "enable_change_governance", "enable_change_governance"):
         errors.append("ASG template binding missing: enable_change_governance <- enable_change_governance")
@@ -444,6 +459,45 @@ def main() -> int:
     )
     if reconcile_matches < 2:
         errors.append(f"Expected enable_change_governance reconcile updates for both workload targets, found {reconcile_matches}")
+
+    servicenow_enable_payload_matches = count_matches(
+        pipeline_text,
+        r'"enable_servicenow"\s*:\s*\{[^}]*"value"\s*:\s*"<\+pipeline\.variables\.enable_servicenow>"',
+    )
+    if servicenow_enable_payload_matches < 2:
+        errors.append(
+            f"Expected enable_servicenow to be passed in both EKS create/recreate payloads, found {servicenow_enable_payload_matches} bindings"
+        )
+
+    servicenow_connector_payload_matches = count_matches(
+        pipeline_text,
+        r'"servicenow_connector_ref"\s*:\s*\{[^}]*"value"\s*:\s*"<\+pipeline\.variables\.servicenow_connector_ref>"',
+    )
+    if servicenow_connector_payload_matches < 2:
+        errors.append(
+            f"Expected servicenow_connector_ref to be passed in both EKS create/recreate payloads, found {servicenow_connector_payload_matches} bindings"
+        )
+
+    servicenow_assignment_payload_matches = count_matches(
+        pipeline_text,
+        r'"servicenow_assignment_group"\s*:\s*\{[^}]*"value"\s*:\s*"<\+pipeline\.variables\.servicenow_assignment_group>"',
+    )
+    if servicenow_assignment_payload_matches < 2:
+        errors.append(
+            f"Expected servicenow_assignment_group to be passed in both EKS create/recreate payloads, found {servicenow_assignment_payload_matches} bindings"
+        )
+
+    for stack_var, env_var in (
+        ("enable_servicenow", "ENABLE_SERVICENOW"),
+        ("servicenow_connector_ref", "SERVICENOW_CONNECTOR_REF"),
+        ("servicenow_assignment_group", "SERVICENOW_ASSIGNMENT_GROUP"),
+    ):
+        reconcile_count = count_matches(
+            pipeline_text,
+            rf'update_tf_var "{stack_var}" "\${env_var}" "string"',
+        )
+        if reconcile_count < 1:
+            errors.append(f"Expected EKS reconcile update for {stack_var}, found {reconcile_count}")
 
     if errors:
         print("Provisioner contract validation failed:")
