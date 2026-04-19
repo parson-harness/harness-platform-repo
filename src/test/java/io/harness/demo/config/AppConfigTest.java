@@ -156,6 +156,44 @@ class AppConfigTest {
     }
 
     @Nested
+    @DisplayName("Deployment Strategy Tests")
+    class DeploymentStrategyTests {
+
+        @Test
+        @DisplayName("Should infer blue-green when deployment variant is blue")
+        void getEffectiveDeploymentStrategy_shouldInferBlueGreenWhenVariantIsBlue() {
+            appConfig.setDeploymentStrategy("");
+            appConfig.setDeploymentVariant("blue");
+            appConfig.setDeploymentTrack("");
+
+            assertEquals("blue-green", appConfig.getEffectiveDeploymentStrategy());
+            assertEquals("Blue Green", appConfig.getDisplayDeploymentStrategy());
+        }
+
+        @Test
+        @DisplayName("Should infer canary when deployment track is stable")
+        void getEffectiveDeploymentStrategy_shouldInferCanaryWhenTrackIsStable() {
+            appConfig.setDeploymentStrategy("");
+            appConfig.setDeploymentVariant("");
+            appConfig.setDeploymentTrack("stable");
+
+            assertEquals("canary", appConfig.getEffectiveDeploymentStrategy());
+            assertEquals("Canary", appConfig.getDisplayDeploymentStrategy());
+        }
+
+        @Test
+        @DisplayName("Should prefer explicit deployment strategy when provided")
+        void getEffectiveDeploymentStrategy_shouldPreferExplicitStrategyWhenProvided() {
+            appConfig.setDeploymentStrategy("canary");
+            appConfig.setDeploymentVariant("blue");
+            appConfig.setDeploymentTrack("");
+
+            assertEquals("canary", appConfig.getEffectiveDeploymentStrategy());
+            assertEquals("Canary", appConfig.getDisplayDeploymentStrategy());
+        }
+    }
+
+    @Nested
     @DisplayName("Variant Color Tests")
     class VariantColorTests {
 
