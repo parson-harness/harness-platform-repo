@@ -14,42 +14,79 @@ terraform {
 }
 
 locals {
-  harness_api_base = trimsuffix(trimsuffix(trimsuffix(var.harness_endpoint, "/"), "/gratis"), "/gateway")
+  harness_api_endpoint = trimsuffix(trimsuffix(var.harness_endpoint, "/"), "/gateway")
 }
 
 ################################################################################
 # DockerHub Upstream Proxy (project-level, for isolated POV environments)
 ################################################################################
 
-resource "harness_platform_har_registry" "dockerhub_upstream" {
+resource "terraform_data" "dockerhub_upstream" {
   count = var.create_dockerhub_upstream ? 1 : 0
 
-  identifier   = var.dockerhub_upstream_id
-  description  = "DockerHub upstream proxy for ${var.project_id}"
-  space_ref    = "${var.account_id}/${var.org_id}/${var.project_id}"
-  package_type = "DOCKER"
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -e
+      UPSTREAM_PATH="$HARNESS_API_ENDPOINT/har/api/v1/registry/${var.account_id}/${var.org_id}/${var.project_id}/${var.dockerhub_upstream_id}/%2B"
+      RESP=$(curl -s -w "\n%%{http_code}" "$UPSTREAM_PATH" -H "x-api-key: $HARNESS_API_KEY")
+      HTTP_CODE=$(echo "$RESP" | tail -n1)
 
-  config {
-    type   = "UPSTREAM"
-    source = "Dockerhub"
-    url    = "https://index.docker.io/v2/"
+      if [ "$HTTP_CODE" = "200" ]; then
+        exit 0
+      fi
 
-    auth {
-      auth_type         = var.dockerhub_username != "" ? "UserPassword" : "Anonymous"
-      user_name         = var.dockerhub_username != "" ? var.dockerhub_username : null
-      secret_identifier = var.dockerhub_username != "" ? var.dockerhub_password_secret_ref : null
-      secret_space_path = var.dockerhub_username != "" ? var.dockerhub_secret_space_path : null
+      if [ "$HTTP_CODE" != "404" ]; then
+        echo "$RESP"
+        exit 1
+      fi
+
+      if [ -n "${var.dockerhub_username}" ]; then
+        PAYLOAD=$(cat <<'JSON'
+{"identifier":"${var.dockerhub_upstream_id}","packageType":"DOCKER","parentRef":"${var.account_id}/${var.org_id}/${var.project_id}","description":"DockerHub upstream proxy for ${var.project_id}","config":{"type":"UPSTREAM","source":"Dockerhub","authType":"UserPassword","userName":"${var.dockerhub_username}","secretIdentifier":"${var.dockerhub_password_secret_ref}","secretSpacePath":"${var.dockerhub_secret_space_path}"}}
+JSON
+)
+      else
+        PAYLOAD=$(cat <<'JSON'
+{"identifier":"${var.dockerhub_upstream_id}","packageType":"DOCKER","parentRef":"${var.account_id}/${var.org_id}/${var.project_id}","description":"DockerHub upstream proxy for ${var.project_id}","config":{"type":"UPSTREAM","source":"Dockerhub","authType":"Anonymous"}}
+JSON
+)
+      fi
+
+      RESP=$(curl -s -w "\n%%{http_code}" -X POST "$HARNESS_API_ENDPOINT/har/api/v1/registry?space_ref=${var.account_id}/${var.org_id}/${var.project_id}/%2B" -H "x-api-key: $HARNESS_API_KEY" -H "Content-Type: application/json" -d "$PAYLOAD")
+      HTTP_CODE=$(echo "$RESP" | tail -n1)
+
+      case "$HTTP_CODE" in
+        200|201|409) exit 0 ;;
+        *) echo "$RESP"; exit 1 ;;
+      esac
+    EOT
+
+    environment = {
+      HARNESS_API_ENDPOINT = local.harness_api_endpoint
+      HARNESS_API_KEY      = var.harness_api_key
     }
   }
 
-  depends_on = [terraform_data.cleanup_existing_registry]
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_API_ENDPOINT/har/api/v1/registry/${var.account_id}/${var.org_id}/${var.project_id}/${var.dockerhub_upstream_id}/%2B" -H "x-api-key: $HARNESS_API_KEY" -H "Content-Type: application/json")
+      HTTP_CODE=$(echo "$RESP" | tail -n1)
 
-  parent_ref = "${var.account_id}/${var.org_id}/${var.project_id}"
+      case "$HTTP_CODE" in
+        200|204|404) exit 0 ;;
+        *) echo "$RESP"; exit 1 ;;
+      esac
+    EOT
 
-  lifecycle {
-    prevent_destroy = false
-    # If the resource was deleted outside of Terraform, recreate it
-    create_before_destroy = true
+    environment = {
+      HARNESS_API_ENDPOINT = local.harness_api_endpoint
+      HARNESS_API_KEY      = var.harness_api_key
+    }
+  }
+
+  input = {
+    identifier = var.dockerhub_upstream_id
   }
 }
 
@@ -60,78 +97,95 @@ resource "harness_platform_har_registry" "dockerhub_upstream" {
 ################################################################################
 
 resource "terraform_data" "cleanup_existing_registry" {
-  count = var.harness_api_key != "" ? 1 : 0
-
-  provisioner "local-exec" {
-    command = <<-EOT
-      # Delete main registry first (it depends on upstream)
-      echo "Cleaning up existing HAR registry: ${var.registry_id}"
-      REGISTRY_REF="${var.account_id}/${var.org_id}/${var.project_id}/${var.registry_id}/+"
-      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_API_BASE/har/api/v1/registry/$REGISTRY_REF" \
-        -H "x-api-key: $HARNESS_API_KEY" \
-        -H "Content-Type: application/json")
-      HTTP_CODE=$(echo "$RESP" | tail -n1)
-      BODY=$(echo "$RESP" | head -n -1)
-      echo "  ${var.registry_id}: $HTTP_CODE"
-      [ -n "$BODY" ] && echo "  Response: $BODY"
-      
-      # Delete upstream proxy if it exists
-      echo "Cleaning up existing upstream proxy: ${var.dockerhub_upstream_id}"
-      UPSTREAM_REF="${var.account_id}/${var.org_id}/${var.project_id}/${var.dockerhub_upstream_id}/+"
-      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_API_BASE/har/api/v1/registry/$UPSTREAM_REF" \
-        -H "x-api-key: $HARNESS_API_KEY" \
-        -H "Content-Type: application/json")
-      HTTP_CODE=$(echo "$RESP" | tail -n1)
-      BODY=$(echo "$RESP" | head -n -1)
-      echo "  ${var.dockerhub_upstream_id}: $HTTP_CODE"
-      [ -n "$BODY" ] && echo "  Response: $BODY"
-      
-      # Small delay to ensure deletion is processed
-      sleep 2
-      exit 0
-    EOT
-
-    environment = {
-      HARNESS_API_BASE = local.harness_api_base
-      HARNESS_API_KEY  = var.harness_api_key
-    }
-  }
-
-  triggers_replace = [
-    var.registry_id,
-    var.account_id,
-    var.org_id,
-    var.project_id
-    # Removed timestamp() - cleanup should only run when identifiers change,
-    # not on every apply (which would delete resources before recreating them)
-  ]
+  count = 0
 }
 
 ################################################################################
 # Project-Level Docker Registry (VIRTUAL type with project-level upstream proxy)
 ################################################################################
 
-resource "harness_platform_har_registry" "registry" {
-  identifier   = var.registry_id
-  description  = var.registry_description
-  space_ref    = "${var.account_id}/${var.org_id}/${var.project_id}"
-  package_type = "DOCKER"
+resource "terraform_data" "registry" {
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -e
+      REGISTRY_PATH="$HARNESS_API_ENDPOINT/har/api/v1/registry/${var.account_id}/${var.org_id}/${var.project_id}/${var.registry_id}/%2B"
+      RESP=$(curl -s -w "\n%%{http_code}" "$REGISTRY_PATH" -H "x-api-key: $HARNESS_API_KEY")
+      HTTP_CODE=$(echo "$RESP" | tail -n1)
+      BODY=$(echo "$RESP" | head -n -1)
 
-  config {
-    type             = "VIRTUAL"
-    upstream_proxies = var.create_dockerhub_upstream ? [var.dockerhub_upstream_id] : var.upstream_proxy_ids
+      if [ "$HTTP_CODE" = "200" ]; then
+        if [ "${var.create_dockerhub_upstream}" != "true" ] || echo "$BODY" | grep -q '"${var.dockerhub_upstream_id}"'; then
+          exit 0
+        fi
+
+        PAYLOAD=$(cat <<'JSON'
+{"identifier":"${var.registry_id}","packageType":"DOCKER","parentRef":"${var.account_id}/${var.org_id}/${var.project_id}","description":"${var.registry_description}","config":{"type":"VIRTUAL","upstreamProxies":["${var.dockerhub_upstream_id}"]}}
+JSON
+)
+        RESP=$(curl -s -w "\n%%{http_code}" -X PUT "$REGISTRY_PATH" -H "x-api-key: $HARNESS_API_KEY" -H "Content-Type: application/json" -d "$PAYLOAD")
+        HTTP_CODE=$(echo "$RESP" | tail -n1)
+
+        case "$HTTP_CODE" in
+          200|201) exit 0 ;;
+          *) echo "$RESP"; exit 1 ;;
+        esac
+      fi
+
+      if [ "$HTTP_CODE" != "404" ]; then
+        echo "$RESP"
+        exit 1
+      fi
+
+      if [ "${var.create_dockerhub_upstream}" = "true" ]; then
+        PAYLOAD=$(cat <<'JSON'
+{"identifier":"${var.registry_id}","packageType":"DOCKER","parentRef":"${var.account_id}/${var.org_id}/${var.project_id}","description":"${var.registry_description}","config":{"type":"VIRTUAL","upstreamProxies":["${var.dockerhub_upstream_id}"]}}
+JSON
+)
+      else
+        PAYLOAD=$(cat <<'JSON'
+{"identifier":"${var.registry_id}","packageType":"DOCKER","parentRef":"${var.account_id}/${var.org_id}/${var.project_id}","description":"${var.registry_description}","config":{"type":"VIRTUAL","upstreamProxies":[]}}
+JSON
+)
+      fi
+      RESP=$(curl -s -w "\n%%{http_code}" -X POST "$HARNESS_API_ENDPOINT/har/api/v1/registry?space_ref=${var.account_id}/${var.org_id}/${var.project_id}/%2B" -H "x-api-key: $HARNESS_API_KEY" -H "Content-Type: application/json" -d "$PAYLOAD")
+      HTTP_CODE=$(echo "$RESP" | tail -n1)
+
+      case "$HTTP_CODE" in
+        200|201|409) exit 0 ;;
+        *) echo "$RESP"; exit 1 ;;
+      esac
+    EOT
+
+    environment = {
+      HARNESS_API_ENDPOINT = local.harness_api_endpoint
+      HARNESS_API_KEY      = var.harness_api_key
+    }
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = <<-EOT
+      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_API_ENDPOINT/har/api/v1/registry/${var.account_id}/${var.org_id}/${var.project_id}/${var.registry_id}/%2B" -H "x-api-key: $HARNESS_API_KEY" -H "Content-Type: application/json")
+      HTTP_CODE=$(echo "$RESP" | tail -n1)
+
+      case "$HTTP_CODE" in
+        200|204|404) exit 0 ;;
+        *) echo "$RESP"; exit 1 ;;
+      esac
+    EOT
+
+    environment = {
+      HARNESS_API_ENDPOINT = local.harness_api_endpoint
+      HARNESS_API_KEY      = var.harness_api_key
+    }
   }
 
   depends_on = [
-    harness_platform_har_registry.dockerhub_upstream,
+    terraform_data.dockerhub_upstream,
     terraform_data.cleanup_existing_registry
   ]
 
-  parent_ref = "${var.account_id}/${var.org_id}/${var.project_id}"
-
-  lifecycle {
-    prevent_destroy = false
-    # Ignore changes to allow re-import if registry already exists
-    ignore_changes = [description]
+  input = {
+    identifier = var.registry_id
   }
 }

@@ -4,7 +4,7 @@
 
 output "registry_id" {
   description = "The identifier of the created registry"
-  value       = harness_platform_har_registry.registry.identifier
+  value       = var.registry_id
 }
 
 output "registry_url" {
@@ -14,5 +14,5 @@ output "registry_url" {
 
 output "dockerhub_upstream_id" {
   description = "The identifier of the DockerHub upstream proxy (if created)"
-  value       = var.create_dockerhub_upstream ? harness_platform_har_registry.dockerhub_upstream[0].identifier : null
+  value       = var.create_dockerhub_upstream ? var.dockerhub_upstream_id : null
 }
