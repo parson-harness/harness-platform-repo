@@ -54,7 +54,7 @@ provider "aws" {
 }
 
 provider "harness" {
-  endpoint         = var.harness_endpoint
+  endpoint         = "${trimsuffix(trimsuffix(trimsuffix(var.harness_endpoint, "/"), "/gratis"), "/gateway")}/gateway"
   account_id       = var.harness_account_id
   platform_api_key = var.harness_api_key
 }

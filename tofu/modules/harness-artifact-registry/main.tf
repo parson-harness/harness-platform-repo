@@ -13,6 +13,10 @@ terraform {
   }
 }
 
+locals {
+  harness_api_base = trimsuffix(trimsuffix(trimsuffix(var.harness_endpoint, "/"), "/gratis"), "/gateway")
+}
+
 ################################################################################
 # DockerHub Upstream Proxy (project-level, for isolated POV environments)
 ################################################################################
@@ -63,7 +67,7 @@ resource "terraform_data" "cleanup_existing_registry" {
       # Delete main registry first (it depends on upstream)
       echo "Cleaning up existing HAR registry: ${var.registry_id}"
       REGISTRY_REF="${var.account_id}/${var.org_id}/${var.project_id}/${var.registry_id}/+"
-      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_ENDPOINT/har/api/v1/registry/$REGISTRY_REF" \
+      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_API_BASE/har/api/v1/registry/$REGISTRY_REF" \
         -H "x-api-key: $HARNESS_API_KEY" \
         -H "Content-Type: application/json")
       HTTP_CODE=$(echo "$RESP" | tail -n1)
@@ -74,7 +78,7 @@ resource "terraform_data" "cleanup_existing_registry" {
       # Delete upstream proxy if it exists
       echo "Cleaning up existing upstream proxy: ${var.dockerhub_upstream_id}"
       UPSTREAM_REF="${var.account_id}/${var.org_id}/${var.project_id}/${var.dockerhub_upstream_id}/+"
-      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_ENDPOINT/har/api/v1/registry/$UPSTREAM_REF" \
+      RESP=$(curl -s -w "\n%%{http_code}" -X DELETE "$HARNESS_API_BASE/har/api/v1/registry/$UPSTREAM_REF" \
         -H "x-api-key: $HARNESS_API_KEY" \
         -H "Content-Type: application/json")
       HTTP_CODE=$(echo "$RESP" | tail -n1)
@@ -88,8 +92,8 @@ resource "terraform_data" "cleanup_existing_registry" {
     EOT
 
     environment = {
+      HARNESS_API_BASE = local.harness_api_base
       HARNESS_API_KEY  = var.harness_api_key
-      HARNESS_ENDPOINT = var.harness_endpoint
     }
   }
 
