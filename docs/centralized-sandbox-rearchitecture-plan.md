@@ -127,15 +127,34 @@ This gives the repo a credible validated baseline for the next shared-resource e
 
 ### Next shared resource class after connectors
 
-The clearest next candidate is project-scoped Harness Code repo wiring.
-
-Why this is next:
+#### Why this is next
 
 - both workload stacks are now constrained to `use_harness_code = true`
 - both `tofu/stacks/eks` and `tofu/stacks/asg` still create `module "harness_code_repo"` inside owner-scoped workload stacks
 - repo import and project-scoped code wiring are more naturally reused across many owner workspaces than destroyed with a single owner sandbox
 
 For now, leave HAR ownership and Kubernetes connector ownership unchanged while this boundary is clarified.
+
+### Continuous Verification path for toddfour
+
+For Continuous Verification, the immediate goal is to validate the end-to-end behavior in the live Git Experience pipeline first, then port the proven shape back into the provisioner and Terraform modules.
+
+Current missing pieces for the provisioner-backed path:
+
+- `tofu/stacks/eks` has local groundwork for `enable_cv` and `prometheus_url`, but the monitored service is not yet instantiated from the stack
+- `tofu/modules/harness-connectors` can already create a Prometheus connector, but the workload stack does not yet complete the full monitored-service wiring
+- `tofu/modules/harness-pipeline` already exposes `enable_cv`, `monitored_service_ref`, `cv_duration`, and `cv_sensitivity`, but `tofu/stacks/eks/delivery.tf` is not yet passing those values into `module "harness_pipelines"`
+- the generated provisioner-managed pipeline path is therefore not yet the source of truth for Prometheus-backed verification
+
+Next steps for this slice:
+
+- create or reconcile the Prometheus connector needed by the live `toddfour` project
+- create or reconcile the monitored service and Prometheus health source needed for verification
+- wire the live `.harness/E2E_Enterprise_Pipeline_Toddfour.yaml` pipeline to use that monitored service in the canary verification path
+- validate the live pipeline behavior first, including successful verification and rollback/error handling when metrics degrade
+- only after that validation, port the resulting connector, monitored service, and pipeline wiring back into the provisioner/Terraform path
+
+This is an intentional pipeline-first exception to reduce iteration time and avoid overfitting the provisioner contract before the live CV shape is proven.
 
 ## Next Planned Slices
 

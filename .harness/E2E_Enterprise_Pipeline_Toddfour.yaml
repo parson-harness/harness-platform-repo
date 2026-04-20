@@ -20,6 +20,21 @@ pipeline:
       description: Automatically trigger CD pipeline after successful build
       required: false
       value: <+input>.default(true).allowedValues(true,false)
+    - name: trigger_cv_chaos
+      type: String
+      description: Trigger the demo chaos endpoint during production canary verification
+      required: false
+      value: <+input>.default(false).allowedValues(true,false)
+    - name: cv_duration
+      type: String
+      description: Continuous Verification duration for the production canary stage
+      required: false
+      value: <+input>.default(5m)
+    - name: cv_sensitivity
+      type: String
+      description: Continuous Verification sensitivity for the production canary stage
+      required: false
+      value: <+input>.default(HIGH).allowedValues(HIGH,MEDIUM,LOW)
     - name: harness_endpoint
       type: String
       description: Harness API endpoint
@@ -1191,6 +1206,47 @@ pipeline:
                         value: STABLE_PCT
                   timeout: 10m
               - step:
+                  type: Http
+                  name: Trigger Chaos for CV Demo
+                  identifier: trigger_cv_chaos
+                  spec:
+                    url: http://<+execution.steps.canary_deploy.output.canaryWorkload>:8080/api/chaos/degrade-canary?durationSeconds=180
+                    method: POST
+                    headers: []
+                    requestBody: ""
+                    assertion: <+httpResponseCode> == 200
+                    timeout: 30s
+                  timeout: 2m
+                  when:
+                    stageStatus: Success
+                    condition: <+pipeline.variables.trigger_cv_chaos> == "true"
+              - step:
+                  type: Verify
+                  name: Verify Canary
+                  identifier: verify_canary
+                  spec:
+                    isMultiServicesOrEnvs: false
+                    type: Canary
+                    monitoredService:
+                      type: Default
+                      spec: {}
+                    spec:
+                      sensitivity: <+pipeline.variables.cv_sensitivity>
+                      duration: <+pipeline.variables.cv_duration>
+                      deploymentTag: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                  timeout: 20m
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - Verification
+                        action:
+                          type: ManualIntervention
+                          spec:
+                            timeout: 2h
+                            onTimeout:
+                              action:
+                                type: StageRollback
+              - step:
                   name: Approval
                   identifier: canary_approval
                   type: HarnessApproval
@@ -1205,6 +1261,8 @@ pipeline:
                       Validation target:
                         App URL: https://<+serviceVariables.ingressHost>
                       Traffic split: ~<+execution.steps.get_validation_urls.output.outputVariables.CANARY_PCT>% canary, ~<+execution.steps.get_validation_urls.output.outputVariables.STABLE_PCT>% stable
+                      CV window: <+pipeline.variables.cv_duration> at <+pipeline.variables.cv_sensitivity> sensitivity
+                      Demo chaos enabled: <+pipeline.variables.trigger_cv_chaos>
 
                       Approve to promote canary to 100% of pods. Reject to roll back.
                     includePipelineExecutionHistory: true
