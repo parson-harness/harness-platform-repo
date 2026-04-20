@@ -1027,9 +1027,9 @@ pipeline:
                       - name: test_plan
                         value: |-
                           Harness production deployment ready for release.
-                          Service: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME>
+                          Service: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>
                           Environment: Production
-                          Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>
+
                           Execution URL: <+pipeline.executionUrl>
                       - name: backout_plan
                         value: Harness Automatic Rollback.
@@ -1041,7 +1041,7 @@ pipeline:
 
                           High Vulnerabilities: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>
 
-                          Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>
+                          Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>
 
                           Commit SHA: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>
 
@@ -1300,7 +1300,7 @@ pipeline:
                         value: successful
                       - name: close_notes
                         value: |-
-                          Deployment successful for <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT> for the <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME> service to <+env.name> 
+                          Deployment successful for <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE> to <+env.name> 
                           Pipeline Execution: <+pipeline.executionUrl> 
                   timeout: 5m
               - step:
