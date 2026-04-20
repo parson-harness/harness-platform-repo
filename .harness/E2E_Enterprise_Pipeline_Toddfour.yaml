@@ -334,6 +334,8 @@ pipeline:
                             limits:
                               memory: 500Mi
                               cpu: "0.5"
+                          imageTag: harness/ssca-plugin:0.57.2
+                          overrideConnectorRef: parsondocker
                     - step:
                         type: provenance
                         name: SLSA Provenance
