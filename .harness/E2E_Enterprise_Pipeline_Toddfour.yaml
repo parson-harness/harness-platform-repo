@@ -1216,7 +1216,9 @@ pipeline:
                     requestBody: ""
                     assertion: <+httpResponseCode> == 200
                     timeout: 30s
-                  timeout: 2m
+                    inputVariables: []
+                    outputVariables: []
+                  timeout: 5m
                   when:
                     stageStatus: Success
                     condition: <+pipeline.variables.trigger_cv_chaos> == "true"
