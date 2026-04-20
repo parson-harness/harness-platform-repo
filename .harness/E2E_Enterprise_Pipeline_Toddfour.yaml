@@ -109,10 +109,7 @@ pipeline:
             arch: Amd64
           runtime:
             type: Cloud
-            spec:
-              size: large
-              imageSpec:
-                imageName: ubuntu-latest
+            spec: {}
           buildIntelligence:
             enabled: true
           execution:
