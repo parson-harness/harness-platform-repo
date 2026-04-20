@@ -127,9 +127,6 @@ pipeline:
                     advanced:
                       log:
                         level: info
-                    imagePullPolicy: IfNotPresent
-                    connectorRef: parsondocker
-                    imageTag: harness/gitleaks-job-runner:latest
               - stepGroup:
                   name: Build and Test
                   identifier: build_and_test
@@ -334,8 +331,6 @@ pipeline:
                             limits:
                               memory: 500Mi
                               cpu: "0.5"
-                          imageTag: harness/ssca-plugin:0.57.2
-                          overrideConnectorRef: parsondocker
                     - step:
                         type: provenance
                         name: SLSA Provenance
@@ -346,8 +341,6 @@ pipeline:
                             spec:
                               registry: har-docker-shared
                               image: toddfourdemoapp:1.0.<+pipeline.sequenceId>
-                          overrideConnectorRef: parsondocker
-                          imageTag: harness/slsa-plugin:0.57.2
               - stepGroup:
                   name: Container Scans
                   identifier: container_scans
