@@ -918,7 +918,7 @@ pipeline:
                             value: "-1"
                           - name: work_notes
                             value: |-
-                              <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME> service passed <+env.name> security and quality gates. Ready to release <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>.
+                              <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE> service passed <+env.name> security and quality gates. Ready to release.
                               Pipeline Execution: <+pipeline.executionUrl>.
                       timeout: 5m
             rollbackSteps: []
