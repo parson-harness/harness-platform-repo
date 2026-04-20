@@ -1210,7 +1210,7 @@ pipeline:
                   name: Trigger Chaos for CV Demo
                   identifier: trigger_cv_chaos
                   spec:
-                    url: http://<+execution.steps.canary_deploy.output.canaryWorkload>:8080/api/chaos/degrade-canary?durationSeconds=180
+                    url: http://<+service.name.replace(" ", "").toLowerCase()>-service-stage.<+infra.namespace>.svc.cluster.local/api/chaos/degrade-canary?durationSeconds=180
                     method: POST
                     headers: []
                     requestBody: ""
