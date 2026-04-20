@@ -765,13 +765,13 @@ pipeline:
                       - name: description
                         value: |-
                           Harness automated change management.
-                          Service: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME>
+                          Service: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>
                           Pipeline Name: <+pipeline.name> 
-                          Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT> 
+
                           Build URL: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_artifact_links.output.outputVariables.BUILD_EXECUTION_URL> 
                           Requested by <+pipeline.triggeredBy.name>
                       - name: short_description
-                        value: Begin deployment of <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME> to QA
+                        value: Begin deployment of <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>.
                     createType: Normal
                   failureStrategies:
                     - onFailure:
