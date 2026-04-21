@@ -1,0 +1,24 @@
+inputSet:
+  name: Toddfour PR Live Defaults
+  identifier: toddfour_pr_live_defaults
+  tags:
+    automation: "true"
+    flow: pr-live
+  orgIdentifier: sandbox
+  projectIdentifier: parson
+  pipeline:
+    identifier: E2E_Enterprise_Pipeline_Toddfour
+    properties:
+      ci:
+        codebase:
+          build:
+            type: PR
+            spec:
+              number: <+trigger.prNumber>
+    variables:
+      - name: auto_deploy
+        type: String
+        value: "true"
+      - name: trigger_cv_chaos
+        type: String
+        value: "false"
