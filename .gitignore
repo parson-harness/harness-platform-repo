@@ -56,6 +56,9 @@ tofu/bootstrap/dockercfg
 tofu/bootstrap/secret.yml
 tofu/bootstrap/temp_dockercfg
 .gradle/
+node_modules/
+playwright-report/
+test-results/
 
 # Java build output
 bin/

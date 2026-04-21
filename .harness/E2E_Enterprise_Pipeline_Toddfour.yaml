@@ -841,6 +841,79 @@ pipeline:
                   timeout: 10m
                   spec:
                     skipDryRun: false
+              - stepGroup:
+                  name: QA Blue Playwright Smoke
+                  identifier: qa_blue_playwright_smoke
+                  steps:
+                    - step:
+                        type: Run
+                        name: Run Playwright Smoke
+                        identifier: run_playwright_smoke
+                        timeout: 20m
+                        spec:
+                          connectorRef: har-docker-shared
+                          image: library/node:20-bookworm
+                          shell: Bash
+                          command: |
+                            set -euo pipefail
+                            export PLAYWRIGHT_BASE_URL="https://<+serviceVariables.ingressStageHost>"
+                            export PLAYWRIGHT_WORKERS=2
+                            export REPO_BRANCH="<+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.BRANCH_NAME>"
+
+                            echo "=== QA PLAYWRIGHT SMOKE TESTS ==="
+                            echo "Target URL: ${PLAYWRIGHT_BASE_URL}"
+                            echo "Repo branch: ${REPO_BRANCH}"
+
+                            apt-get update
+                            apt-get install -y --no-install-recommends git
+                            rm -rf repo-under-test
+                            git clone --depth 1 --branch "$REPO_BRANCH" https://github.com/parson-harness/harness-demo-app.git repo-under-test
+                            cd repo-under-test
+
+                            npm install --no-fund --no-audit
+                            npx playwright install --with-deps chromium
+                            set +e
+                            npx playwright test --config=playwright.config.js
+                            TEST_EXIT_CODE=$?
+                            set -e
+
+                            RESULTS_FILE="playwright-report/junit/results.xml"
+                            TOTAL_TESTS=0
+                            TOTAL_FAILURES=0
+                            TOTAL_SKIPPED=0
+
+                            if [ -f "$RESULTS_FILE" ]; then
+                              TOTAL_TESTS=$(grep -o 'tests="[0-9][0-9]*"' "$RESULTS_FILE" | head -n1 | cut -d'"' -f2 || true)
+                              TOTAL_FAILURES=$(grep -o 'failures="[0-9][0-9]*"' "$RESULTS_FILE" | head -n1 | cut -d'"' -f2 || true)
+                              TOTAL_SKIPPED=$(grep -o 'skipped="[0-9][0-9]*"' "$RESULTS_FILE" | head -n1 | cut -d'"' -f2 || true)
+                              if command -v hcli >/dev/null 2>&1; then
+                                hcli --verbose test-reports upload "$RESULTS_FILE" || true
+                              fi
+                            fi
+
+                            TOTAL_TESTS=${TOTAL_TESTS:-0}
+                            TOTAL_FAILURES=${TOTAL_FAILURES:-0}
+                            TOTAL_SKIPPED=${TOTAL_SKIPPED:-0}
+                            PASSED_TESTS=$((TOTAL_TESTS - TOTAL_FAILURES - TOTAL_SKIPPED))
+                            if [ "$PASSED_TESTS" -lt 0 ]; then
+                              PASSED_TESTS=0
+                            fi
+
+                            echo "=== QA PLAYWRIGHT SUMMARY ==="
+                            echo "Total tests: ${TOTAL_TESTS}"
+                            echo "Passed: ${PASSED_TESTS}"
+                            echo "Failed: ${TOTAL_FAILURES}"
+                            echo "Skipped: ${TOTAL_SKIPPED}"
+                            echo "Exit code: ${TEST_EXIT_CODE}"
+
+                            if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+                              exit "$TEST_EXIT_CODE"
+                            fi
+                  stepGroupInfra:
+                    type: KubernetesDirect
+                    spec:
+                      connectorRef: <+infra.connectorRef>
+                      namespace: <+infra.namespace>
               - step:
                   name: Approval
                   identifier: bg_approval
