@@ -199,6 +199,10 @@ Import the pipeline from `.harness/pipelines/idp_pov_provisioner.yaml`:
 3. Select connector `parsongh`, repo `harness-demo-app`
 4. Path: `.harness/pipelines/idp_pov_provisioner.yaml`
 
+### Deferred live PR-trigger automation
+
+The Toddfour PR-created trigger and companion input sets under `.harness/triggers/` and `.harness/input_sets/` are intentionally being validated as a live Git Experience workflow first. Do not port that trigger/input-set shape into `tofu/stacks/eks` or the provisioner-managed Terraform path until the shared `harness-demo-app` repo flow, PR status checks, and repeatable Test Intelligence demo behavior have been proven in the live project.
+
 ## Sandbox Janitor Entry Points
 
 ### Manual Audit or Cleanup
