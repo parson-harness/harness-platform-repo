@@ -142,6 +142,8 @@ pipeline:
                               connectorRef: account.harnessImage
                               image: gradle:8.5-jdk17
                               intelligenceMode: true
+                              reports:
+                                - build/test-results/test/*.xml
                         - step:
                             type: Run
                             name: Build Intelligence
@@ -177,8 +179,7 @@ pipeline:
                       fi
 
                       echo ""
-                      echo "=== UPLOADING TEST REPORTS TO HARNESS ==="
-                      hcli --verbose test-reports upload "build/test-results/test/*.xml"
+                      echo "=== TEST REPORTS ARE PUBLISHED BY THE TI V2 TEST STEP ==="
 
                       COVERAGE_FILE="build/reports/jacoco/test/jacocoTestReport.xml"
 
