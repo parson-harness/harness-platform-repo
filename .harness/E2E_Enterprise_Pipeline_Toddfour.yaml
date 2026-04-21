@@ -854,7 +854,7 @@ pipeline:
                         timeout: 20m
                         spec:
                           connectorRef: account.harnessImage
-                          image: library/node:20-bookworm
+                          image: node:20-bookworm
                           shell: Bash
                           command: |-
                             set -euo pipefail
