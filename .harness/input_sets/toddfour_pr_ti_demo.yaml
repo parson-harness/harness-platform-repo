@@ -1,0 +1,24 @@
+inputSet:
+  name: Toddfour PR Test Intelligence Demo
+  identifier: toddfour_pr_ti_demo
+  tags:
+    automation: "true"
+    flow: pr-ti-demo
+  orgIdentifier: sandbox
+  projectIdentifier: parson
+  pipeline:
+    identifier: E2E_Enterprise_Pipeline_Toddfour
+    properties:
+      ci:
+        codebase:
+          build:
+            type: PR
+            spec:
+              number: <+trigger.prNumber>
+    variables:
+      - name: auto_deploy
+        type: String
+        value: "false"
+      - name: trigger_cv_chaos
+        type: String
+        value: "false"
