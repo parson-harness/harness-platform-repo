@@ -88,6 +88,24 @@ class MetricsServiceTest {
             assertEquals(1.0, meterRegistry.get("harness_demo_api_calls_total")
                     .tag("endpoint", "/api/version").counter().count());
         }
+
+        @Test
+        @DisplayName("Should trim endpoint before tagging metrics")
+        void incrementApiCalls_shouldTrimEndpointBeforeTagging() {
+            metricsService.incrementApiCalls("  /api/info  ");
+
+            assertEquals(1.0, meterRegistry.get("harness_demo_api_calls_total")
+                    .tag("endpoint", "/api/info").counter().count());
+        }
+
+        @Test
+        @DisplayName("Should use unknown when endpoint is blank")
+        void incrementApiCalls_shouldUseUnknownWhenEndpointBlank() {
+            metricsService.incrementApiCalls("   ");
+
+            assertEquals(1.0, meterRegistry.get("harness_demo_api_calls_total")
+                    .tag("endpoint", "unknown").counter().count());
+        }
     }
 
     @Nested

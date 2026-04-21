@@ -25,7 +25,7 @@ public class MetricsService {
     public void incrementApiCalls(String endpoint) {
         Counter.builder("harness_demo_api_calls_total")
                 .description("Total API calls")
-                .tag("endpoint", endpoint)
+                .tag("endpoint", normalizeEndpoint(endpoint))
                 .register(meterRegistry)
                 .increment();
     }
@@ -51,5 +51,14 @@ public class MetricsService {
                 .tag("type", type)
                 .register(meterRegistry)
                 .increment();
+    }
+
+    private String normalizeEndpoint(String endpoint) {
+        if (endpoint == null) {
+            return "unknown";
+        }
+
+        String normalizedEndpoint = endpoint.trim();
+        return normalizedEndpoint.isEmpty() ? "unknown" : normalizedEndpoint;
     }
 }
