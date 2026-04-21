@@ -830,6 +830,8 @@ pipeline:
                           echo "Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>"
                           echo "Primary URL: https://<+serviceVariables.ingressHost>"
                           echo "Stage URL:   https://<+serviceVariables.ingressStageHost>"
+                          echo "Infra Connector: <+infra.connectorRef>"
+                          echo "Infra Namespace: <+infra.namespace>"
                           echo "========================================"
                     environmentVariables: []
                     outputVariables: []
@@ -847,14 +849,14 @@ pipeline:
                   steps:
                     - step:
                         type: Run
-                        name: Run Playwright Smoke
+                        name: Playwright QA Tests
                         identifier: run_playwright_smoke
                         timeout: 20m
                         spec:
-                          connectorRef: har-docker-shared
+                          connectorRef: account.harnessImage
                           image: library/node:20-bookworm
                           shell: Bash
-                          command: |
+                          command: |-
                             set -euo pipefail
                             export PLAYWRIGHT_BASE_URL="https://<+serviceVariables.ingressStageHost>"
                             export PLAYWRIGHT_WORKERS=2
