@@ -612,6 +612,55 @@ resource "harness_platform_policy" "change_risk_score" {
   REGO
 }
 
+resource "harness_platform_policy" "require_release_governance_stage" {
+  count      = var.create_change_governance_policies ? 1 : 0
+  identifier = "require_release_governance_stage"
+  name       = "Require Release Governance Stage for Production Deployments"
+  org_id     = var.org_id
+  project_id = var.project_id
+
+  rego = <<-REGO
+    package pipeline
+
+    ${local.scope_check_rego}
+
+    deny[msg] {
+      in_scope
+      has_production_deployment_stage
+      not has_release_governance_stage
+      msg := "Provisioner-managed pipelines with a Production deployment stage must include a Release Governance stage with identifier 'release_governance'."
+    }
+
+    has_production_deployment_stage {
+      stage := input.pipeline.stages[_].stage
+      is_production_deployment_stage(stage)
+    }
+
+    is_production_deployment_stage(stage) {
+      stage.type == "Deployment"
+      lower(object.get(stage.spec.environment, "type", "")) == "production"
+    }
+
+    is_production_deployment_stage(stage) {
+      stage.type == "Deployment"
+      lower(object.get(object.get(stage.spec.environment, "environmentInputs", {}), "type", "")) == "production"
+    }
+
+    is_production_deployment_stage(stage) {
+      stage.type == "Deployment"
+      is_production_environment_ref(object.get(stage.spec.environment, "environmentRef", ""))
+    }
+
+    has_release_governance_stage {
+      input.pipeline.stages[_].stage.identifier == "release_governance"
+    }
+
+    is_production_environment_ref(ref) {
+      regex.match("(^|.*[_-])(prod|production)([_-].*|$)", lower(ref))
+    }
+  REGO
+}
+
 ################################################################################
 # Policy Sets
 ################################################################################
@@ -754,6 +803,26 @@ resource "harness_platform_policyset" "quality_gates" {
   depends_on = [
     harness_platform_policy.require_test_reports,
     harness_platform_policy.require_pipeline_tags
+  ]
+}
+
+resource "harness_platform_policyset" "change_governance_pipeline_on_save" {
+  count      = var.create_change_governance_policies && var.create_change_governance_policy_set ? 1 : 0
+  identifier = "change_governance_pipeline_guardrails"
+  name       = "Change Governance Pipeline Guardrails"
+  org_id     = var.org_id
+  project_id = var.project_id
+  action     = "onsave"
+  type       = "pipeline"
+  enabled    = var.enforce_change_governance_policies
+
+  policies {
+    identifier = harness_platform_policy.require_release_governance_stage[0].identifier
+    severity   = "error"
+  }
+
+  depends_on = [
+    harness_platform_policy.require_release_governance_stage
   ]
 }
 

@@ -307,7 +307,7 @@ ${local.strategy_shell_step_delegate_yaml}                        source:
   strategy_governance_stage_yaml = var.enable_change_governance ? format("%s\n", <<-EOT
         - stage:
             name: Release Governance
-            identifier: change_governance
+            identifier: release_governance
             description: Policy-driven approval gate for deployment risk evaluation
             type: Custom
             when:

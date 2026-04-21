@@ -1,0 +1,235 @@
+pipeline:
+  name: Temporary CI CD Test Pipeline
+  identifier: temp_ci_cd_test
+  projectIdentifier: <+input>
+  orgIdentifier: <+input>
+  tags:
+    purpose: temporary-testing
+    build: gradle
+    deployment: kubernetes
+  variables:
+    - name: image_tag
+      type: String
+      description: Image tag used for both the HAR push and the Kubernetes deployment
+      required: false
+      value: <+input>.default(1.0.<+pipeline.sequenceId>)
+    - name: auto_deploy
+      type: String
+      description: Automatically deploy after a successful build
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
+    - name: har_registry_ref
+      type: String
+      description: Harness Artifact Registry connector or registry reference used for docker push
+      required: true
+      value: <+input>
+    - name: har_image_name
+      type: String
+      description: Docker image name inside HAR
+      required: true
+      value: <+input>
+    - name: base_image_registry
+      type: String
+      description: Base image registry path used by the Dockerfile BASE_IMAGE_REGISTRY arg
+      required: true
+      value: <+input>
+    - name: service_ref
+      type: String
+      description: Existing Harness Kubernetes service to deploy
+      required: true
+      value: <+input>
+    - name: environment_ref
+      type: String
+      description: Existing Harness environment to deploy into
+      required: true
+      value: <+input>
+    - name: infrastructure_id
+      type: String
+      description: Existing Harness infrastructure definition identifier
+      required: true
+      value: <+input>
+  properties:
+    ci:
+      codebase:
+        connectorRef: <+input>
+        repoName: harness-demo-app
+        build: <+input>
+        sparseCheckout: []
+  stages:
+    - stage:
+        name: Build and Push
+        identifier: build_and_push
+        type: CI
+        spec:
+          cloneCodebase: true
+          caching:
+            enabled: true
+          sharedPaths:
+            - /var/run
+            - /harness/.gradle
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          buildIntelligence:
+            enabled: true
+          execution:
+            steps:
+              - step:
+                  type: Gitleaks
+                  name: Gitleaks Secret Scan
+                  identifier: gitleaks
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: repository
+                      detection: auto
+                    advanced:
+                      log:
+                        level: info
+              - step:
+                  type: Test
+                  name: Test Intelligence
+                  identifier: test_intelligence
+                  spec:
+                    command: gradle test --build-cache --profile
+                    shell: Sh
+                    connectorRef: account.harnessImage
+                    image: gradle:8.5-jdk17
+                    intelligenceMode: true
+              - step:
+                  type: Run
+                  name: Build Application
+                  identifier: build_application
+                  spec:
+                    connectorRef: account.harnessImage
+                    image: gradle:8.5-jdk17
+                    shell: Sh
+                    command: |
+                      set -e
+                      gradle clean bootJar -x test --build-cache --parallel
+                      ls -la build/libs/
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Push to HAR
+                  identifier: push_to_har
+                  spec:
+                    repo: <+pipeline.variables.har_image_name>
+                    tags:
+                      - <+pipeline.variables.image_tag>
+                      - latest
+                    caching: true
+                    optimize: true
+                    registryRef: <+pipeline.variables.har_registry_ref>
+                    buildArgs:
+                      JAR_PATH: build/libs/*.jar
+                      BUILD_COMMIT_SHA: <+codebase.commitSha>
+                      IMAGE_TAG: <+pipeline.variables.image_tag>
+                      BASE_IMAGE_REGISTRY: <+pipeline.variables.base_image_registry>
+                  failureStrategies:
+                    - onFailure:
+                        errors:
+                          - AllErrors
+                        action:
+                          type: Retry
+                          spec:
+                            retryCount: 2
+                            retryIntervals:
+                              - 2m
+                            onRetryFailure:
+                              action:
+                                type: Abort
+              - step:
+                  type: Run
+                  name: Build Summary
+                  identifier: build_summary
+                  spec:
+                    shell: Sh
+                    command: |
+                      echo "Pipeline: <+pipeline.name>"
+                      echo "Execution: <+pipeline.executionId>"
+                      echo "Commit: <+codebase.commitSha>"
+                      echo "Branch: <+codebase.branch>"
+                      echo "Image: <+pipeline.variables.har_image_name>:<+pipeline.variables.image_tag>"
+                      echo "Auto deploy: <+pipeline.variables.auto_deploy>"
+        tags: {}
+    - stage:
+        name: Deploy to Test
+        identifier: deploy_to_test
+        type: Deployment
+        when:
+          pipelineStatus: Success
+          condition: <+pipeline.variables.auto_deploy> == "true"
+        spec:
+          deploymentType: Kubernetes
+          service:
+            serviceRef: <+pipeline.variables.service_ref>
+          environment:
+            environmentRef: <+pipeline.variables.environment_ref>
+            deployToAll: false
+            infrastructureDefinitions:
+              - identifier: <+pipeline.variables.infrastructure_id>
+          execution:
+            steps:
+              - step:
+                  type: ShellScript
+                  name: Deployment Context
+                  identifier: deployment_context
+                  timeout: 10m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "Pipeline: <+pipeline.name>"
+                          echo "Service: <+service.name>"
+                          echo "Environment: <+env.name>"
+                          echo "Infrastructure: <+infra.name>"
+                          echo "Namespace: <+infra.namespace>"
+                          echo "Deploying image tag: <+pipeline.variables.image_tag>"
+                    environmentVariables: []
+                    outputVariables: []
+              - step:
+                  type: K8sRollingDeploy
+                  name: Rolling Deployment
+                  identifier: rolling_deploy
+                  timeout: 10m
+                  spec:
+                    skipDryRun: false
+              - step:
+                  type: ShellScript
+                  name: Deployment Complete
+                  identifier: deployment_complete
+                  timeout: 10m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          echo "Deployment completed successfully."
+                          echo "Service: <+service.name>"
+                          echo "Environment: <+env.name>"
+                          echo "Image tag: <+pipeline.variables.image_tag>"
+                    environmentVariables: []
+                    outputVariables: []
+            rollbackSteps:
+              - step:
+                  type: K8sRollingRollback
+                  name: Rolling Rollback
+                  identifier: rolling_rollback
+                  timeout: 10m
+                  spec: {}
+        tags: {}
+        failureStrategies:
+          - onFailure:
+              errors:
+                - AllErrors
+              action:
+                type: StageRollback
