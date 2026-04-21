@@ -10,7 +10,7 @@ trigger:
   orgIdentifier: sandbox
   projectIdentifier: parson
   pipelineIdentifier: E2E_Enterprise_Pipeline_Toddfour
-  pipelineBranchName: <+trigger.sourceBranch>
+  pipelineBranchName: main
   inputSetRefs:
     - toddfour_pr_live_defaults
   source:
