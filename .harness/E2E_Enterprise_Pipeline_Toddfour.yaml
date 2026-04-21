@@ -137,10 +137,15 @@ pipeline:
                             name: Test Intelligence
                             identifier: test_intelligence
                             spec:
-                              command: gradle test --build-cache --profile
-                              shell: Sh
                               connectorRef: account.harnessImage
                               image: gradle:8.5-jdk17
+                              shell: Sh
+                              command: gradle test --build-cache --profile
+                              reports:
+                                type: JUnit
+                                spec:
+                                  paths:
+                                    - build/test-results/test/*.xml
                               intelligenceMode: true
                         - step:
                             type: Run
