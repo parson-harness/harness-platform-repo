@@ -29,6 +29,7 @@ public class ApiController {
         chaosService.maybeInjectChaos();
         
         Map<String, Object> info = new HashMap<>();
+        Map<String, Object> dynamicConfig = new HashMap<>();
         info.put("appName", appConfig.getAppName());
         info.put("customerName", appConfig.getDisplayCustomerName());
         info.put("version", appConfig.getDisplayVersion());
@@ -49,6 +50,29 @@ public class ApiController {
         info.put("region", appConfig.getRegion());
         info.put("publicUrl", appConfig.getPublicUrl());
         info.put("stageUrl", appConfig.getStageUrl());
+        info.put("configProfile", appConfig.getConfigProfile());
+        info.put("configBanner", appConfig.getDisplayConfigBanner());
+        info.put("configTenant", appConfig.getConfigTenant());
+        info.put("configReleaseRing", appConfig.getConfigReleaseRing());
+        info.put("configTarget", appConfig.getDisplayConfigTarget());
+        info.put("configSupportContact", appConfig.getConfigSupportContact());
+        info.put("configVersion", appConfig.getDisplayConfigVersion());
+        info.put("configSource", appConfig.getDisplayConfigSource());
+        info.put("secretProvider", appConfig.getDisplaySecretProvider());
+        info.put("dynamicSecretConfigured", appConfig.isDynamicSecretConfigured());
+        dynamicConfig.put("profile", appConfig.getConfigProfile());
+        dynamicConfig.put("banner", appConfig.getDisplayConfigBanner());
+        dynamicConfig.put("tenant", appConfig.getConfigTenant());
+        dynamicConfig.put("releaseRing", appConfig.getConfigReleaseRing());
+        dynamicConfig.put("target", appConfig.getDisplayConfigTarget());
+        dynamicConfig.put("supportContact", appConfig.getConfigSupportContact());
+        dynamicConfig.put("version", appConfig.getDisplayConfigVersion());
+        dynamicConfig.put("source", appConfig.getDisplayConfigSource());
+        dynamicConfig.put("secretProvider", appConfig.getDisplaySecretProvider());
+        dynamicConfig.put("secretConfigured", appConfig.isDynamicSecretConfigured());
+        dynamicConfig.put("artifactPromotionModel", "same-artifact-different-config");
+        dynamicConfig.put("injectionModel", "deployment-time-config-injection");
+        info.put("dynamicConfig", dynamicConfig);
         info.put("timestamp", Instant.now().toString());
         info.put("javaVersion", System.getProperty("java.version"));
         

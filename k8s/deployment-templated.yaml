@@ -11,6 +11,27 @@ data:
   .dockercfg: {{ .Values.dockercfg }}
 type: kubernetes.io/dockercfg
 {{- end }}
+{{- if .Values.env.config }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{.Values.name}}-app-config"
+  namespace: {{.Values.namespace}}
+data:
+{{ .Values.env.config | toYaml | indent 2 }}
+{{- end }}
+{{- if .Values.env.secrets }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "{{.Values.name}}-app-secrets"
+  namespace: {{.Values.namespace}}
+type: Opaque
+stringData:
+{{ .Values.env.secrets | toYaml | indent 2 }}
+{{- end }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -54,6 +75,17 @@ spec:
         - name: {{.Values.name}}
           image: {{ .Values.image | quote }}
           imagePullPolicy: Always
+          {{- if or .Values.env.config .Values.env.secrets }}
+          envFrom:
+            {{- if .Values.env.config }}
+            - configMapRef:
+                name: {{.Values.name}}-app-config
+            {{- end }}
+            {{- if .Values.env.secrets }}
+            - secretRef:
+                name: {{.Values.name}}-app-secrets
+            {{- end }}
+          {{- end }}
           ports:
             - containerPort: {{int .Values.containerPort}}
               name: http

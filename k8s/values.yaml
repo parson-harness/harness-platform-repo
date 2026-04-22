@@ -15,6 +15,7 @@ image: <+artifact.image>
 service_identifier: <+service.identifier>
 env_identifier: <+env.identifier>
 build_id: <+pipeline.executionId>
+region: <+stage.variables.dynamic_config_region>
 
 # Application branding
 appName: "Harness Demo Application"
@@ -48,6 +49,21 @@ resources:
 chaosEnabled: false
 chaosLatencyMs: 0
 chaosErrorRate: 0.0
+
+env:
+  config:
+    CONFIG_PROFILE: <+pipeline.variables.dynamic_config_profile>
+    CONFIG_BANNER: <+stage.variables.dynamic_config_banner>
+    CONFIG_TENANT: <+pipeline.variables.dynamic_config_tenant>
+    CONFIG_RELEASE_RING: <+stage.variables.dynamic_config_release_ring>
+    CONFIG_TARGET: <+infra.identifier>
+    CONFIG_SUPPORT_CONTACT: <+pipeline.variables.dynamic_config_support_contact>
+    CONFIG_VERSION: <+stage.variables.dynamic_config_version>
+    CONFIG_SOURCE: Harness Stage Variables
+    CONFIG_SECRET_PROVIDER: Separate Kubernetes Secret
+    REGION: <+stage.variables.dynamic_config_region>
+  secrets:
+    DYNAMIC_CONFIG_SECRET: <+stage.variables.dynamic_config_secret>
 
 # Service configuration
 service:

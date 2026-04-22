@@ -36,6 +36,16 @@ public class AppConfig {
     private String podName = "local";
     private String namespace = "default";
     private String region = "us-east-1";
+    private String configProfile = "shared-base";
+    private String configBanner = "";
+    private String configTenant = "default";
+    private String configReleaseRing = "default";
+    private String configTarget = "default-target";
+    private String configSupportContact = "support@harness.io";
+    private String configVersion = "";
+    private String configSource = "Harness Pipeline";
+    private String secretProvider = "Harness Secret Variable";
+    private String dynamicSecret = "";
     private boolean chaosEnabled = true;
     private int chaosLatencyMs = 0;
     private double chaosErrorRate = 0.0;
@@ -116,6 +126,45 @@ public class AppConfig {
             return "n/a";
         }
         return buildId.trim();
+    }
+
+    public String getDisplayConfigBanner() {
+        if (configBanner == null || configBanner.isBlank()) {
+            return "No banner configured";
+        }
+        return configBanner.trim();
+    }
+
+    public String getDisplayConfigVersion() {
+        if (configVersion == null || configVersion.isBlank()) {
+            return "not-set";
+        }
+        return configVersion.trim();
+    }
+
+    public String getDisplayConfigTarget() {
+        if (configTarget == null || configTarget.isBlank()) {
+            return "default-target";
+        }
+        return configTarget.trim();
+    }
+
+    public String getDisplayConfigSource() {
+        if (configSource == null || configSource.isBlank()) {
+            return "Harness Pipeline";
+        }
+        return configSource.trim();
+    }
+
+    public String getDisplaySecretProvider() {
+        if (secretProvider == null || secretProvider.isBlank()) {
+            return "Harness Secret Variable";
+        }
+        return secretProvider.trim();
+    }
+
+    public boolean isDynamicSecretConfigured() {
+        return dynamicSecret != null && !dynamicSecret.isBlank();
     }
 
     public String getDisplayDeploymentTarget() {

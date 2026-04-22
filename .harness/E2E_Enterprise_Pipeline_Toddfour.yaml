@@ -100,6 +100,21 @@ pipeline:
       description: JSON release-candidate evidence bundle; auto-populated from CI on webhook runs or entered manually for demo/manual runs
       required: false
       value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})
+    - name: dynamic_config_profile
+      type: String
+      description: Shared application-level dynamic configuration profile injected into the deployed workload
+      required: false
+      value: <+input>.default(shared-base)
+    - name: dynamic_config_tenant
+      type: String
+      description: Shared tenant-level dynamic configuration value used across QA and Prod
+      required: false
+      value: <+input>.default(toddfour)
+    - name: dynamic_config_support_contact
+      type: String
+      description: Shared support contact exposed through the deployed workload configuration
+      required: false
+      value: <+input>.default(platform@harness.io)
   properties:
     ci:
       codebase:
@@ -809,6 +824,27 @@ pipeline:
         identifier: deploy_to_qa
         description: Blue-Green deployment with instant traffic swap
         type: Deployment
+        variables:
+          - name: dynamic_config_banner
+            type: String
+            description: Environment-level banner resolved for the QA deployment stage
+            value: QA configuration injected by Harness at deploy time
+          - name: dynamic_config_release_ring
+            type: String
+            description: Environment-level release ring for the QA deployment stage
+            value: pre-release
+          - name: dynamic_config_version
+            type: String
+            description: Version label for the QA config bundle
+            value: qa-config-v1
+          - name: dynamic_config_region
+            type: String
+            description: Region-level configuration for the QA deployment stage
+            value: us-east-1
+          - name: dynamic_config_secret
+            type: Secret
+            description: Secret configuration injected separately from non-sensitive QA config
+            value: acct-automation-svc-acct
         when:
           pipelineStatus: Success
         delegateSelectors:
@@ -858,6 +894,21 @@ pipeline:
                   timeout: 10m
                   spec:
                     skipDryRun: false
+              - step:
+                  type: Run
+                  name: Inspect Dynamic Config
+                  identifier: inspect_dynamic_config
+                  timeout: 10m
+                  spec:
+                    connectorRef: <+pipeline.variables.qa_playwright_image_connector_ref>
+                    image: <+pipeline.variables.qa_playwright_image>
+                    shell: Bash
+                    command: |-
+                      set -euo pipefail
+                      TARGET_URL="https://<+serviceVariables.ingressStageHost>/api/info"
+                      echo "Fetching dynamic config snapshot from ${TARGET_URL}"
+                      curl --silent --show-error --fail "${TARGET_URL}" > dynamic_config_snapshot.json
+                      node -e 'const fs=require("fs"); const info=JSON.parse(fs.readFileSync("dynamic_config_snapshot.json","utf8")); const dynamic=info.dynamicConfig || {}; console.log("=== Dynamic Config Snapshot ==="); console.log(`Profile: ${dynamic.profile}`); console.log(`Banner: ${dynamic.banner}`); console.log(`Tenant: ${dynamic.tenant}`); console.log(`Release ring: ${dynamic.releaseRing}`); console.log(`Target: ${dynamic.target}`); console.log(`Support: ${dynamic.supportContact}`); console.log(`Version: ${dynamic.version}`); console.log(`Source: ${dynamic.source}`); console.log(`Secret provider: ${dynamic.secretProvider}`); console.log(`Secret configured: ${dynamic.secretConfigured}`);'
               - stepGroup:
                   name: QA Validation
                   identifier: qa_validation
@@ -1340,6 +1391,27 @@ pipeline:
         identifier: deploy_to_prod
         description: Canary deployment with gradual traffic shift
         type: Deployment
+        variables:
+          - name: dynamic_config_banner
+            type: String
+            description: Environment-level banner resolved for the Prod deployment stage
+            value: Production configuration injected by Harness at deploy time
+          - name: dynamic_config_release_ring
+            type: String
+            description: Environment-level release ring for the Prod deployment stage
+            value: production
+          - name: dynamic_config_version
+            type: String
+            description: Version label for the Prod config bundle
+            value: prod-config-v1
+          - name: dynamic_config_region
+            type: String
+            description: Region-level configuration for the Prod deployment stage
+            value: us-east-1
+          - name: dynamic_config_secret
+            type: Secret
+            description: Secret configuration injected separately from non-sensitive Prod config
+            value: acct-automation-svc-acct
         when:
           pipelineStatus: Success
         delegateSelectors:
@@ -1388,6 +1460,21 @@ pipeline:
                       spec:
                         count: 1
                     skipDryRun: false
+              - step:
+                  type: Run
+                  name: Inspect Dynamic Config
+                  identifier: inspect_dynamic_config
+                  timeout: 10m
+                  spec:
+                    connectorRef: <+pipeline.variables.qa_playwright_image_connector_ref>
+                    image: <+pipeline.variables.qa_playwright_image>
+                    shell: Bash
+                    command: |-
+                      set -euo pipefail
+                      TARGET_URL="https://<+serviceVariables.ingressHost>/api/info"
+                      echo "Fetching dynamic config snapshot from ${TARGET_URL}"
+                      curl --silent --show-error --fail "${TARGET_URL}" > dynamic_config_snapshot.json
+                      node -e 'const fs=require("fs"); const info=JSON.parse(fs.readFileSync("dynamic_config_snapshot.json","utf8")); const dynamic=info.dynamicConfig || {}; console.log("=== Dynamic Config Snapshot ==="); console.log(`Profile: ${dynamic.profile}`); console.log(`Banner: ${dynamic.banner}`); console.log(`Tenant: ${dynamic.tenant}`); console.log(`Release ring: ${dynamic.releaseRing}`); console.log(`Target: ${dynamic.target}`); console.log(`Support: ${dynamic.supportContact}`); console.log(`Version: ${dynamic.version}`); console.log(`Source: ${dynamic.source}`); console.log(`Secret provider: ${dynamic.secretProvider}`); console.log(`Secret configured: ${dynamic.secretConfigured}`);'
               - step:
                   type: ShellScript
                   name: Get Canary Traffic Split
