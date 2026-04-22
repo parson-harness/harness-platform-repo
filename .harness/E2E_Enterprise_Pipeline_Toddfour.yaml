@@ -20,6 +20,11 @@ pipeline:
       description: Automatically trigger CD pipeline after successful build
       required: false
       value: <+input>.default(true).allowedValues(true,false)
+    - name: qa_repo_branch
+      type: String
+      description: Repository branch to clone for the QA Playwright smoke tests during manual or demo runs
+      required: false
+      value: <+input>.default(main)
     - name: trigger_cv_chaos
       type: String
       description: Trigger the demo chaos endpoint during production canary verification
@@ -860,7 +865,7 @@ pipeline:
                             set -euo pipefail
                             export PLAYWRIGHT_BASE_URL="https://<+serviceVariables.ingressStageHost>"
                             export PLAYWRIGHT_WORKERS=2
-                            export REPO_BRANCH="<+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.BRANCH_NAME>"
+                            export REPO_BRANCH="<+pipeline.variables.qa_repo_branch>"
 
                             echo "=== QA PLAYWRIGHT SMOKE TESTS ==="
                             echo "Target URL: ${PLAYWRIGHT_BASE_URL}"
