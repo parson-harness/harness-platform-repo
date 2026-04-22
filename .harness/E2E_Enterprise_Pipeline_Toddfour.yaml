@@ -910,23 +910,64 @@ pipeline:
                           TARGET_URL="https://<+serviceVariables.ingressStageHost>/api/info"
                           echo "Fetching dynamic config snapshot from ${TARGET_URL}"
                           curl --silent --show-error --fail "${TARGET_URL}" > dynamic_config_snapshot.json
-                          python3 - <<'PY'
-                          import json
-                          with open("dynamic_config_snapshot.json", "r", encoding="utf-8") as fh:
-                              info = json.load(fh)
-                          dynamic = info.get("dynamicConfig", {})
-                          print("=== Dynamic Config Snapshot ===")
-                          print(f"Profile: {dynamic.get('profile')}")
-                          print(f"Banner: {dynamic.get('banner')}")
-                          print(f"Tenant: {dynamic.get('tenant')}")
-                          print(f"Release ring: {dynamic.get('releaseRing')}")
-                          print(f"Target: {dynamic.get('target')}")
-                          print(f"Support: {dynamic.get('supportContact')}")
-                          print(f"Version: {dynamic.get('version')}")
-                          print(f"Source: {dynamic.get('source')}")
-                          print(f"Secret provider: {dynamic.get('secretProvider')}")
-                          print(f"Secret configured: {dynamic.get('secretConfigured')}")
-                          PY
+                          echo "=== Dynamic Config Snapshot (raw /api/info response) ==="
+                          cat dynamic_config_snapshot.json
+                          echo
+                          if command -v python3 >/dev/null 2>&1; then
+                            python3 - <<'PY'
+                            import json
+                            with open("dynamic_config_snapshot.json", "r", encoding="utf-8") as fh:
+                                info = json.load(fh)
+                            dynamic = info.get("dynamicConfig", {})
+                            print("=== Dynamic Config Snapshot (parsed) ===")
+                            print(f"Profile: {dynamic.get('profile')}")
+                            print(f"Banner: {dynamic.get('banner')}")
+                            print(f"Tenant: {dynamic.get('tenant')}")
+                            print(f"Release ring: {dynamic.get('releaseRing')}")
+                            print(f"Target: {dynamic.get('target')}")
+                            print(f"Support: {dynamic.get('supportContact')}")
+                            print(f"Version: {dynamic.get('version')}")
+                            print(f"Source: {dynamic.get('source')}")
+                            print(f"Secret provider: {dynamic.get('secretProvider')}")
+                            print(f"Secret configured: {dynamic.get('secretConfigured')}")
+                            PY
+                          elif command -v python >/dev/null 2>&1; then
+                            python - <<'PY'
+                            import json
+                            with open("dynamic_config_snapshot.json", "r", encoding="utf-8") as fh:
+                                info = json.load(fh)
+                            dynamic = info.get("dynamicConfig", {})
+                            print("=== Dynamic Config Snapshot (parsed) ===")
+                            print(f"Profile: {dynamic.get('profile')}")
+                            print(f"Banner: {dynamic.get('banner')}")
+                            print(f"Tenant: {dynamic.get('tenant')}")
+                            print(f"Release ring: {dynamic.get('releaseRing')}")
+                            print(f"Target: {dynamic.get('target')}")
+                            print(f"Support: {dynamic.get('supportContact')}")
+                            print(f"Version: {dynamic.get('version')}")
+                            print(f"Source: {dynamic.get('source')}")
+                            print(f"Secret provider: {dynamic.get('secretProvider')}")
+                            print(f"Secret configured: {dynamic.get('secretConfigured')}")
+                            PY
+                          elif command -v node >/dev/null 2>&1; then
+                            node -e 'const fs=require("fs"); const info=JSON.parse(fs.readFileSync("dynamic_config_snapshot.json","utf8")); const dynamic=info.dynamicConfig || {}; console.log("=== Dynamic Config Snapshot (parsed) ==="); console.log(`Profile: ${dynamic.profile}`); console.log(`Banner: ${dynamic.banner}`); console.log(`Tenant: ${dynamic.tenant}`); console.log(`Release ring: ${dynamic.releaseRing}`); console.log(`Target: ${dynamic.target}`); console.log(`Support: ${dynamic.supportContact}`); console.log(`Version: ${dynamic.version}`); console.log(`Source: ${dynamic.source}`); console.log(`Secret provider: ${dynamic.secretProvider}`); console.log(`Secret configured: ${dynamic.secretConfigured}`);'
+                          elif command -v jq >/dev/null 2>&1; then
+                            echo "=== Dynamic Config Snapshot (parsed) ==="
+                            jq -r '[
+                              "Profile: " + (.dynamicConfig.profile // "null"),
+                              "Banner: " + (.dynamicConfig.banner // "null"),
+                              "Tenant: " + (.dynamicConfig.tenant // "null"),
+                              "Release ring: " + (.dynamicConfig.releaseRing // "null"),
+                              "Target: " + (.dynamicConfig.target // "null"),
+                              "Support: " + (.dynamicConfig.supportContact // "null"),
+                              "Version: " + (.dynamicConfig.version // "null"),
+                              "Source: " + (.dynamicConfig.source // "null"),
+                              "Secret provider: " + (.dynamicConfig.secretProvider // "null"),
+                              "Secret configured: " + ((.dynamicConfig.secretConfigured // false) | tostring)
+                            ] | .[]' dynamic_config_snapshot.json
+                          else
+                            echo "No JSON parser available on execution target; raw /api/info response shown above."
+                          fi
                     environmentVariables: []
                     outputVariables: []
               - stepGroup:
@@ -1496,23 +1537,64 @@ pipeline:
                           TARGET_URL="https://<+serviceVariables.ingressHost>/api/info"
                           echo "Fetching dynamic config snapshot from ${TARGET_URL}"
                           curl --silent --show-error --fail "${TARGET_URL}" > dynamic_config_snapshot.json
-                          python3 - <<'PY'
-                          import json
-                          with open("dynamic_config_snapshot.json", "r", encoding="utf-8") as fh:
-                              info = json.load(fh)
-                          dynamic = info.get("dynamicConfig", {})
-                          print("=== Dynamic Config Snapshot ===")
-                          print(f"Profile: {dynamic.get('profile')}")
-                          print(f"Banner: {dynamic.get('banner')}")
-                          print(f"Tenant: {dynamic.get('tenant')}")
-                          print(f"Release ring: {dynamic.get('releaseRing')}")
-                          print(f"Target: {dynamic.get('target')}")
-                          print(f"Support: {dynamic.get('supportContact')}")
-                          print(f"Version: {dynamic.get('version')}")
-                          print(f"Source: {dynamic.get('source')}")
-                          print(f"Secret provider: {dynamic.get('secretProvider')}")
-                          print(f"Secret configured: {dynamic.get('secretConfigured')}")
-                          PY
+                          echo "=== Dynamic Config Snapshot (raw /api/info response) ==="
+                          cat dynamic_config_snapshot.json
+                          echo
+                          if command -v python3 >/dev/null 2>&1; then
+                            python3 - <<'PY'
+                            import json
+                            with open("dynamic_config_snapshot.json", "r", encoding="utf-8") as fh:
+                                info = json.load(fh)
+                            dynamic = info.get("dynamicConfig", {})
+                            print("=== Dynamic Config Snapshot (parsed) ===")
+                            print(f"Profile: {dynamic.get('profile')}")
+                            print(f"Banner: {dynamic.get('banner')}")
+                            print(f"Tenant: {dynamic.get('tenant')}")
+                            print(f"Release ring: {dynamic.get('releaseRing')}")
+                            print(f"Target: {dynamic.get('target')}")
+                            print(f"Support: {dynamic.get('supportContact')}")
+                            print(f"Version: {dynamic.get('version')}")
+                            print(f"Source: {dynamic.get('source')}")
+                            print(f"Secret provider: {dynamic.get('secretProvider')}")
+                            print(f"Secret configured: {dynamic.get('secretConfigured')}")
+                            PY
+                          elif command -v python >/dev/null 2>&1; then
+                            python - <<'PY'
+                            import json
+                            with open("dynamic_config_snapshot.json", "r", encoding="utf-8") as fh:
+                                info = json.load(fh)
+                            dynamic = info.get("dynamicConfig", {})
+                            print("=== Dynamic Config Snapshot (parsed) ===")
+                            print(f"Profile: {dynamic.get('profile')}")
+                            print(f"Banner: {dynamic.get('banner')}")
+                            print(f"Tenant: {dynamic.get('tenant')}")
+                            print(f"Release ring: {dynamic.get('releaseRing')}")
+                            print(f"Target: {dynamic.get('target')}")
+                            print(f"Support: {dynamic.get('supportContact')}")
+                            print(f"Version: {dynamic.get('version')}")
+                            print(f"Source: {dynamic.get('source')}")
+                            print(f"Secret provider: {dynamic.get('secretProvider')}")
+                            print(f"Secret configured: {dynamic.get('secretConfigured')}")
+                            PY
+                          elif command -v node >/dev/null 2>&1; then
+                            node -e 'const fs=require("fs"); const info=JSON.parse(fs.readFileSync("dynamic_config_snapshot.json","utf8")); const dynamic=info.dynamicConfig || {}; console.log("=== Dynamic Config Snapshot (parsed) ==="); console.log(`Profile: ${dynamic.profile}`); console.log(`Banner: ${dynamic.banner}`); console.log(`Tenant: ${dynamic.tenant}`); console.log(`Release ring: ${dynamic.releaseRing}`); console.log(`Target: ${dynamic.target}`); console.log(`Support: ${dynamic.supportContact}`); console.log(`Version: ${dynamic.version}`); console.log(`Source: ${dynamic.source}`); console.log(`Secret provider: ${dynamic.secretProvider}`); console.log(`Secret configured: ${dynamic.secretConfigured}`);'
+                          elif command -v jq >/dev/null 2>&1; then
+                            echo "=== Dynamic Config Snapshot (parsed) ==="
+                            jq -r '[
+                              "Profile: " + (.dynamicConfig.profile // "null"),
+                              "Banner: " + (.dynamicConfig.banner // "null"),
+                              "Tenant: " + (.dynamicConfig.tenant // "null"),
+                              "Release ring: " + (.dynamicConfig.releaseRing // "null"),
+                              "Target: " + (.dynamicConfig.target // "null"),
+                              "Support: " + (.dynamicConfig.supportContact // "null"),
+                              "Version: " + (.dynamicConfig.version // "null"),
+                              "Source: " + (.dynamicConfig.source // "null"),
+                              "Secret provider: " + (.dynamicConfig.secretProvider // "null"),
+                              "Secret configured: " + ((.dynamicConfig.secretConfigured // false) | tostring)
+                            ] | .[]' dynamic_config_snapshot.json
+                          else
+                            echo "No JSON parser available on execution target; raw /api/info response shown above."
+                          fi
                     environmentVariables: []
                     outputVariables: []
               - step:
