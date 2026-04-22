@@ -29,7 +29,7 @@ pipeline:
       type: String
       description: Container image used for the QA Playwright smoke tests; point this at the dedicated runner image when it is published
       required: false
-      value: <+input>.default("node:20-bookworm")
+      value: <+input>.default("parsontodd/custom-runner:latest")
     - name: qa_playwright_image_connector_ref
       type: String
       description: Connector reference used to pull the QA Playwright runner image
@@ -39,7 +39,7 @@ pipeline:
       type: String
       description: Whether to install Chromium at runtime; disable when the custom runner image already bakes in the Playwright browser payload
       required: false
-      value: <+input>.default(true).allowedValues(true,false)
+      value: <+input>.default(false).allowedValues(true,false)
     - name: harness_code_api_key
       type: Secret
       description: Harness API key used to post QA smoke summaries to Harness Code pull requests in harness-demo-app
