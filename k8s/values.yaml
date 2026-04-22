@@ -56,7 +56,7 @@ env:
     CONFIG_BANNER: <+stage.variables.dynamic_config_banner>
     CONFIG_TENANT: <+pipeline.variables.dynamic_config_tenant>
     CONFIG_RELEASE_RING: <+stage.variables.dynamic_config_release_ring>
-    CONFIG_TARGET: <+infra.identifier>
+    CONFIG_TARGET: <+infra.infraIdentifier>
     CONFIG_SUPPORT_CONTACT: <+pipeline.variables.dynamic_config_support_contact>
     CONFIG_VERSION: <+stage.variables.dynamic_config_version>
     CONFIG_SOURCE: Harness Stage Variables
