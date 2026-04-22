@@ -15,11 +15,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && chmod +x /usr/local/bin/kubectl
 
 ENV CI=true \
+    QA_PLAYWRIGHT_HOME=/opt/qa-playwright \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     npm_config_fund=false \
     npm_config_update_notifier=false
 
+WORKDIR /opt/qa-playwright
+
+COPY package.json package-lock.json playwright.config.js ./
+COPY playwright-tests ./playwright-tests
+
+RUN npm ci --no-fund --no-audit \
+  && npm cache clean --force
+
 WORKDIR /workspace
 
 ENTRYPOINT ["/bin/bash", "-lc"]
-CMD ["node --version && npm --version && npx playwright --version && kubectl version --client=true && jq --version && ab -V"]
+CMD ["node --version && npm --version && npx playwright --version && kubectl version --client=true && jq --version && ab -V && test -d /opt/qa-playwright/playwright-tests"]
