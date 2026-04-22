@@ -1127,6 +1127,7 @@ pipeline:
                           - name: work_notes
                             value: |-
                               <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE> service passed <+env.name> security and quality gates. Ready to release.
+                              QA Playwright Smoke: <+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_STATUS> (<+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_PASSED>/<+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_TOTAL> passed, <+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_FAILED> failed).
                               Pipeline Execution: <+pipeline.executionUrl>.
                       timeout: 5m
             rollbackSteps: []
@@ -1177,7 +1178,13 @@ pipeline:
                             },
                             "validation": {
                               "tests": {
-                                "pass_rate": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>
+                                "pass_rate": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>,
+                                "qa_playwright": {
+                                  "status": "<+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_STATUS>",
+                                  "total": "<+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_TOTAL>",
+                                  "passed": "<+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_PASSED>",
+                                  "failed": "<+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_FAILED>"
+                                }
                               },
                               "security": {
                                 "critical_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>,
