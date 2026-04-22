@@ -1584,32 +1584,93 @@ pipeline:
                   when:
                     stageStatus: Success
                     condition: <+pipeline.variables.trigger_cv_chaos> == "true"
-              - step:
-                  type: Verify
-                  name: Verify Canary
-                  identifier: verify_canary
-                  spec:
-                    isMultiServicesOrEnvs: false
-                    type: Canary
-                    monitoredService:
-                      type: Default
-                      spec: {}
-                    spec:
-                      sensitivity: <+pipeline.variables.cv_sensitivity>
-                      duration: <+pipeline.variables.cv_duration>
-                      deploymentTag: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
-                  timeout: 20m
-                  failureStrategies:
-                    - onFailure:
-                        errors:
-                          - Verification
-                        action:
-                          type: ManualIntervention
+              - parallel:
+                  - step:
+                      type: ShellScript
+                      name: Generate CV Baseline Traffic
+                      identifier: generate_cv_baseline_traffic
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
                           spec:
-                            timeout: 2h
-                            onTimeout:
-                              action:
-                                type: StageRollback
+                            script: |
+                              #!/bin/bash
+                              set +e
+
+                              STABLE_URL="http://<+service.name.replace(\" \", \"\").toLowerCase()>-service.<+infra.namespace>.svc.cluster.local/api/process"
+                              CANARY_URL="http://<+service.name.replace(\" \", \"\").toLowerCase()>-service-stage.<+infra.namespace>.svc.cluster.local/api/process"
+                              CV_DURATION_RAW="<+pipeline.variables.cv_duration>"
+                              case "$CV_DURATION_RAW" in
+                                *m)
+                                  DURATION_SECONDS=$(( ${CV_DURATION_RAW%m} * 60 ))
+                                  ;;
+                                *s)
+                                  DURATION_SECONDS=${CV_DURATION_RAW%s}
+                                  ;;
+                                *)
+                                  DURATION_SECONDS=300
+                                  ;;
+                              esac
+                              DURATION_SECONDS=$(( DURATION_SECONDS + 60 ))
+                              END_TIME=$(( $(date +%s) + DURATION_SECONDS ))
+                              STABLE_SUCCESS=0
+                              STABLE_FAILURE=0
+                              CANARY_SUCCESS=0
+                              CANARY_FAILURE=0
+
+                              echo "Driving baseline traffic for ${DURATION_SECONDS}s during canary verification"
+                              echo "Stable URL: ${STABLE_URL}"
+                              echo "Canary URL: ${CANARY_URL}"
+
+                              while [ "$(date +%s)" -lt "$END_TIME" ]; do
+                                if curl -k -sS -o /dev/null -X POST "${STABLE_URL}" -H 'Content-Type: application/json' -d '{"source":"cv-baseline","target":"stable"}'; then
+                                  STABLE_SUCCESS=$((STABLE_SUCCESS + 1))
+                                else
+                                  STABLE_FAILURE=$((STABLE_FAILURE + 1))
+                                fi
+
+                                if curl -sS -o /dev/null -X POST "${CANARY_URL}" -H 'Content-Type: application/json' -d '{"source":"cv-baseline","target":"canary"}'; then
+                                  CANARY_SUCCESS=$((CANARY_SUCCESS + 1))
+                                else
+                                  CANARY_FAILURE=$((CANARY_FAILURE + 1))
+                                fi
+
+                                sleep 2
+                              done
+
+                              echo "Stable traffic results: success=${STABLE_SUCCESS}, failure=${STABLE_FAILURE}"
+                              echo "Canary traffic results: success=${CANARY_SUCCESS}, failure=${CANARY_FAILURE}"
+                        environmentVariables: []
+                        outputVariables: []
+                      timeout: 15m
+                  - step:
+                      type: Verify
+                      name: Verify Canary
+                      identifier: verify_canary
+                      spec:
+                        isMultiServicesOrEnvs: false
+                        type: Canary
+                        monitoredService:
+                          type: Default
+                          spec: {}
+                        spec:
+                          sensitivity: <+pipeline.variables.cv_sensitivity>
+                          duration: <+pipeline.variables.cv_duration>
+                          deploymentTag: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                      timeout: 20m
+                      failureStrategies:
+                        - onFailure:
+                            errors:
+                              - Verification
+                            action:
+                              type: ManualIntervention
+                              spec:
+                                timeout: 2h
+                                onTimeout:
+                                  action:
+                                    type: StageRollback
               - step:
                   name: Approval
                   identifier: canary_approval
