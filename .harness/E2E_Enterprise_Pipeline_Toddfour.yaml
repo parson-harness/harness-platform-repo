@@ -29,12 +29,12 @@ pipeline:
       type: String
       description: Container image used for the QA Playwright smoke tests; point this at the dedicated runner image when it is published
       required: false
-      value: <+input>.default("parsontodd/custom-runner:latest")
+      value: <+input>.default(har-docker-shared/custom-runner:latest)
     - name: qa_playwright_image_connector_ref
       type: String
       description: Connector reference used to pull the QA Playwright runner image
       required: false
-      value: <+input>.default("parson")
+      value: <+input>.default(dockershared)
     - name: qa_playwright_install_browsers
       type: String
       description: Whether to install Chromium at runtime; disable when the custom runner image already bakes in the Playwright browser payload
