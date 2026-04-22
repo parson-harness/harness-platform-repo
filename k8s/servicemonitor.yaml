@@ -13,7 +13,7 @@ spec:
       app: {{.Values.name}}
   namespaceSelector:
     matchNames:
-      - <+infra.namespace>
+      - {{.Values.namespace}}
   endpoints:
     - port: http
       path: /actuator/prometheus
