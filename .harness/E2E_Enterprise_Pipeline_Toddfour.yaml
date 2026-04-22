@@ -25,6 +25,26 @@ pipeline:
       description: Repository branch to clone for the QA Playwright smoke tests during manual or demo runs
       required: false
       value: <+input>.default(main)
+    - name: qa_playwright_image
+      type: String
+      description: Container image used for the QA Playwright smoke tests; point this at the dedicated runner image when it is published
+      required: false
+      value: <+input>.default("node:20-bookworm")
+    - name: qa_playwright_image_connector_ref
+      type: String
+      description: Connector reference used to pull the QA Playwright runner image
+      required: false
+      value: <+input>.default("parson")
+    - name: qa_playwright_install_browsers
+      type: String
+      description: Whether to install Chromium at runtime; disable when the custom runner image already bakes in the Playwright browser payload
+      required: false
+      value: <+input>.default(true).allowedValues(true,false)
+    - name: harness_code_api_key
+      type: Secret
+      description: Harness API key used to post QA smoke summaries to Harness Code pull requests in harness-demo-app
+      required: false
+      value: acct-automation-svc-acct
     - name: trigger_cv_chaos
       type: String
       description: Trigger the demo chaos endpoint during production canary verification
@@ -858,44 +878,142 @@ pipeline:
                         identifier: automated_qa_tests
                         timeout: 20m
                         spec:
-                          connectorRef: parson
-                          image: node:20-bookworm
+                          connectorRef: <+pipeline.variables.qa_playwright_image_connector_ref>
+                          image: <+pipeline.variables.qa_playwright_image>
                           shell: Bash
                           command: |-
-                            set -euo pipefail
+                            set -uo pipefail
+
+                            resolve_input() {
+                              case "$1" in
+                                ""|"<+"*">")
+                                  printf ''
+                                  ;;
+                                *)
+                                  printf '%s' "$1"
+                                  ;;
+                              esac
+                            }
+
                             export PLAYWRIGHT_BASE_URL="https://<+serviceVariables.ingressStageHost>"
                             export PLAYWRIGHT_WORKERS=2
-                            export REPO_BRANCH="<+pipeline.variables.qa_repo_branch>"
 
-                            echo "=== QA PLAYWRIGHT SMOKE TESTS ==="
-                            echo "Target URL: ${PLAYWRIGHT_BASE_URL}"
-                            echo "Repo branch: ${REPO_BRANCH}"
+                            MANUAL_BRANCH="$(resolve_input "<+pipeline.variables.qa_repo_branch>")"
+                            CODEBASE_BRANCH="$(resolve_input "<+codebase.branch>")"
+                            export REPO_BRANCH="${MANUAL_BRANCH:-$CODEBASE_BRANCH}"
+                            if [ -z "$REPO_BRANCH" ]; then
+                              REPO_BRANCH="main"
+                            fi
 
-                            apt-get update
-                            apt-get install -y --no-install-recommends git
-                            rm -rf repo-under-test
-                            git clone --depth 1 --branch "$REPO_BRANCH" https://github.com/parson-harness/harness-demo-app.git repo-under-test
-                            cd repo-under-test
+                            PR_NUMBER="$(resolve_input "<+codebase.prNumber>")"
+                            INSTALL_BROWSERS="$(resolve_input "<+pipeline.variables.qa_playwright_install_browsers>")"
+                            if [ -z "$INSTALL_BROWSERS" ]; then
+                              INSTALL_BROWSERS="true"
+                            fi
 
-                            npm install --no-fund --no-audit
-                            npx playwright install --with-deps chromium
-                            set +e
-                            npx playwright test --config=playwright.config.js
-                            TEST_EXIT_CODE=$?
-                            set -e
+                            HARNESS_BASE_URL="$(resolve_input "<+pipeline.variables.harness_endpoint>")"
+                            if [ -z "$HARNESS_BASE_URL" ]; then
+                              HARNESS_BASE_URL="https://app.harness.io/gratis"
+                            fi
+                            HARNESS_BASE_URL="${HARNESS_BASE_URL%%/gratis*}"
+                            if [ -z "$HARNESS_BASE_URL" ]; then
+                              HARNESS_BASE_URL="https://app.harness.io"
+                            fi
+
+                            HARNESS_CODE_REPO="harness-demo-app"
+                            ACCOUNT_IDENTIFIER="<+account.identifier>"
+                            ORG_IDENTIFIER="<+org.identifier>"
+                            PROJECT_IDENTIFIER="<+project.identifier>"
+                            PIPELINE_EXECUTION_URL="<+pipeline.executionUrl>"
+                            IMAGE_REFERENCE="<+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>"
+                            COMMIT_SHA="<+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>"
+                            HARNESS_CODE_API_KEY="<+pipeline.variables.harness_code_api_key>"
 
                             RESULTS_FILE="playwright-report/junit/results.xml"
                             TOTAL_TESTS=0
                             TOTAL_FAILURES=0
                             TOTAL_SKIPPED=0
+                            PASSED_TESTS=0
+                            TEST_EXIT_CODE=0
+                            FAILURE_CONTEXT=""
+                            GATE_STATUS="PASSED"
+
+                            echo "=== QA PLAYWRIGHT SMOKE TESTS ==="
+                            echo "Target URL: ${PLAYWRIGHT_BASE_URL}"
+                            echo "Repo branch: ${REPO_BRANCH}"
+
+                            REQUIRED_PACKAGES=""
+                            if ! command -v git >/dev/null 2>&1; then
+                              REQUIRED_PACKAGES="${REQUIRED_PACKAGES} git"
+                            fi
+                            if ! command -v curl >/dev/null 2>&1; then
+                              REQUIRED_PACKAGES="${REQUIRED_PACKAGES} curl"
+                            fi
+
+                            if [ -n "${REQUIRED_PACKAGES# }" ]; then
+                              if command -v apt-get >/dev/null 2>&1; then
+                                apt-get update || {
+                                  TEST_EXIT_CODE=$?
+                                  FAILURE_CONTEXT="apt-get update"
+                                }
+                                if [ "$TEST_EXIT_CODE" -eq 0 ]; then
+                                  apt-get install -y --no-install-recommends ${REQUIRED_PACKAGES# } || {
+                                    TEST_EXIT_CODE=$?
+                                    FAILURE_CONTEXT="install runtime tools"
+                                  }
+                                fi
+                              else
+                                TEST_EXIT_CODE=1
+                                FAILURE_CONTEXT="install runtime tools"
+                                echo "Missing required tools:${REQUIRED_PACKAGES}"
+                              fi
+                            fi
+
+                            if [ "$TEST_EXIT_CODE" -eq 0 ] && command -v git >/dev/null 2>&1; then
+                              git config --global --add safe.directory '*' || true
+                            fi
+
+                            if [ "$TEST_EXIT_CODE" -eq 0 ]; then
+                              rm -rf repo-under-test
+                              git clone --depth 1 --branch "$REPO_BRANCH" https://github.com/parson-harness/harness-demo-app.git repo-under-test || {
+                                TEST_EXIT_CODE=$?
+                                FAILURE_CONTEXT="clone repository"
+                              }
+                            fi
+
+                            if [ "$TEST_EXIT_CODE" -eq 0 ]; then
+                              cd repo-under-test || {
+                                TEST_EXIT_CODE=$?
+                                FAILURE_CONTEXT="enter repository"
+                              }
+                            fi
+
+                            if [ "$TEST_EXIT_CODE" -eq 0 ]; then
+                              npm install --no-fund --no-audit || {
+                                TEST_EXIT_CODE=$?
+                                FAILURE_CONTEXT="install npm dependencies"
+                              }
+                            fi
+
+                            if [ "$TEST_EXIT_CODE" -eq 0 ] && [ "$INSTALL_BROWSERS" = "true" ]; then
+                              npx playwright install --with-deps chromium || {
+                                TEST_EXIT_CODE=$?
+                                FAILURE_CONTEXT="install Playwright browsers"
+                              }
+                            fi
+
+                            if [ "$TEST_EXIT_CODE" -eq 0 ]; then
+                              npx playwright test --config=playwright.config.js
+                              TEST_EXIT_CODE=$?
+                              if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+                                FAILURE_CONTEXT="run Playwright smoke tests"
+                              fi
+                            fi
 
                             if [ -f "$RESULTS_FILE" ]; then
                               TOTAL_TESTS=$(grep -o 'tests="[0-9][0-9]*"' "$RESULTS_FILE" | head -n1 | cut -d'"' -f2 || true)
                               TOTAL_FAILURES=$(grep -o 'failures="[0-9][0-9]*"' "$RESULTS_FILE" | head -n1 | cut -d'"' -f2 || true)
                               TOTAL_SKIPPED=$(grep -o 'skipped="[0-9][0-9]*"' "$RESULTS_FILE" | head -n1 | cut -d'"' -f2 || true)
-                              if command -v hcli >/dev/null 2>&1; then
-                                hcli --verbose test-reports upload "$RESULTS_FILE" || true
-                              fi
                             fi
 
                             TOTAL_TESTS=${TOTAL_TESTS:-0}
@@ -906,16 +1024,87 @@ pipeline:
                               PASSED_TESTS=0
                             fi
 
+                            if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+                              GATE_STATUS="FAILED"
+                            fi
+
+                            cat <<EOF > qa_playwright_summary.md
+                            ## QA Blue Playwright Smoke
+
+                            - Status: ${GATE_STATUS}
+                            - Stage URL: ${PLAYWRIGHT_BASE_URL}
+                            - Branch: ${REPO_BRANCH}
+                            - Commit: ${COMMIT_SHA}
+                            - Artifact: ${IMAGE_REFERENCE}
+                            - Total tests: ${TOTAL_TESTS}
+                            - Passed: ${PASSED_TESTS}
+                            - Failed: ${TOTAL_FAILURES}
+                            - Skipped: ${TOTAL_SKIPPED}
+                            - Pipeline execution: ${PIPELINE_EXECUTION_URL}
+                            EOF
+
+                            if [ -n "$FAILURE_CONTEXT" ]; then
+                              printf '\n- Failure context: %s\n' "$FAILURE_CONTEXT" >> qa_playwright_summary.md
+                            fi
+
+                            if command -v hcli >/dev/null 2>&1; then
+                              ANNOTATION_STYLE="SUCCESS"
+                              if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+                                ANNOTATION_STYLE="FAILURE"
+                              fi
+                              hcli annotate --context "qa-playwright-smoke" --style "$ANNOTATION_STYLE" --summary-file qa_playwright_summary.md || true
+                              if [ -f "$RESULTS_FILE" ]; then
+                                hcli --verbose test-reports upload "$RESULTS_FILE" || true
+                              fi
+                            fi
+
+                            if [ -n "$PR_NUMBER" ] && [ -n "$HARNESS_CODE_API_KEY" ] && command -v curl >/dev/null 2>&1; then
+                              node -e 'const fs=require("fs"); const text=fs.readFileSync("qa_playwright_summary.md","utf8"); process.stdout.write(JSON.stringify({text}));' > qa_playwright_pr_comment.json
+                              curl --silent --show-error --fail \
+                                -X POST \
+                                "${HARNESS_BASE_URL}/code/api/v1/repos/${HARNESS_CODE_REPO}/pullreq/${PR_NUMBER}/comments?accountIdentifier=${ACCOUNT_IDENTIFIER}&orgIdentifier=${ORG_IDENTIFIER}&projectIdentifier=${PROJECT_IDENTIFIER}" \
+                                -H "Content-Type: application/json" \
+                                -H "x-api-key: ${HARNESS_CODE_API_KEY}" \
+                                --data @qa_playwright_pr_comment.json || true
+                            fi
+
                             echo "=== QA PLAYWRIGHT SUMMARY ==="
+                            echo "Status: ${GATE_STATUS}"
                             echo "Total tests: ${TOTAL_TESTS}"
                             echo "Passed: ${PASSED_TESTS}"
                             echo "Failed: ${TOTAL_FAILURES}"
                             echo "Skipped: ${TOTAL_SKIPPED}"
                             echo "Exit code: ${TEST_EXIT_CODE}"
 
+                            export QA_PLAYWRIGHT_STATUS="$GATE_STATUS"
+                            export QA_PLAYWRIGHT_TOTAL="$TOTAL_TESTS"
+                            export QA_PLAYWRIGHT_PASSED="$PASSED_TESTS"
+                            export QA_PLAYWRIGHT_FAILED="$TOTAL_FAILURES"
+                            export QA_PLAYWRIGHT_SKIPPED="$TOTAL_SKIPPED"
+                            export QA_PLAYWRIGHT_BRANCH="$REPO_BRANCH"
+
                             if [ "$TEST_EXIT_CODE" -ne 0 ]; then
                               exit "$TEST_EXIT_CODE"
                             fi
+                          outputVariables:
+                            - name: QA_PLAYWRIGHT_STATUS
+                              type: String
+                              value: QA_PLAYWRIGHT_STATUS
+                            - name: QA_PLAYWRIGHT_TOTAL
+                              type: String
+                              value: QA_PLAYWRIGHT_TOTAL
+                            - name: QA_PLAYWRIGHT_PASSED
+                              type: String
+                              value: QA_PLAYWRIGHT_PASSED
+                            - name: QA_PLAYWRIGHT_FAILED
+                              type: String
+                              value: QA_PLAYWRIGHT_FAILED
+                            - name: QA_PLAYWRIGHT_SKIPPED
+                              type: String
+                              value: QA_PLAYWRIGHT_SKIPPED
+                            - name: QA_PLAYWRIGHT_BRANCH
+                              type: String
+                              value: QA_PLAYWRIGHT_BRANCH
                   stepGroupInfra:
                     type: KubernetesDirect
                     spec:
@@ -929,6 +1118,11 @@ pipeline:
                   spec:
                     approvalMessage: |
                       Blue/Green deployment staged successfully.
+
+                      QA smoke gate:
+                        Status: <+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_STATUS>
+                        Passed: <+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_PASSED> / <+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_TOTAL>
+                        Branch: <+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_BRANCH>
 
                       Artifact:
                         Image tag: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
