@@ -1,0 +1,13 @@
+environment:
+  name: Toddfour Prod
+  identifier: Toddfour_Prod
+  description: Production environment for toddfour
+  tags:
+    toddfour: ""
+    workspace-id: toddfour_pov
+    workspace-template-id: POV_Provisioner
+    eks: ""
+    tofu: ""
+  type: Production
+  orgIdentifier: sandbox
+  projectIdentifier: parson
