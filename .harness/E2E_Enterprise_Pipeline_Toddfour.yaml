@@ -20,6 +20,21 @@ pipeline:
       description: Automatically trigger CD pipeline after successful build
       required: false
       value: <+input>.default(true).allowedValues(true,false)
+    - name: qa_playwright_image
+      type: String
+      description: Container image used for the QA Playwright smoke tests; point this at the dedicated runner image when it is published
+      required: false
+      value: <+input>.default(har-docker-shared/custom-runner:latest)
+    - name: qa_playwright_image_connector_ref
+      type: String
+      description: Connector reference used to pull the QA Playwright runner image
+      required: false
+      value: <+input>.default(dockershared)
+    - name: harness_code_api_key
+      type: Secret
+      description: Harness API key used to post QA smoke summaries to Harness Code pull requests in harness-demo-app
+      required: false
+      value: acct-automation-svc-acct
     - name: trigger_cv_chaos
       type: String
       description: Trigger the demo chaos endpoint during production canary verification
@@ -830,6 +845,8 @@ pipeline:
                           echo "Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>"
                           echo "Primary URL: https://<+serviceVariables.ingressHost>"
                           echo "Stage URL:   https://<+serviceVariables.ingressStageHost>"
+                          echo "Infra Connector: <+infra.connectorRef>"
+                          echo "Infra Namespace: <+infra.namespace>"
                           echo "========================================"
                     environmentVariables: []
                     outputVariables: []
@@ -841,6 +858,183 @@ pipeline:
                   timeout: 10m
                   spec:
                     skipDryRun: false
+              - stepGroup:
+                  name: QA Validation
+                  identifier: qa_validation
+                  steps:
+                    - step:
+                        type: Run
+                        name: Automated QA Tests
+                        identifier: automated_qa_tests
+                        timeout: 20m
+                        spec:
+                          connectorRef: <+pipeline.variables.qa_playwright_image_connector_ref>
+                          image: <+pipeline.variables.qa_playwright_image>
+                          shell: Bash
+                          command: |-
+                            set -uo pipefail
+
+                            resolve_input() {
+                              case "$1" in
+                                ""|"null"|"<+"*">")
+                                  printf ''
+                                  ;;
+                                *)
+                                  printf '%s' "$1"
+                                  ;;
+                              esac
+                            }
+
+                            export PLAYWRIGHT_BASE_URL="https://<+serviceVariables.ingressStageHost>"
+                            export PLAYWRIGHT_WORKERS=2
+
+                            PR_NUMBER="$(resolve_input "<+codebase.prNumber>")"
+
+                            HARNESS_BASE_URL="$(resolve_input "<+pipeline.variables.harness_endpoint>")"
+                            if [ -z "$HARNESS_BASE_URL" ]; then
+                              HARNESS_BASE_URL="https://app.harness.io/gratis"
+                            fi
+                            HARNESS_BASE_URL="${HARNESS_BASE_URL%%/gratis*}"
+                            if [ -z "$HARNESS_BASE_URL" ]; then
+                              HARNESS_BASE_URL="https://app.harness.io"
+                            fi
+
+                            HARNESS_CODE_REPO="harness-demo-app"
+                            ACCOUNT_IDENTIFIER="<+account.identifier>"
+                            ORG_IDENTIFIER="<+org.identifier>"
+                            PROJECT_IDENTIFIER="<+project.identifier>"
+                            PIPELINE_EXECUTION_URL="<+pipeline.executionUrl>"
+                            IMAGE_REFERENCE="<+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>"
+                            COMMIT_SHA="<+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>"
+                            HARNESS_CODE_API_KEY="<+pipeline.variables.harness_code_api_key>"
+
+                            RESULTS_FILE="playwright-report/junit/results.xml"
+                            TOTAL_TESTS=0
+                            TOTAL_FAILURES=0
+                            TOTAL_SKIPPED=0
+                            PASSED_TESTS=0
+                            TEST_EXIT_CODE=0
+                            FAILURE_CONTEXT=""
+                            GATE_STATUS="PASSED"
+
+                            echo "=== QA PLAYWRIGHT SMOKE TESTS ==="
+                            echo "Target URL: ${PLAYWRIGHT_BASE_URL}"
+
+                            if [ "$TEST_EXIT_CODE" -eq 0 ]; then
+                              cd /opt/qa-playwright || {
+                                TEST_EXIT_CODE=$?
+                                FAILURE_CONTEXT="enter baked Playwright suite"
+                              }
+                            fi
+
+                            if [ "$TEST_EXIT_CODE" -eq 0 ]; then
+                              npx playwright test --config=playwright.config.js
+                              TEST_EXIT_CODE=$?
+                              if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+                                FAILURE_CONTEXT="run Playwright smoke tests"
+                              fi
+                            fi
+
+                            if [ -f "$RESULTS_FILE" ]; then
+                              TOTAL_TESTS=$(grep -o 'tests="[0-9][0-9]*"' "$RESULTS_FILE" | head -n1 | cut -d'"' -f2 || true)
+                              TOTAL_FAILURES=$(grep -o 'failures="[0-9][0-9]*"' "$RESULTS_FILE" | head -n1 | cut -d'"' -f2 || true)
+                              TOTAL_SKIPPED=$(grep -o 'skipped="[0-9][0-9]*"' "$RESULTS_FILE" | head -n1 | cut -d'"' -f2 || true)
+                            fi
+
+                            TOTAL_TESTS=${TOTAL_TESTS:-0}
+                            TOTAL_FAILURES=${TOTAL_FAILURES:-0}
+                            TOTAL_SKIPPED=${TOTAL_SKIPPED:-0}
+                            PASSED_TESTS=$((TOTAL_TESTS - TOTAL_FAILURES - TOTAL_SKIPPED))
+                            if [ "$PASSED_TESTS" -lt 0 ]; then
+                              PASSED_TESTS=0
+                            fi
+
+                            if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+                              GATE_STATUS="FAILED"
+                            fi
+
+                            cat <<EOF > qa_playwright_summary.md
+                            ## QA Blue Playwright Smoke
+
+                            - Status: ${GATE_STATUS}
+                            - Stage URL: ${PLAYWRIGHT_BASE_URL}
+                            - Suite source: baked into runner image
+                            - Commit: ${COMMIT_SHA}
+                            - Artifact: ${IMAGE_REFERENCE}
+                            - Total tests: ${TOTAL_TESTS}
+                            - Passed: ${PASSED_TESTS}
+                            - Failed: ${TOTAL_FAILURES}
+                            - Skipped: ${TOTAL_SKIPPED}
+                            - Pipeline execution: ${PIPELINE_EXECUTION_URL}
+                            EOF
+
+                            if [ -n "$FAILURE_CONTEXT" ]; then
+                              printf '\n- Failure context: %s\n' "$FAILURE_CONTEXT" >> qa_playwright_summary.md
+                            fi
+
+                            if command -v hcli >/dev/null 2>&1; then
+                              ANNOTATION_STYLE="SUCCESS"
+                              if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+                                ANNOTATION_STYLE="FAILURE"
+                              fi
+                              hcli annotate --context "qa-playwright-smoke" --style "$ANNOTATION_STYLE" --summary-file qa_playwright_summary.md || true
+                              if [ -f "$RESULTS_FILE" ]; then
+                                hcli --verbose test-reports upload "$RESULTS_FILE" || true
+                              fi
+                            fi
+
+                            if [ -n "$PR_NUMBER" ] && [ -n "$HARNESS_CODE_API_KEY" ] && command -v curl >/dev/null 2>&1; then
+                              node -e 'const fs=require("fs"); const text=fs.readFileSync("qa_playwright_summary.md","utf8"); process.stdout.write(JSON.stringify({text}));' > qa_playwright_pr_comment.json
+                              curl --silent --show-error --fail \
+                                -X POST \
+                                "${HARNESS_BASE_URL}/code/api/v1/repos/${HARNESS_CODE_REPO}/pullreq/${PR_NUMBER}/comments?accountIdentifier=${ACCOUNT_IDENTIFIER}&orgIdentifier=${ORG_IDENTIFIER}&projectIdentifier=${PROJECT_IDENTIFIER}" \
+                                -H "Content-Type: application/json" \
+                                -H "x-api-key: ${HARNESS_CODE_API_KEY}" \
+                                --data @qa_playwright_pr_comment.json || true
+                            fi
+
+                            echo "=== QA PLAYWRIGHT SUMMARY ==="
+                            echo "Status: ${GATE_STATUS}"
+                            echo "Total tests: ${TOTAL_TESTS}"
+                            echo "Passed: ${PASSED_TESTS}"
+                            echo "Failed: ${TOTAL_FAILURES}"
+                            echo "Skipped: ${TOTAL_SKIPPED}"
+                            echo "Exit code: ${TEST_EXIT_CODE}"
+
+                            export QA_PLAYWRIGHT_STATUS="$GATE_STATUS"
+                            export QA_PLAYWRIGHT_TOTAL="$TOTAL_TESTS"
+                            export QA_PLAYWRIGHT_PASSED="$PASSED_TESTS"
+                            export QA_PLAYWRIGHT_FAILED="$TOTAL_FAILURES"
+                            export QA_PLAYWRIGHT_SKIPPED="$TOTAL_SKIPPED"
+                            export QA_PLAYWRIGHT_BRANCH="baked-runner-image"
+
+                            if [ "$TEST_EXIT_CODE" -ne 0 ]; then
+                              exit "$TEST_EXIT_CODE"
+                            fi
+                          outputVariables:
+                            - name: QA_PLAYWRIGHT_STATUS
+                              type: String
+                              value: QA_PLAYWRIGHT_STATUS
+                            - name: QA_PLAYWRIGHT_TOTAL
+                              type: String
+                              value: QA_PLAYWRIGHT_TOTAL
+                            - name: QA_PLAYWRIGHT_PASSED
+                              type: String
+                              value: QA_PLAYWRIGHT_PASSED
+                            - name: QA_PLAYWRIGHT_FAILED
+                              type: String
+                              value: QA_PLAYWRIGHT_FAILED
+                            - name: QA_PLAYWRIGHT_SKIPPED
+                              type: String
+                              value: QA_PLAYWRIGHT_SKIPPED
+                            - name: QA_PLAYWRIGHT_BRANCH
+                              type: String
+                              value: QA_PLAYWRIGHT_BRANCH
+                  stepGroupInfra:
+                    type: KubernetesDirect
+                    spec:
+                      connectorRef: <+infra.connectorRef>
+                      namespace: <+infra.namespace>
               - step:
                   name: Approval
                   identifier: bg_approval
@@ -849,6 +1043,11 @@ pipeline:
                   spec:
                     approvalMessage: |
                       Blue/Green deployment staged successfully.
+
+                      QA smoke gate:
+                        Status: <+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_STATUS>
+                        Passed: <+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_PASSED> / <+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_TOTAL>
+                        Suite: <+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_BRANCH>
 
                       Artifact:
                         Image tag: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
@@ -1357,3 +1556,4 @@ pipeline:
   identifier: E2E_Enterprise_Pipeline_Toddfour
   description: "End-to-end enterprise CI/CD pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA), Change Management, QA B/G deploy, Prod Canary deploy"
   name: E2E Enterprise Pipeline - Toddfour
+  allowStageExecutions: true
