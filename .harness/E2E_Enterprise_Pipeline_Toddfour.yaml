@@ -844,13 +844,13 @@ pipeline:
                   spec:
                     skipDryRun: false
               - stepGroup:
-                  name: QA Blue Playwright Smoke
-                  identifier: qa_blue_playwright_smoke
+                  name: QA Validation
+                  identifier: qa_validation
                   steps:
                     - step:
                         type: Run
-                        name: Playwright QA Tests
-                        identifier: run_playwright_smoke
+                        name: Automated QA Tests
+                        identifier: automated_qa_tests
                         timeout: 20m
                         spec:
                           connectorRef: account.harnessImage
