@@ -853,7 +853,7 @@ pipeline:
                         identifier: automated_qa_tests
                         timeout: 20m
                         spec:
-                          connectorRef: account.harnessImage
+                          connectorRef: parson
                           image: gradle:8.5-jdk17
                           shell: Bash
                           command: |-
