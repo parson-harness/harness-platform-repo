@@ -1572,7 +1572,7 @@ pipeline:
                   name: Trigger Chaos for CV Demo
                   identifier: trigger_cv_chaos
                   spec:
-                    url: http://<+service.name.replace(" ", "").toLowerCase()>-service-stage.<+infra.namespace>.svc.cluster.local/api/chaos/degrade-canary?durationSeconds=180
+                    url: https://<+serviceVariables.ingressStageHost>/api/chaos/degrade-canary?durationSeconds=180
                     method: POST
                     headers: []
                     requestBody: ""
@@ -1599,8 +1599,8 @@ pipeline:
                               #!/bin/bash
                               set +e
 
-                              STABLE_URL="http://<+service.name.replace(\" \", \"\").toLowerCase()>-service.<+infra.namespace>.svc.cluster.local/api/process"
-                              CANARY_URL="http://<+service.name.replace(\" \", \"\").toLowerCase()>-service-stage.<+infra.namespace>.svc.cluster.local/api/process"
+                              STABLE_URL="https://<+serviceVariables.ingressHost>/api/process"
+                              CANARY_URL="https://<+serviceVariables.ingressStageHost>/api/process"
                               CV_DURATION_RAW="<+pipeline.variables.cv_duration>"
                               case "$CV_DURATION_RAW" in
                                 *m)
