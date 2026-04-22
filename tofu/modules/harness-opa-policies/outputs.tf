@@ -34,6 +34,7 @@ output "change_governance_policy_ids" {
   value = {
     change_readiness_guardrails = var.create_change_governance_policies ? harness_platform_policy.change_readiness_guardrails[0].identifier : null
     change_validation_quality   = var.create_change_governance_policies ? harness_platform_policy.change_validation_quality[0].identifier : null
+    change_qa_playwright_gate   = var.create_change_governance_policies ? harness_platform_policy.change_qa_playwright_gate[0].identifier : null
     change_risk_score           = var.create_change_governance_policies ? harness_platform_policy.change_risk_score[0].identifier : null
   }
 }

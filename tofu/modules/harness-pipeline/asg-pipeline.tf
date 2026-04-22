@@ -50,7 +50,8 @@ ${local.asg_delegate_yaml}            spec:
                                 "pipeline": {
                                   "identifier": "<+pipeline.identifier>",
                                   "execution_id": "<+pipeline.executionId>",
-                                  "sequence_id": "<+pipeline.sequenceId>"
+                                  "sequence_id": "<+pipeline.sequenceId>",
+                                  "provisioner_managed": true
                                 },
                                 "change": {
                                   "request_id": "<+pipeline.identifier>-<+pipeline.sequenceId>",
@@ -64,7 +65,14 @@ ${local.asg_delegate_yaml}            spec:
                                 },
                                 "validation": {
                                   "tests": {
-                                    "pass_rate": <+pipeline.variables.test_pass_rate>
+                                    "pass_rate": <+pipeline.variables.test_pass_rate>,
+                                    "qa_playwright": {
+                                      "enforced": <+pipeline.variables.qa_playwright_governance_enabled>,
+                                      "status": "<+pipeline.variables.qa_playwright_status>",
+                                      "total": "<+pipeline.variables.qa_playwright_total>",
+                                      "passed": "<+pipeline.variables.qa_playwright_passed>",
+                                      "failed": "<+pipeline.variables.qa_playwright_failed>"
+                                    }
                                   },
                                   "security": {
                                     "critical_vulns": <+pipeline.variables.critical_vulnerabilities>,
@@ -269,6 +277,31 @@ ${local.asg_pipeline_yaml_tags != "" ? "${local.asg_pipeline_yaml_tags}\n" : ""}
           description: JSON release-candidate evidence bundle; auto-populated from CI/webhook runs or entered manually for demo/manual runs
           required: false
           value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})
+        - name: qa_playwright_governance_enabled
+          type: String
+          description: Whether Release Governance should require a PASSED QA Playwright smoke gate for this provisioner-managed pipeline run
+          required: false
+          value: <+input>.default(false).allowedValues(true,false)
+        - name: qa_playwright_status
+          type: String
+          description: QA Playwright smoke gate status passed into Release Governance when the gate is enabled for this run
+          required: false
+          value: <+input>.default(NOT_RUN)
+        - name: qa_playwright_total
+          type: String
+          description: Total QA Playwright smoke tests executed for this run
+          required: false
+          value: <+input>.default(0)
+        - name: qa_playwright_passed
+          type: String
+          description: Number of QA Playwright smoke tests that passed for this run
+          required: false
+          value: <+input>.default(0)
+        - name: qa_playwright_failed
+          type: String
+          description: Number of QA Playwright smoke tests that failed for this run
+          required: false
+          value: <+input>.default(0)
       stages:
 ${local.asg_change_governance_yaml}
         - stage:

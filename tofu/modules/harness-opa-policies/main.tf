@@ -533,6 +533,44 @@ resource "harness_platform_policy" "change_validation_quality" {
   REGO
 }
 
+resource "harness_platform_policy" "change_qa_playwright_gate" {
+  count      = var.create_change_governance_policies ? 1 : 0
+  identifier = "change_qa_playwright_gate"
+  name       = "Require QA Playwright Smoke Gate"
+  org_id     = var.org_id
+  project_id = var.project_id
+
+  rego = <<-REGO
+    package change_governance
+
+    qa_playwright := object.get(object.get(object.get(input.validation, "tests", {}), "qa_playwright", {}), "status", "")
+
+    provisioner_managed {
+      object.get(object.get(input, "pipeline", {}), "provisioner_managed", false) == true
+    }
+
+    explicit_opt_in {
+      object.get(object.get(input, "pipeline", {}), "qa_playwright_policy_enabled", false) == true
+    }
+
+    qa_playwright_enforced {
+      provisioner_managed
+      object.get(object.get(object.get(input.validation, "tests", {}), "qa_playwright", {}), "enforced", false) == true
+    }
+
+    qa_playwright_enforced {
+      explicit_opt_in
+      object.get(object.get(object.get(input.validation, "tests", {}), "qa_playwright", {}), "enforced", false) == true
+    }
+
+    deny[msg] {
+      qa_playwright_enforced
+      lower(qa_playwright) != "passed"
+      msg := sprintf("QA Playwright smoke gate must be PASSED when QA Playwright governance is enabled. Current status: %v.", [qa_playwright])
+    }
+  REGO
+}
+
 resource "harness_platform_policy" "change_risk_score" {
   count      = var.create_change_governance_policies ? 1 : 0
   identifier = "change_risk_score"
@@ -778,6 +816,11 @@ resource "harness_platform_policyset" "change_governance_on_step" {
   }
 
   policies {
+    identifier = harness_platform_policy.change_qa_playwright_gate[0].identifier
+    severity   = "error"
+  }
+
+  policies {
     identifier = harness_platform_policy.change_risk_score[0].identifier
     severity   = "error"
   }
@@ -785,6 +828,7 @@ resource "harness_platform_policyset" "change_governance_on_step" {
   depends_on = [
     harness_platform_policy.change_readiness_guardrails,
     harness_platform_policy.change_validation_quality,
+    harness_platform_policy.change_qa_playwright_gate,
     harness_platform_policy.change_risk_score
   ]
 }

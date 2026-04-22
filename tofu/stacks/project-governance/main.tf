@@ -82,7 +82,7 @@ resource "terraform_data" "adopt_existing_project_governance" {
         api_delete "$policy_set" "${var.harness_endpoint}/pm/api/v1/policysets/$${policy_set}?accountIdentifier=${var.harness_account_id}&orgIdentifier=${local.resolved_org_id}&projectIdentifier=${local.resolved_project_id}"
       done
 
-      for policy in require_tests_in_ci require_cache_intelligence require_harness_cloud require_docker_layer_caching no_hardcoded_secrets recommend_artifact_scanning require_test_reports require_harness_scanners require_pipeline_tags change_readiness_guardrails change_validation_quality change_risk_score; do
+      for policy in require_tests_in_ci require_cache_intelligence require_harness_cloud require_docker_layer_caching no_hardcoded_secrets recommend_artifact_scanning require_test_reports require_harness_scanners require_pipeline_tags change_readiness_guardrails change_validation_quality change_qa_playwright_gate change_risk_score; do
         api_delete "$policy" "${var.harness_endpoint}/pm/api/v1/policies/$${policy}?accountIdentifier=${var.harness_account_id}&orgIdentifier=${local.resolved_org_id}&projectIdentifier=${local.resolved_project_id}"
       done
     EOT

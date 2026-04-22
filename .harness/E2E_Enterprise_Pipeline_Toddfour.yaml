@@ -1165,7 +1165,8 @@ pipeline:
                             "pipeline": {
                               "identifier": "<+pipeline.identifier>",
                               "execution_id": "<+pipeline.executionId>",
-                              "sequence_id": "<+pipeline.sequenceId>"
+                              "sequence_id": "<+pipeline.sequenceId>",
+                              "qa_playwright_policy_enabled": true
                             },
                             "change": {
                               "request_id": "<+pipeline.identifier>-<+pipeline.sequenceId>",
@@ -1180,6 +1181,7 @@ pipeline:
                               "tests": {
                                 "pass_rate": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.TEST_PASS_RATE>,
                                 "qa_playwright": {
+                                  "enforced": true,
                                   "status": "<+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_STATUS>",
                                   "total": "<+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_TOTAL>",
                                   "passed": "<+pipeline.stages.deploy_to_qa.spec.execution.steps.qa_validation.steps.automated_qa_tests.output.outputVariables.QA_PLAYWRIGHT_PASSED>",

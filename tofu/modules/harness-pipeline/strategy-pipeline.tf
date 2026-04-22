@@ -6,14 +6,14 @@
 locals {
   # Emits a delegateSelectors YAML block for ShellScript steps that must run on the shared EKS delegate.
   strategy_shell_step_delegate_yaml = var.delegate_selector != "" ? "                        delegateSelectors:\n                          - ${var.delegate_selector}\n" : ""
-  strategy_pipeline_tag_keys = distinct([for tag in local.explicit_pipeline_tags : regex("^([^:]+):(.*)$", tag)[0]])
+  strategy_pipeline_tag_keys        = distinct([for tag in local.explicit_pipeline_tags : regex("^([^:]+):(.*)$", tag)[0]])
   strategy_pipeline_tag_objects = [
     for key in local.strategy_pipeline_tag_keys : {
       key   = key
       value = regex("^([^:]+):(.*)$", one([for tag in local.explicit_pipeline_tags : tag if regex("^([^:]+):(.*)$", tag)[0] == key]))[1]
     }
   ]
-  strategy_pipeline_provider_tags  = [for tag in local.strategy_pipeline_tag_objects : "${tag.key}:${tag.value}"]
+  strategy_pipeline_provider_tags   = [for tag in local.strategy_pipeline_tag_objects : "${tag.key}:${tag.value}"]
   strategy_pipeline_yaml_tags       = join("\n", [for tag in local.strategy_pipeline_tag_objects : format("        %s: %s", tag.key, jsonencode(tag.value))])
   strategy_servicenow_ticket_number = "<+pipeline.stages.approval.spec.execution.steps.servicenow_create_ticket.ticket.ticketNumber>"
   strategy_servicenow_create_yaml = var.enable_change_governance && var.enable_servicenow ? format("%s", <<-EOT
@@ -331,7 +331,8 @@ ${local.strategy_shell_step_delegate_yaml}                        source:
                                 "pipeline": {
                                   "identifier": "<+pipeline.identifier>",
                                   "execution_id": "<+pipeline.executionId>",
-                                  "sequence_id": "<+pipeline.sequenceId>"
+                                  "sequence_id": "<+pipeline.sequenceId>",
+                                  "provisioner_managed": true
                                 },
                                 "change": {
                                   "request_id": "<+pipeline.identifier>-<+pipeline.sequenceId>",
@@ -345,7 +346,14 @@ ${local.strategy_shell_step_delegate_yaml}                        source:
                                 },
                                 "validation": {
                                   "tests": {
-                                    "pass_rate": <+pipeline.variables.test_pass_rate>
+                                    "pass_rate": <+pipeline.variables.test_pass_rate>,
+                                    "qa_playwright": {
+                                      "enforced": <+pipeline.variables.qa_playwright_governance_enabled>,
+                                      "status": "<+pipeline.variables.qa_playwright_status>",
+                                      "total": "<+pipeline.variables.qa_playwright_total>",
+                                      "passed": "<+pipeline.variables.qa_playwright_passed>",
+                                      "failed": "<+pipeline.variables.qa_playwright_failed>"
+                                    }
                                   },
                                   "security": {
                                     "critical_vulns": <+pipeline.variables.critical_vulnerabilities>,
@@ -492,9 +500,34 @@ ${local.strategy_pipeline_yaml_tags != "" ? "${local.strategy_pipeline_yaml_tags
           value: <+input>.default(false).allowedValues(true,false)
         - name: release_candidate_evidence
           type: String
-          description: JSON release-candidate evidence bundle; auto-populated from CI on webhook runs or entered manually for demo/manual runs
+          description: JSON release-candidate evidence bundle; auto-populated from CI/webhook runs or entered manually for demo/manual runs
           required: false
           value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})
+        - name: qa_playwright_governance_enabled
+          type: String
+          description: Whether Release Governance should require a PASSED QA Playwright smoke gate for this provisioner-managed pipeline run
+          required: false
+          value: <+input>.default(false).allowedValues(true,false)
+        - name: qa_playwright_status
+          type: String
+          description: QA Playwright smoke gate status passed into Release Governance when the gate is enabled for this run
+          required: false
+          value: <+input>.default(NOT_RUN)
+        - name: qa_playwright_total
+          type: String
+          description: Total QA Playwright smoke tests executed for this run
+          required: false
+          value: <+input>.default(0)
+        - name: qa_playwright_passed
+          type: String
+          description: Number of QA Playwright smoke tests that passed for this run
+          required: false
+          value: <+input>.default(0)
+        - name: qa_playwright_failed
+          type: String
+          description: Number of QA Playwright smoke tests that failed for this run
+          required: false
+          value: <+input>.default(0)
       stages:
 ${local.strategy_servicenow_approval_stage_yaml}
 ${local.strategy_governance_stage_yaml}
