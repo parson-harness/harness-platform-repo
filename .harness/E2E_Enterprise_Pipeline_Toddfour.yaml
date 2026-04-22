@@ -859,7 +859,7 @@ pipeline:
                         timeout: 20m
                         spec:
                           connectorRef: parson
-                          image: gradle:8.5-jdk17
+                          image: node:20-bookworm
                           shell: Bash
                           command: |-
                             set -euo pipefail
@@ -872,7 +872,7 @@ pipeline:
                             echo "Repo branch: ${REPO_BRANCH}"
 
                             apt-get update
-                            apt-get install -y --no-install-recommends git nodejs npm
+                            apt-get install -y --no-install-recommends git
                             rm -rf repo-under-test
                             git clone --depth 1 --branch "$REPO_BRANCH" https://github.com/parson-harness/harness-demo-app.git repo-under-test
                             cd repo-under-test
