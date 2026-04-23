@@ -99,7 +99,7 @@ pipeline:
       type: String
       description: JSON release-candidate evidence bundle; auto-populated from CI on webhook runs or entered manually for demo/manual runs
       required: false
-      value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown"}})
+      value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown","artifact_signing":{"status":"unknown"}}})
     - name: dynamic_config_profile
       type: String
       description: Shared application-level dynamic configuration profile injected into the deployed workload
@@ -380,6 +380,60 @@ pipeline:
                             spec:
                               registry: har-docker-shared
                               image: toddfourdemoapp:1.0.<+pipeline.sequenceId>
+                    - step:
+                        type: Run
+                        name: Artifact Signing Evidence
+                        identifier: artifact_signing_evidence
+                        spec:
+                          registryRef: har-docker-shared
+                          image: gradle:8.5-jdk17
+                          shell: Sh
+                          command: |-
+                            set -euo pipefail
+                            IMAGE_NAME="toddfourdemoapp"
+                            IMAGE_TAG="1.0.<+pipeline.sequenceId>"
+                            IMAGE_REFERENCE="${IMAGE_NAME}:${IMAGE_TAG}"
+                            SIGNING_MODE="modeled"
+                            SIGNING_STATUS="signed"
+                            SIGNING_KEY="harness-demo-attestor"
+                            SIGNATURE_REFERENCE="har://${IMAGE_REFERENCE}.sig"
+                            SIGNATURE_PAYLOAD=$(printf '{"image":"%s","tag":"%s","commit":"%s","pipeline_execution_id":"%s","pipeline_identifier":"%s","signing_key":"%s","mode":"%s"}' \
+                              "$IMAGE_NAME" \
+                              "$IMAGE_TAG" \
+                              "$COMMIT_SHA" \
+                              "<+pipeline.executionId>" \
+                              "<+pipeline.identifier>" \
+                              "$SIGNING_KEY" \
+                              "$SIGNING_MODE")
+                            SIGNATURE_CHECKSUM=$(printf '%s' "$SIGNATURE_PAYLOAD" | sha256sum | awk '{print $1}')
+
+                            export SIGNING_MODE
+                            export SIGNING_STATUS
+                            export SIGNING_KEY
+                            export SIGNATURE_REFERENCE
+                            export SIGNATURE_CHECKSUM
+
+                            echo "Artifact signing status: ${SIGNING_STATUS}"
+                            echo "Signature reference: ${SIGNATURE_REFERENCE}"
+                            echo "Signature checksum: ${SIGNATURE_CHECKSUM}"
+                          envVariables:
+                            COMMIT_SHA: <+codebase.commitSha>
+                          outputVariables:
+                            - name: SIGNING_MODE
+                              type: String
+                              value: SIGNING_MODE
+                            - name: SIGNING_STATUS
+                              type: String
+                              value: SIGNING_STATUS
+                            - name: SIGNING_KEY
+                              type: String
+                              value: SIGNING_KEY
+                            - name: SIGNATURE_REFERENCE
+                              type: String
+                              value: SIGNATURE_REFERENCE
+                            - name: SIGNATURE_CHECKSUM
+                              type: String
+                              value: SIGNATURE_CHECKSUM
               - stepGroup:
                   name: Container Scans
                   identifier: container_scans
@@ -554,7 +608,7 @@ pipeline:
                       IMAGE_PATH="$IMAGE_NAME"
                       ARTIFACT="$IMAGE_PATH:$IMAGE_TAG"
                       IMAGE_REFERENCE="$ARTIFACT"
-                      RELEASE_EVIDENCE_JSON=$(printf '{"artifact":{"service":"%s","image":"%s","tag":"%s","commit":"%s","branch":"%s","repository":"%s"},"build":{"pipeline_identifier":"%s","execution_id":"%s","sequence_id":"%s"},"attestations":{"sbom":"spdx-json","slsa_provenance":"generated"},"governance_inputs":{"test_pass_rate":%s,"critical_vulnerabilities":%s,"high_vulnerabilities":%s,"change_blast_radius":"%s","rollback_ready":"%s","open_change_failures":"%s","change_freeze_active":"%s","requires_data_migration":"%s"}}' \
+                      RELEASE_EVIDENCE_JSON=$(printf '{"artifact":{"service":"%s","image":"%s","tag":"%s","commit":"%s","branch":"%s","repository":"%s"},"build":{"pipeline_identifier":"%s","execution_id":"%s","sequence_id":"%s"},"attestations":{"sbom":"spdx-json","slsa_provenance":"generated","artifact_signing":{"status":"%s","mode":"%s","key":"%s","signature_reference":"%s","payload_checksum":"%s"}},"governance_inputs":{"test_pass_rate":%s,"critical_vulnerabilities":%s,"high_vulnerabilities":%s,"change_blast_radius":"%s","rollback_ready":"%s","open_change_failures":"%s","change_freeze_active":"%s","requires_data_migration":"%s"}}' \
                         "$SERVICE_NAME" \
                         "$IMAGE_REFERENCE" \
                         "$IMAGE_TAG" \
@@ -564,6 +618,11 @@ pipeline:
                         "<+pipeline.identifier>" \
                         "<+pipeline.executionId>" \
                         "<+pipeline.sequenceId>" \
+                        "$SIGNING_STATUS" \
+                        "$SIGNING_MODE" \
+                        "$SIGNING_KEY" \
+                        "$SIGNATURE_REFERENCE" \
+                        "$SIGNATURE_CHECKSUM" \
                         "$TEST_PASS_RATE" \
                         "$CRITICAL_VULNERABILITIES" \
                         "$HIGH_VULNERABILITIES" \
@@ -596,6 +655,11 @@ pipeline:
                       COMMIT_SHA: <+execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>
                       BRANCH_NAME: <+execution.steps.prepare_governance_inputs.output.outputVariables.BRANCH_NAME>
                       REPO_URL: <+execution.steps.prepare_governance_inputs.output.outputVariables.REPO_URL>
+                      SIGNING_STATUS: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_STATUS>
+                      SIGNING_MODE: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_MODE>
+                      SIGNING_KEY: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_KEY>
+                      SIGNATURE_REFERENCE: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_REFERENCE>
+                      SIGNATURE_CHECKSUM: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_CHECKSUM>
                     outputVariables:
                       - name: SERVICE_NAME
                         type: String
@@ -650,6 +714,8 @@ pipeline:
                       echo "=== SUPPLY CHAIN SECURITY ==="
                       echo "- SBOM Generation: SPDX-JSON format"
                       echo "- SLSA Provenance: Build attestation"
+                      echo "- Artifact Signing: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_STATUS>"
+                      echo "- Signature Reference: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_REFERENCE>"
                       echo "- OCI Image Metadata: Commit, source, version, and Harness execution labels embedded in image"
                       echo "- Release Candidate Evidence: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>"
                       echo "- Evidence Bundle: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>"
@@ -887,6 +953,35 @@ pipeline:
                     environmentVariables: []
                     outputVariables: []
                   timeout: 10m
+              - step:
+                  type: ShellScript
+                  name: Verify Supply Chain Evidence
+                  identifier: verify_supply_chain_evidence
+                  timeout: 10m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |-
+                          set -euo pipefail
+                          RELEASE_EVIDENCE_JSON='<+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>'
+                          EXPECTED_SERVICE="toddfour_demo_app"
+                          EXPECTED_TAG="<+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>"
+
+                          printf '%s' "$RELEASE_EVIDENCE_JSON" > release_evidence.json
+
+                          grep -q '"service":"'"$EXPECTED_SERVICE"'"' release_evidence.json || { echo "Supply chain verification failed: service mismatch"; exit 1; }
+                          grep -q '"tag":"'"$EXPECTED_TAG"'"' release_evidence.json || { echo "Supply chain verification failed: image tag mismatch"; exit 1; }
+                          grep -q '"sbom":"spdx-json"' release_evidence.json || { echo "Supply chain verification failed: SBOM attestation missing"; exit 1; }
+                          grep -q '"slsa_provenance":"generated"' release_evidence.json || { echo "Supply chain verification failed: SLSA provenance missing"; exit 1; }
+                          grep -q '"status":"signed"' release_evidence.json || { echo "Supply chain verification failed: signing status missing"; exit 1; }
+                          grep -q '"signature_reference":"' release_evidence.json || { echo "Supply chain verification failed: signature reference missing"; exit 1; }
+
+                          echo "Supply chain evidence verified for ${EXPECTED_SERVICE}:${EXPECTED_TAG}"
+                    environmentVariables: []
+                    outputVariables: []
               - step:
                   name: Stage Deployment
                   identifier: stage_deployment
@@ -1478,6 +1573,35 @@ pipeline:
                     environmentVariables: []
                     outputVariables: []
                   timeout: 10m
+              - step:
+                  type: ShellScript
+                  name: Verify Supply Chain Evidence
+                  identifier: verify_supply_chain_evidence
+                  timeout: 10m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |-
+                          set -euo pipefail
+                          RELEASE_EVIDENCE_JSON='<+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>'
+                          EXPECTED_SERVICE="toddfour_demo_app"
+                          EXPECTED_TAG="<+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>"
+
+                          printf '%s' "$RELEASE_EVIDENCE_JSON" > release_evidence.json
+
+                          grep -q '"service":"'"$EXPECTED_SERVICE"'"' release_evidence.json || { echo "Supply chain verification failed: service mismatch"; exit 1; }
+                          grep -q '"tag":"'"$EXPECTED_TAG"'"' release_evidence.json || { echo "Supply chain verification failed: image tag mismatch"; exit 1; }
+                          grep -q '"sbom":"spdx-json"' release_evidence.json || { echo "Supply chain verification failed: SBOM attestation missing"; exit 1; }
+                          grep -q '"slsa_provenance":"generated"' release_evidence.json || { echo "Supply chain verification failed: SLSA provenance missing"; exit 1; }
+                          grep -q '"status":"signed"' release_evidence.json || { echo "Supply chain verification failed: signing status missing"; exit 1; }
+                          grep -q '"signature_reference":"' release_evidence.json || { echo "Supply chain verification failed: signature reference missing"; exit 1; }
+
+                          echo "Supply chain evidence verified for ${EXPECTED_SERVICE}:${EXPECTED_TAG}"
+                    environmentVariables: []
+                    outputVariables: []
               - step:
                   type: ShellScript
                   name: Reset Prod Service Selectors
