@@ -1,5 +1,5 @@
 environment:
-  name: Harness Prod
+  name: Toddfour Prod
   identifier: Toddfour_Prod
   description: Production environment for toddfour
   tags:
