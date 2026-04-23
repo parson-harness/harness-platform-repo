@@ -1,6 +1,6 @@
 ---
 environment:
-  name: "Harness K8s QA"
+  name: "Toddfour K8s QA"
   description: "QA environment for toddfour"
   tags:
     toddfour: ""
