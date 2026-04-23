@@ -1855,5 +1855,5 @@ pipeline:
         tags: {}
   identifier: E2E_Enterprise_Pipeline_Toddfour
   description: "End-to-end enterprise CI/CD pipeline: Gradle build, Test Intelligence, Security Scanning (SAST/SCA/Trivy), Supply Chain (SBOM/SLSA), Change Management, QA B/G deploy, Prod Canary deploy"
-  name: E2E Enterprise Pipeline - Toddfour
+  name: E2E Enterprise Pipeline
   allowStageExecutions: true
