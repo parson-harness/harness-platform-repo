@@ -1568,6 +1568,41 @@ pipeline:
                         value: STABLE_PCT
                   timeout: 10m
               - step:
+                  type: ShellScript
+                  name: Warm Stable CV Control
+                  identifier: warm_stable_cv_control
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |
+                          set +e
+
+                          STABLE_URL="https://<+serviceVariables.ingressHost>/api/process"
+                          END_TIME=$(( $(date +%s) + 120 ))
+                          STABLE_SUCCESS=0
+                          STABLE_FAILURE=0
+
+                          echo "Warming stable control traffic for 120s before canary verification"
+                          echo "Stable URL: ${STABLE_URL}"
+
+                          while [ "$(date +%s)" -lt "$END_TIME" ]; do
+                            if curl -k -sS -o /dev/null -X POST "${STABLE_URL}" -H 'Content-Type: application/json' -d '{"source":"cv-warmup","target":"stable"}'; then
+                              STABLE_SUCCESS=$((STABLE_SUCCESS + 1))
+                            else
+                              STABLE_FAILURE=$((STABLE_FAILURE + 1))
+                            fi
+
+                            sleep 2
+                          done
+
+                          echo "Stable warm-up results: success=${STABLE_SUCCESS}, failure=${STABLE_FAILURE}"
+                    environmentVariables: []
+                    outputVariables: []
+              - step:
                   type: Http
                   name: Trigger Chaos for CV Demo
                   identifier: trigger_cv_chaos
