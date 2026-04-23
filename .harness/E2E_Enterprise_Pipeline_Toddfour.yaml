@@ -393,31 +393,57 @@ pipeline:
                             IMAGE_NAME="toddfourdemoapp"
                             IMAGE_TAG="1.0.<+pipeline.sequenceId>"
                             IMAGE_REFERENCE="${IMAGE_NAME}:${IMAGE_TAG}"
-                            SIGNING_MODE="modeled"
+                            SERVICE_NAME="toddfour_demo_app"
+                            SIGNING_MODE="cosign-blob"
                             SIGNING_STATUS="signed"
-                            SIGNING_KEY="harness-demo-attestor"
-                            SIGNATURE_REFERENCE="har://${IMAGE_REFERENCE}.sig"
-                            SIGNATURE_PAYLOAD=$(printf '{"image":"%s","tag":"%s","commit":"%s","pipeline_execution_id":"%s","pipeline_identifier":"%s","signing_key":"%s","mode":"%s"}' \
-                              "$IMAGE_NAME" \
-                              "$IMAGE_TAG" \
-                              "$COMMIT_SHA" \
-                              "<+pipeline.executionId>" \
-                              "<+pipeline.identifier>" \
-                              "$SIGNING_KEY" \
-                              "$SIGNING_MODE")
-                            SIGNATURE_CHECKSUM=$(printf '%s' "$SIGNATURE_PAYLOAD" | sha256sum | awk '{print $1}')
+                            SIGNING_KEY="pipeline-ephemeral-cosign"
+                            SIGNATURE_REFERENCE="inline://release-candidate/<+pipeline.executionId>/artifact-signature"
+                            COSIGN_VERSION="v2.2.4"
+                            TOOLS_DIR="$(pwd)/.supply-chain-tools"
+                            COSIGN_BIN="${TOOLS_DIR}/cosign"
 
-                            export SIGNING_MODE
+                            mkdir -p "$TOOLS_DIR"
+                            if command -v curl >/dev/null 2>&1; then
+                              curl -fsSL "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" -o "$COSIGN_BIN"
+                            elif command -v wget >/dev/null 2>&1; then
+                              wget -qO "$COSIGN_BIN" "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+                            else
+                              echo "Artifact signing requires curl or wget to download cosign"
+                              exit 1
+                            fi
+                            chmod +x "$COSIGN_BIN"
+
+                            cat <<EOF > artifact-payload.json
+                            {"service":"${SERVICE_NAME}","image":"${IMAGE_NAME}","tag":"${IMAGE_TAG}","reference":"${IMAGE_REFERENCE}","commit":"${COMMIT_SHA}","branch":"${BRANCH_NAME}","repository":"${REPO_URL}","pipeline_execution_id":"<+pipeline.executionId>","pipeline_identifier":"<+pipeline.identifier>"}
+                            EOF
+
+                            COSIGN_PASSWORD="" "$COSIGN_BIN" generate-key-pair --output-key-prefix cosign >/dev/null 2>&1
+                            COSIGN_PASSWORD="" "$COSIGN_BIN" sign-blob --yes --key cosign.key --output-signature artifact.sig artifact-payload.json >/dev/null
+
+                            SIGNATURE_CHECKSUM=$(sha256sum artifact-payload.json | awk '{print $1}')
+                            PUBLIC_KEY_CHECKSUM=$(sha256sum cosign.pub | awk '{print $1}')
+                            SIGNATURE_BASE64=$(base64 < artifact.sig | tr -d '\n')
+                            PUBLIC_KEY_BASE64=$(base64 < cosign.pub | tr -d '\n')
+                            SIGNED_PAYLOAD_BASE64=$(base64 < artifact-payload.json | tr -d '\n')
+
                             export SIGNING_STATUS
+                            export SIGNING_MODE
                             export SIGNING_KEY
                             export SIGNATURE_REFERENCE
                             export SIGNATURE_CHECKSUM
+                            export PUBLIC_KEY_CHECKSUM
+                            export SIGNATURE_BASE64
+                            export PUBLIC_KEY_BASE64
+                            export SIGNED_PAYLOAD_BASE64
 
                             echo "Artifact signing status: ${SIGNING_STATUS}"
                             echo "Signature reference: ${SIGNATURE_REFERENCE}"
-                            echo "Signature checksum: ${SIGNATURE_CHECKSUM}"
+                            echo "Signed payload checksum: ${SIGNATURE_CHECKSUM}"
+                            echo "Public key checksum: ${PUBLIC_KEY_CHECKSUM}"
                           envVariables:
                             COMMIT_SHA: <+codebase.commitSha>
+                            BRANCH_NAME: <+codebase.branch>
+                            REPO_URL: <+codebase.repoUrl>
                           outputVariables:
                             - name: SIGNING_MODE
                               type: String
@@ -434,6 +460,18 @@ pipeline:
                             - name: SIGNATURE_CHECKSUM
                               type: String
                               value: SIGNATURE_CHECKSUM
+                            - name: PUBLIC_KEY_CHECKSUM
+                              type: String
+                              value: PUBLIC_KEY_CHECKSUM
+                            - name: SIGNATURE_BASE64
+                              type: String
+                              value: SIGNATURE_BASE64
+                            - name: PUBLIC_KEY_BASE64
+                              type: String
+                              value: PUBLIC_KEY_BASE64
+                            - name: SIGNED_PAYLOAD_BASE64
+                              type: String
+                              value: SIGNED_PAYLOAD_BASE64
               - stepGroup:
                   name: Container Scans
                   identifier: container_scans
@@ -608,29 +646,11 @@ pipeline:
                       IMAGE_PATH="$IMAGE_NAME"
                       ARTIFACT="$IMAGE_PATH:$IMAGE_TAG"
                       IMAGE_REFERENCE="$ARTIFACT"
-                      RELEASE_EVIDENCE_JSON=$(printf '{"artifact":{"service":"%s","image":"%s","tag":"%s","commit":"%s","branch":"%s","repository":"%s"},"build":{"pipeline_identifier":"%s","execution_id":"%s","sequence_id":"%s"},"attestations":{"sbom":"spdx-json","slsa_provenance":"generated","artifact_signing":{"status":"%s","mode":"%s","key":"%s","signature_reference":"%s","payload_checksum":"%s"}},"governance_inputs":{"test_pass_rate":%s,"critical_vulnerabilities":%s,"high_vulnerabilities":%s,"change_blast_radius":"%s","rollback_ready":"%s","open_change_failures":"%s","change_freeze_active":"%s","requires_data_migration":"%s"}}' \
-                        "$SERVICE_NAME" \
-                        "$IMAGE_REFERENCE" \
-                        "$IMAGE_TAG" \
-                        "$COMMIT_SHA" \
-                        "$BRANCH_NAME" \
-                        "$REPO_URL" \
-                        "<+pipeline.identifier>" \
-                        "<+pipeline.executionId>" \
-                        "<+pipeline.sequenceId>" \
-                        "$SIGNING_STATUS" \
-                        "$SIGNING_MODE" \
-                        "$SIGNING_KEY" \
-                        "$SIGNATURE_REFERENCE" \
-                        "$SIGNATURE_CHECKSUM" \
-                        "$TEST_PASS_RATE" \
-                        "$CRITICAL_VULNERABILITIES" \
-                        "$HIGH_VULNERABILITIES" \
-                        "$CHANGE_BLAST_RADIUS" \
-                        "$ROLLBACK_READY" \
-                        "$OPEN_CHANGE_FAILURES" \
-                        "$CHANGE_FREEZE_ACTIVE" \
-                        "$REQUIRES_DATA_MIGRATION")
+                      cat <<EOF > release_evidence.json
+                      {"artifact":{"service":"${SERVICE_NAME}","image":"${IMAGE_REFERENCE}","tag":"${IMAGE_TAG}","commit":"${COMMIT_SHA}","branch":"${BRANCH_NAME}","repository":"${REPO_URL}"},"build":{"pipeline_identifier":"<+pipeline.identifier>","execution_id":"<+pipeline.executionId>","sequence_id":"<+pipeline.sequenceId>"},"attestations":{"sbom":"spdx-json","slsa_provenance":"generated","artifact_signing":{"status":"${SIGNING_STATUS}","mode":"${SIGNING_MODE}","key":"${SIGNING_KEY}","signature_reference":"${SIGNATURE_REFERENCE}","payload_checksum":"${SIGNATURE_CHECKSUM}","public_key_checksum":"${PUBLIC_KEY_CHECKSUM}","signature_base64":"${SIGNATURE_BASE64}","public_key_base64":"${PUBLIC_KEY_BASE64}","signed_payload_base64":"${SIGNED_PAYLOAD_BASE64}"}},"governance_inputs":{"test_pass_rate":${TEST_PASS_RATE},"critical_vulnerabilities":${CRITICAL_VULNERABILITIES},"high_vulnerabilities":${HIGH_VULNERABILITIES},"change_blast_radius":"${CHANGE_BLAST_RADIUS}","rollback_ready":"${ROLLBACK_READY}","open_change_failures":"${OPEN_CHANGE_FAILURES}","change_freeze_active":"${CHANGE_FREEZE_ACTIVE}","requires_data_migration":"${REQUIRES_DATA_MIGRATION}"}}
+                      EOF
+
+                      RELEASE_EVIDENCE_JSON="$(tr -d '\n' < release_evidence.json)"
 
                       export SERVICE_NAME
                       export IMAGE_NAME
@@ -660,6 +680,10 @@ pipeline:
                       SIGNING_KEY: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_KEY>
                       SIGNATURE_REFERENCE: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_REFERENCE>
                       SIGNATURE_CHECKSUM: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_CHECKSUM>
+                      PUBLIC_KEY_CHECKSUM: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_CHECKSUM>
+                      SIGNATURE_BASE64: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_BASE64>
+                      PUBLIC_KEY_BASE64: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_BASE64>
+                      SIGNED_PAYLOAD_BASE64: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNED_PAYLOAD_BASE64>
                     outputVariables:
                       - name: SERVICE_NAME
                         type: String
@@ -715,7 +739,10 @@ pipeline:
                       echo "- SBOM Generation: SPDX-JSON format"
                       echo "- SLSA Provenance: Build attestation"
                       echo "- Artifact Signing: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_STATUS>"
+                      echo "- Signing Mode: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_MODE>"
                       echo "- Signature Reference: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_REFERENCE>"
+                      echo "- Signed Payload Checksum: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_CHECKSUM>"
+                      echo "- Public Key Checksum: <+execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_CHECKSUM>"
                       echo "- OCI Image Metadata: Commit, source, version, and Harness execution labels embedded in image"
                       echo "- Release Candidate Evidence: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>"
                       echo "- Evidence Bundle: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>"
@@ -959,6 +986,139 @@ pipeline:
                   steps:
                     - step:
                         type: ShellScript
+                        name: Verify Artifact Signature
+                        identifier: verify_artifact_signature
+                        timeout: 10m
+                        spec:
+                          shell: Bash
+                          executionTarget: {}
+                          source:
+                            type: Inline
+                            spec:
+                              script: |
+                                set -euo pipefail
+
+                                COSIGN_VERSION="v2.2.4"
+                                TOOLS_DIR="$(pwd)/.supply-chain-tools"
+                                COSIGN_BIN="${TOOLS_DIR}/cosign"
+                                SIGNATURE_VERIFICATION_STATUS="verified"
+                                SIGNATURE_VERIFICATION_MESSAGE="Artifact signature verified successfully."
+                                VERIFIED_PAYLOAD_CHECKSUM=""
+                                VERIFIED_PUBLIC_KEY_CHECKSUM=""
+
+                                mkdir -p "$TOOLS_DIR"
+
+                                if [ "$SIGNING_STATUS" != "signed" ]; then
+                                  SIGNATURE_VERIFICATION_STATUS="error"
+                                  SIGNATURE_VERIFICATION_MESSAGE="Artifact signing status is ${SIGNING_STATUS}."
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && [ "$SIGNING_MODE" != "cosign-blob" ]; then
+                                  SIGNATURE_VERIFICATION_STATUS="error"
+                                  SIGNATURE_VERIFICATION_MESSAGE="Expected signing mode cosign-blob but found ${SIGNING_MODE}."
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  if command -v cosign >/dev/null 2>&1; then
+                                    COSIGN_BIN="$(command -v cosign)"
+                                  elif command -v curl >/dev/null 2>&1; then
+                                    curl -fsSL "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" -o "$COSIGN_BIN"
+                                    chmod +x "$COSIGN_BIN"
+                                  elif command -v wget >/dev/null 2>&1; then
+                                    wget -qO "$COSIGN_BIN" "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+                                    chmod +x "$COSIGN_BIN"
+                                  else
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Unable to acquire cosign because neither curl, wget, nor a preinstalled cosign binary is available."
+                                  fi
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  if ! printf '%s' "$SIGNED_PAYLOAD_BASE64" | base64 -d > artifact-payload.json 2>/dev/null; then
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the signed payload from release evidence."
+                                  fi
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  if ! printf '%s' "$PUBLIC_KEY_BASE64" | base64 -d > cosign.pub 2>/dev/null; then
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the signing public key from release evidence."
+                                  fi
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  if ! printf '%s' "$SIGNATURE_BASE64" | base64 -d > artifact.sig 2>/dev/null; then
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the artifact signature from release evidence."
+                                  fi
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  VERIFIED_PAYLOAD_CHECKSUM="$(sha256sum artifact-payload.json | awk '{print $1}')"
+                                  VERIFIED_PUBLIC_KEY_CHECKSUM="$(sha256sum cosign.pub | awk '{print $1}')"
+
+                                  if [ "$VERIFIED_PAYLOAD_CHECKSUM" != "$EXPECTED_PAYLOAD_CHECKSUM" ]; then
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Signed payload checksum mismatch. Expected ${EXPECTED_PAYLOAD_CHECKSUM}, got ${VERIFIED_PAYLOAD_CHECKSUM}."
+                                  fi
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && [ "$VERIFIED_PUBLIC_KEY_CHECKSUM" != "$EXPECTED_PUBLIC_KEY_CHECKSUM" ]; then
+                                  SIGNATURE_VERIFICATION_STATUS="error"
+                                  SIGNATURE_VERIFICATION_MESSAGE="Signing public key checksum mismatch. Expected ${EXPECTED_PUBLIC_KEY_CHECKSUM}, got ${VERIFIED_PUBLIC_KEY_CHECKSUM}."
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && ! grep -q '"service":"'"$EXPECTED_SERVICE"'"' artifact-payload.json; then
+                                  SIGNATURE_VERIFICATION_STATUS="error"
+                                  SIGNATURE_VERIFICATION_MESSAGE="Signed payload service does not match ${EXPECTED_SERVICE}."
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && ! grep -q '"tag":"'"$EXPECTED_TAG"'"' artifact-payload.json; then
+                                  SIGNATURE_VERIFICATION_STATUS="error"
+                                  SIGNATURE_VERIFICATION_MESSAGE="Signed payload tag does not match ${EXPECTED_TAG}."
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  VERIFY_OUTPUT="$($COSIGN_BIN verify-blob --key cosign.pub --signature artifact.sig artifact-payload.json 2>&1)" || true
+                                  if ! printf '%s' "$VERIFY_OUTPUT" | grep -q 'Verified OK'; then
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Cosign verification failed: $(printf '%s' "$VERIFY_OUTPUT" | tr '\n' ' ' | cut -c1-500)"
+                                  fi
+                                fi
+
+                                export SIGNATURE_VERIFICATION_STATUS
+                                export SIGNATURE_VERIFICATION_MESSAGE
+                                export VERIFIED_PAYLOAD_CHECKSUM
+                                export VERIFIED_PUBLIC_KEY_CHECKSUM
+
+                                echo "Signature verification status: ${SIGNATURE_VERIFICATION_STATUS}"
+                                echo "Signature verification message: ${SIGNATURE_VERIFICATION_MESSAGE}"
+                          environmentVariables:
+                            SIGNING_STATUS: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_STATUS>
+                            SIGNING_MODE: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_MODE>
+                            EXPECTED_SERVICE: toddfour_demo_app
+                            EXPECTED_TAG: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                            EXPECTED_PAYLOAD_CHECKSUM: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_CHECKSUM>
+                            EXPECTED_PUBLIC_KEY_CHECKSUM: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_CHECKSUM>
+                            SIGNATURE_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_BASE64>
+                            PUBLIC_KEY_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_BASE64>
+                            SIGNED_PAYLOAD_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNED_PAYLOAD_BASE64>
+                          outputVariables:
+                            - name: SIGNATURE_VERIFICATION_STATUS
+                              type: String
+                              value: SIGNATURE_VERIFICATION_STATUS
+                            - name: SIGNATURE_VERIFICATION_MESSAGE
+                              type: String
+                              value: SIGNATURE_VERIFICATION_MESSAGE
+                            - name: VERIFIED_PAYLOAD_CHECKSUM
+                              type: String
+                              value: VERIFIED_PAYLOAD_CHECKSUM
+                            - name: VERIFIED_PUBLIC_KEY_CHECKSUM
+                              type: String
+                              value: VERIFIED_PUBLIC_KEY_CHECKSUM
+                    - step:
+                        type: ShellScript
                         name: Assemble Supply Chain Context
                         identifier: assemble_supply_chain_context
                         timeout: 10m
@@ -986,6 +1146,12 @@ pipeline:
                                     "environment_type": "<+env.type>"
                                   },
                                   "validation": {
+                                    "signature_verification": {
+                                      "status": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_STATUS>",
+                                      "message": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_MESSAGE>",
+                                      "payload_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PAYLOAD_CHECKSUM>",
+                                      "public_key_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PUBLIC_KEY_CHECKSUM>"
+                                    },
                                     "security": {
                                       "critical_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>,
                                       "high_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>
@@ -1611,6 +1777,139 @@ pipeline:
                   steps:
                     - step:
                         type: ShellScript
+                        name: Verify Artifact Signature
+                        identifier: verify_artifact_signature
+                        timeout: 10m
+                        spec:
+                          shell: Bash
+                          executionTarget: {}
+                          source:
+                            type: Inline
+                            spec:
+                              script: |
+                                set -euo pipefail
+
+                                COSIGN_VERSION="v2.2.4"
+                                TOOLS_DIR="$(pwd)/.supply-chain-tools"
+                                COSIGN_BIN="${TOOLS_DIR}/cosign"
+                                SIGNATURE_VERIFICATION_STATUS="verified"
+                                SIGNATURE_VERIFICATION_MESSAGE="Artifact signature verified successfully."
+                                VERIFIED_PAYLOAD_CHECKSUM=""
+                                VERIFIED_PUBLIC_KEY_CHECKSUM=""
+
+                                mkdir -p "$TOOLS_DIR"
+
+                                if [ "$SIGNING_STATUS" != "signed" ]; then
+                                  SIGNATURE_VERIFICATION_STATUS="error"
+                                  SIGNATURE_VERIFICATION_MESSAGE="Artifact signing status is ${SIGNING_STATUS}."
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && [ "$SIGNING_MODE" != "cosign-blob" ]; then
+                                  SIGNATURE_VERIFICATION_STATUS="error"
+                                  SIGNATURE_VERIFICATION_MESSAGE="Expected signing mode cosign-blob but found ${SIGNING_MODE}."
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  if command -v cosign >/dev/null 2>&1; then
+                                    COSIGN_BIN="$(command -v cosign)"
+                                  elif command -v curl >/dev/null 2>&1; then
+                                    curl -fsSL "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" -o "$COSIGN_BIN"
+                                    chmod +x "$COSIGN_BIN"
+                                  elif command -v wget >/dev/null 2>&1; then
+                                    wget -qO "$COSIGN_BIN" "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+                                    chmod +x "$COSIGN_BIN"
+                                  else
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Unable to acquire cosign because neither curl, wget, nor a preinstalled cosign binary is available."
+                                  fi
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  if ! printf '%s' "$SIGNED_PAYLOAD_BASE64" | base64 -d > artifact-payload.json 2>/dev/null; then
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the signed payload from release evidence."
+                                  fi
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  if ! printf '%s' "$PUBLIC_KEY_BASE64" | base64 -d > cosign.pub 2>/dev/null; then
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the signing public key from release evidence."
+                                  fi
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  if ! printf '%s' "$SIGNATURE_BASE64" | base64 -d > artifact.sig 2>/dev/null; then
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the artifact signature from release evidence."
+                                  fi
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  VERIFIED_PAYLOAD_CHECKSUM="$(sha256sum artifact-payload.json | awk '{print $1}')"
+                                  VERIFIED_PUBLIC_KEY_CHECKSUM="$(sha256sum cosign.pub | awk '{print $1}')"
+
+                                  if [ "$VERIFIED_PAYLOAD_CHECKSUM" != "$EXPECTED_PAYLOAD_CHECKSUM" ]; then
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Signed payload checksum mismatch. Expected ${EXPECTED_PAYLOAD_CHECKSUM}, got ${VERIFIED_PAYLOAD_CHECKSUM}."
+                                  fi
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && [ "$VERIFIED_PUBLIC_KEY_CHECKSUM" != "$EXPECTED_PUBLIC_KEY_CHECKSUM" ]; then
+                                  SIGNATURE_VERIFICATION_STATUS="error"
+                                  SIGNATURE_VERIFICATION_MESSAGE="Signing public key checksum mismatch. Expected ${EXPECTED_PUBLIC_KEY_CHECKSUM}, got ${VERIFIED_PUBLIC_KEY_CHECKSUM}."
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && ! grep -q '"service":"'"$EXPECTED_SERVICE"'"' artifact-payload.json; then
+                                  SIGNATURE_VERIFICATION_STATUS="error"
+                                  SIGNATURE_VERIFICATION_MESSAGE="Signed payload service does not match ${EXPECTED_SERVICE}."
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && ! grep -q '"tag":"'"$EXPECTED_TAG"'"' artifact-payload.json; then
+                                  SIGNATURE_VERIFICATION_STATUS="error"
+                                  SIGNATURE_VERIFICATION_MESSAGE="Signed payload tag does not match ${EXPECTED_TAG}."
+                                fi
+
+                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                  VERIFY_OUTPUT="$($COSIGN_BIN verify-blob --key cosign.pub --signature artifact.sig artifact-payload.json 2>&1)" || true
+                                  if ! printf '%s' "$VERIFY_OUTPUT" | grep -q 'Verified OK'; then
+                                    SIGNATURE_VERIFICATION_STATUS="error"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Cosign verification failed: $(printf '%s' "$VERIFY_OUTPUT" | tr '\n' ' ' | cut -c1-500)"
+                                  fi
+                                fi
+
+                                export SIGNATURE_VERIFICATION_STATUS
+                                export SIGNATURE_VERIFICATION_MESSAGE
+                                export VERIFIED_PAYLOAD_CHECKSUM
+                                export VERIFIED_PUBLIC_KEY_CHECKSUM
+
+                                echo "Signature verification status: ${SIGNATURE_VERIFICATION_STATUS}"
+                                echo "Signature verification message: ${SIGNATURE_VERIFICATION_MESSAGE}"
+                          environmentVariables:
+                            SIGNING_STATUS: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_STATUS>
+                            SIGNING_MODE: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_MODE>
+                            EXPECTED_SERVICE: toddfour_demo_app
+                            EXPECTED_TAG: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                            EXPECTED_PAYLOAD_CHECKSUM: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_CHECKSUM>
+                            EXPECTED_PUBLIC_KEY_CHECKSUM: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_CHECKSUM>
+                            SIGNATURE_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_BASE64>
+                            PUBLIC_KEY_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_BASE64>
+                            SIGNED_PAYLOAD_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNED_PAYLOAD_BASE64>
+                          outputVariables:
+                            - name: SIGNATURE_VERIFICATION_STATUS
+                              type: String
+                              value: SIGNATURE_VERIFICATION_STATUS
+                            - name: SIGNATURE_VERIFICATION_MESSAGE
+                              type: String
+                              value: SIGNATURE_VERIFICATION_MESSAGE
+                            - name: VERIFIED_PAYLOAD_CHECKSUM
+                              type: String
+                              value: VERIFIED_PAYLOAD_CHECKSUM
+                            - name: VERIFIED_PUBLIC_KEY_CHECKSUM
+                              type: String
+                              value: VERIFIED_PUBLIC_KEY_CHECKSUM
+                    - step:
+                        type: ShellScript
                         name: Assemble Supply Chain Context
                         identifier: assemble_supply_chain_context
                         timeout: 10m
@@ -1638,6 +1937,12 @@ pipeline:
                                     "environment_type": "<+env.type>"
                                   },
                                   "validation": {
+                                    "signature_verification": {
+                                      "status": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_STATUS>",
+                                      "message": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_MESSAGE>",
+                                      "payload_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PAYLOAD_CHECKSUM>",
+                                      "public_key_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PUBLIC_KEY_CHECKSUM>"
+                                    },
                                     "security": {
                                       "critical_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>,
                                       "high_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>

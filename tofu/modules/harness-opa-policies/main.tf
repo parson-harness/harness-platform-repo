@@ -665,6 +665,7 @@ resource "harness_platform_policy" "supply_chain_release_evidence" {
     attestations := object.get(release_candidate, "attestations", {})
     artifact_signing := object.get(attestations, "artifact_signing", {})
     validation := object.get(input, "validation", {})
+    signature_verification := object.get(validation, "signature_verification", {})
     security := object.get(validation, "security", {})
     change := object.get(input, "change", {})
 
@@ -694,6 +695,11 @@ resource "harness_platform_policy" "supply_chain_release_evidence" {
     }
 
     deny[msg] {
+      lower(object.get(artifact_signing, "mode", "")) != "cosign-blob"
+      msg := sprintf("Artifact signing mode must be cosign-blob, found %v.", [object.get(artifact_signing, "mode", "missing")])
+    }
+
+    deny[msg] {
       object.get(artifact_signing, "signature_reference", "") == ""
       msg := "Artifact signing evidence must include a signature reference."
     }
@@ -701,6 +707,31 @@ resource "harness_platform_policy" "supply_chain_release_evidence" {
     deny[msg] {
       object.get(artifact_signing, "payload_checksum", "") == ""
       msg := "Artifact signing evidence must include a payload checksum."
+    }
+
+    deny[msg] {
+      object.get(artifact_signing, "public_key_checksum", "") == ""
+      msg := "Artifact signing evidence must include a public key checksum."
+    }
+
+    deny[msg] {
+      object.get(artifact_signing, "signature_base64", "") == ""
+      msg := "Artifact signing evidence must include the signature payload."
+    }
+
+    deny[msg] {
+      object.get(artifact_signing, "public_key_base64", "") == ""
+      msg := "Artifact signing evidence must include the signing public key."
+    }
+
+    deny[msg] {
+      object.get(artifact_signing, "signed_payload_base64", "") == ""
+      msg := "Artifact signing evidence must include the signed payload."
+    }
+
+    deny[msg] {
+      lower(object.get(signature_verification, "status", "")) != "verified"
+      msg := sprintf("Deploy stage must cryptographically verify the artifact signature before promotion. Current status: %v.", [object.get(signature_verification, "status", "missing")])
     }
 
     deny[msg] {
