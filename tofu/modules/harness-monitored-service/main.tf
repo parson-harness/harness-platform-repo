@@ -37,8 +37,8 @@ resource "harness_platform_monitored_service" "main" {
         connectorRef = var.prometheus_connector_ref
         metricDefinitions = [
           {
-            identifier = "prometheus_metric"
-            metricName = "Prometheus Metric"
+            identifier = "response_latency"
+            metricName = "Response Latency"
             riskProfile = {
               riskCategory = "Performance_Other"
               thresholdTypes = [
@@ -54,8 +54,30 @@ resource "harness_platform_monitored_service" "main" {
                 serviceInstanceFieldName = "pod_name"
               }
             }
-            query         = "avg(container_cpu_usage_seconds_total{namespace=\"${var.namespace}\", pod=~\"${var.app_name}.*\"})"
-            groupName     = "Infrastructure"
+            query         = "sum(rate(harness_demo_processing_duration_seconds_sum{namespace=\"${var.namespace}\"}[2m])) by (pod_name) / sum(rate(harness_demo_processing_duration_seconds_count{namespace=\"${var.namespace}\"}[2m])) by (pod_name)"
+            groupName     = "Application"
+            isManualQuery = true
+          },
+          {
+            identifier = "error_rate"
+            metricName = "Error Rate"
+            riskProfile = {
+              riskCategory = "Errors"
+              thresholdTypes = [
+                "ACT_WHEN_HIGHER"
+              ]
+            }
+            analysis = {
+              liveMonitoring = {
+                enabled = true
+              }
+              deploymentVerification = {
+                enabled                  = true
+                serviceInstanceFieldName = "pod_name"
+              }
+            }
+            query         = "sum(rate(harness_demo_errors_total{namespace=\"${var.namespace}\"}[2m])) by (pod_name)"
+            groupName     = "Application"
             isManualQuery = true
           }
         ]

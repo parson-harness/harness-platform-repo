@@ -1,0 +1,14 @@
+---
+environment:
+  name: "Harness K8s QA"
+  description: "QA environment for toddfour"
+  tags:
+    toddfour: ""
+    workspace-id: "toddfour_pov"
+    workspace-template-id: "POV_Provisioner"
+    eks: ""
+    tofu: ""
+  type: "PreProduction"
+  orgIdentifier: "sandbox"
+  projectIdentifier: "parson"
+  identifier: "Toddfour_K8s_QA"
