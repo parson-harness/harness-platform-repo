@@ -1491,6 +1491,30 @@ pipeline:
                     skipDryRun: false
               - step:
                   type: ShellScript
+                  name: Pin Prod Service Selectors for CV
+                  identifier: pin_prod_service_selectors_for_cv
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |-
+                          set -euo pipefail
+                          NAMESPACE="<+infra.namespace>"
+                          SERVICE_NAME="<+service.name.replace(\" \", \"\").toLowerCase()>"
+                          PRIMARY_SERVICE="${SERVICE_NAME}-service"
+                          STAGE_SERVICE="${SERVICE_NAME}-service-stage"
+
+                          echo "Pinning ${PRIMARY_SERVICE} to stable pods and ${STAGE_SERVICE} to canary pods in ${NAMESPACE}"
+                          kubectl patch service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" --type merge -p '{"spec":{"selector":{"app":"'"${SERVICE_NAME}"'","harness.io/track":"stable"}}}'
+                          kubectl patch service "${STAGE_SERVICE}" -n "${NAMESPACE}" --type merge -p '{"spec":{"selector":{"app":"'"${SERVICE_NAME}"'","harness.io/track":"canary"}}}'
+                          kubectl get service "${PRIMARY_SERVICE}" "${STAGE_SERVICE}" -n "${NAMESPACE}" -o wide
+                    environmentVariables: []
+                    outputVariables: []
+              - step:
+                  type: ShellScript
                   name: Inspect Dynamic Config
                   identifier: inspect_dynamic_config
                   timeout: 10m

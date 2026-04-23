@@ -174,7 +174,6 @@ spec:
       name: http
   selector:
     app: {{.Values.name}}
-    harness.io/track: stable
 ---
 apiVersion: v1
 kind: Service
@@ -194,4 +193,3 @@ spec:
       name: http
   selector:
     app: {{.Values.name}}
-    harness.io/track: canary
