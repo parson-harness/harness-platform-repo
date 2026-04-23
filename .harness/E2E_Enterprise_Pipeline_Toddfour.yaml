@@ -1095,15 +1095,33 @@ pipeline:
                                 echo "Signature verification status: ${SIGNATURE_VERIFICATION_STATUS}"
                                 echo "Signature verification message: ${SIGNATURE_VERIFICATION_MESSAGE}"
                           environmentVariables:
-                            SIGNING_STATUS: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_STATUS>
-                            SIGNING_MODE: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_MODE>
-                            EXPECTED_SERVICE: toddfour_demo_app
-                            EXPECTED_TAG: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
-                            EXPECTED_PAYLOAD_CHECKSUM: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_CHECKSUM>
-                            EXPECTED_PUBLIC_KEY_CHECKSUM: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_CHECKSUM>
-                            SIGNATURE_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_BASE64>
-                            PUBLIC_KEY_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_BASE64>
-                            SIGNED_PAYLOAD_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNED_PAYLOAD_BASE64>
+                            - name: SIGNING_STATUS
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_STATUS>
+                              type: String
+                            - name: SIGNING_MODE
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_MODE>
+                              type: String
+                            - name: EXPECTED_SERVICE
+                              value: toddfour_demo_app
+                              type: String
+                            - name: EXPECTED_TAG
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                              type: String
+                            - name: EXPECTED_PAYLOAD_CHECKSUM
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_CHECKSUM>
+                              type: String
+                            - name: EXPECTED_PUBLIC_KEY_CHECKSUM
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_CHECKSUM>
+                              type: String
+                            - name: SIGNATURE_BASE64
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_BASE64>
+                              type: String
+                            - name: PUBLIC_KEY_BASE64
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_BASE64>
+                              type: String
+                            - name: SIGNED_PAYLOAD_BASE64
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNED_PAYLOAD_BASE64>
+                              type: String
                           outputVariables:
                             - name: SIGNATURE_VERIFICATION_STATUS
                               type: String
@@ -1886,15 +1904,33 @@ pipeline:
                                 echo "Signature verification status: ${SIGNATURE_VERIFICATION_STATUS}"
                                 echo "Signature verification message: ${SIGNATURE_VERIFICATION_MESSAGE}"
                           environmentVariables:
-                            SIGNING_STATUS: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_STATUS>
-                            SIGNING_MODE: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_MODE>
-                            EXPECTED_SERVICE: toddfour_demo_app
-                            EXPECTED_TAG: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
-                            EXPECTED_PAYLOAD_CHECKSUM: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_CHECKSUM>
-                            EXPECTED_PUBLIC_KEY_CHECKSUM: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_CHECKSUM>
-                            SIGNATURE_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_BASE64>
-                            PUBLIC_KEY_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_BASE64>
-                            SIGNED_PAYLOAD_BASE64: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNED_PAYLOAD_BASE64>
+                            - name: SIGNING_STATUS
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_STATUS>
+                              type: String
+                            - name: SIGNING_MODE
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_MODE>
+                              type: String
+                            - name: EXPECTED_SERVICE
+                              value: toddfour_demo_app
+                              type: String
+                            - name: EXPECTED_TAG
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                              type: String
+                            - name: EXPECTED_PAYLOAD_CHECKSUM
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_CHECKSUM>
+                              type: String
+                            - name: EXPECTED_PUBLIC_KEY_CHECKSUM
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_CHECKSUM>
+                              type: String
+                            - name: SIGNATURE_BASE64
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_BASE64>
+                              type: String
+                            - name: PUBLIC_KEY_BASE64
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_BASE64>
+                              type: String
+                            - name: SIGNED_PAYLOAD_BASE64
+                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNED_PAYLOAD_BASE64>
+                              type: String
                           outputVariables:
                             - name: SIGNATURE_VERIFICATION_STATUS
                               type: String
