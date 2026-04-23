@@ -1479,6 +1479,57 @@ pipeline:
                     outputVariables: []
                   timeout: 10m
               - step:
+                  type: ShellScript
+                  name: Reset Prod Service Selectors
+                  identifier: reset_prod_service_selectors
+                  timeout: 5m
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |-
+                          set -euo pipefail
+                          NAMESPACE="<+infra.namespace>"
+                          PRIMARY_HOST="<+serviceVariables.ingressHost>"
+                          STAGE_HOST="<+serviceVariables.ingressStageHost>"
+
+                          resolve_service_for_host() {
+                            local host="$1"
+                            kubectl get ingress -n "${NAMESPACE}" -o jsonpath='{range .items[*]}{range .spec.rules[*]}{.host}{"\t"}{.http.paths[0].backend.service.name}{"\n"}{end}{end}' | awk -v target_host="${host}" '$1 == target_host { print $2; exit }'
+                          }
+
+                          PRIMARY_SERVICE="$(resolve_service_for_host "${PRIMARY_HOST}")"
+                          STAGE_SERVICE="$(resolve_service_for_host "${STAGE_HOST}")"
+
+                          if [ -z "${PRIMARY_SERVICE}" ] || [ -z "${STAGE_SERVICE}" ]; then
+                            echo "Failed to resolve backend services from ingress hosts"
+                            echo "Primary host: ${PRIMARY_HOST} -> ${PRIMARY_SERVICE:-<none>}"
+                            echo "Stage host: ${STAGE_HOST} -> ${STAGE_SERVICE:-<none>}"
+                            kubectl get ingress -n "${NAMESPACE}" -o wide
+                            exit 1
+                          fi
+
+                          APP_SELECTOR="$(kubectl get service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" -o jsonpath='{.spec.selector.app}')"
+                          if [ -z "${APP_SELECTOR}" ]; then
+                            APP_SELECTOR="$(kubectl get service "${STAGE_SERVICE}" -n "${NAMESPACE}" -o jsonpath='{.spec.selector.app}')"
+                          fi
+
+                          if [ -z "${APP_SELECTOR}" ]; then
+                            echo "Could not determine app selector from ${PRIMARY_SERVICE} or ${STAGE_SERVICE}"
+                            exit 1
+                          fi
+
+                          echo "Resetting ${PRIMARY_SERVICE} and ${STAGE_SERVICE} selectors to app=${APP_SELECTOR} in ${NAMESPACE}"
+                          kubectl patch service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" --type json -p '[{"op":"remove","path":"/spec/selector/harness.io~1track"}]' >/dev/null 2>&1 || true
+                          kubectl patch service "${STAGE_SERVICE}" -n "${NAMESPACE}" --type json -p '[{"op":"remove","path":"/spec/selector/harness.io~1track"}]' >/dev/null 2>&1 || true
+                          kubectl patch service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" --type merge -p '{"spec":{"selector":{"app":"'"${APP_SELECTOR}"'"}}}'
+                          kubectl patch service "${STAGE_SERVICE}" -n "${NAMESPACE}" --type merge -p '{"spec":{"selector":{"app":"'"${APP_SELECTOR}"'"}}}'
+                          kubectl get service "${PRIMARY_SERVICE}" "${STAGE_SERVICE}" -n "${NAMESPACE}" -o wide
+                    environmentVariables: []
+                    outputVariables: []
+              - step:
                   name: Canary Deployment
                   identifier: canary_deploy
                   type: K8sCanaryDeploy
