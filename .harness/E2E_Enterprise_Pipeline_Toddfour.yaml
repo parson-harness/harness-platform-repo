@@ -1491,56 +1491,6 @@ pipeline:
                     skipDryRun: false
               - step:
                   type: ShellScript
-                  name: Pin Prod Service Selectors for CV
-                  identifier: pin_prod_service_selectors_for_cv
-                  timeout: 5m
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |-
-                          set -euo pipefail
-                          NAMESPACE="<+infra.namespace>"
-                          PRIMARY_HOST="<+serviceVariables.ingressHost>"
-                          STAGE_HOST="<+serviceVariables.ingressStageHost>"
-
-                          resolve_service_for_host() {
-                            local host="$1"
-                            kubectl get ingress -n "${NAMESPACE}" -o jsonpath='{range .items[*]}{range .spec.rules[*]}{.host}{"\t"}{.http.paths[0].backend.service.name}{"\n"}{end}{end}' | awk -v target_host="${host}" '$1 == target_host { print $2; exit }'
-                          }
-
-                          PRIMARY_SERVICE="$(resolve_service_for_host "${PRIMARY_HOST}")"
-                          STAGE_SERVICE="$(resolve_service_for_host "${STAGE_HOST}")"
-
-                          if [ -z "${PRIMARY_SERVICE}" ] || [ -z "${STAGE_SERVICE}" ]; then
-                            echo "Failed to resolve backend services from ingress hosts"
-                            echo "Primary host: ${PRIMARY_HOST} -> ${PRIMARY_SERVICE:-<none>}"
-                            echo "Stage host: ${STAGE_HOST} -> ${STAGE_SERVICE:-<none>}"
-                            kubectl get ingress -n "${NAMESPACE}" -o wide
-                            exit 1
-                          fi
-
-                          APP_SELECTOR="$(kubectl get service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" -o jsonpath='{.spec.selector.app}')"
-                          if [ -z "${APP_SELECTOR}" ]; then
-                            APP_SELECTOR="$(kubectl get service "${STAGE_SERVICE}" -n "${NAMESPACE}" -o jsonpath='{.spec.selector.app}')"
-                          fi
-
-                          if [ -z "${APP_SELECTOR}" ]; then
-                            echo "Could not determine app selector from ${PRIMARY_SERVICE} or ${STAGE_SERVICE}"
-                            exit 1
-                          fi
-
-                          echo "Pinning ${PRIMARY_SERVICE} to stable pods and ${STAGE_SERVICE} to canary pods in ${NAMESPACE}"
-                          echo "Resolved via ingress hosts: ${PRIMARY_HOST} -> ${PRIMARY_SERVICE}, ${STAGE_HOST} -> ${STAGE_SERVICE}, app=${APP_SELECTOR}"
-                          kubectl patch service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" --type merge -p '{"spec":{"selector":{"app":"'"${APP_SELECTOR}"'","harness.io/track":"stable"}}}'
-                          kubectl patch service "${STAGE_SERVICE}" -n "${NAMESPACE}" --type merge -p '{"spec":{"selector":{"app":"'"${APP_SELECTOR}"'","harness.io/track":"canary"}}}'
-                          kubectl get service "${PRIMARY_SERVICE}" "${STAGE_SERVICE}" -n "${NAMESPACE}" -o wide
-                    environmentVariables: []
-                    outputVariables: []
-              - step:
-                  type: ShellScript
                   name: Inspect Dynamic Config
                   identifier: inspect_dynamic_config
                   timeout: 10m
@@ -1619,8 +1569,8 @@ pipeline:
                   timeout: 10m
               - step:
                   type: ShellScript
-                  name: Warm Stable CV Control
-                  identifier: warm_stable_cv_control
+                  name: Trigger Chaos for CV Demo
+                  identifier: trigger_cv_chaos
                   timeout: 5m
                   spec:
                     shell: Bash
@@ -1628,44 +1578,22 @@ pipeline:
                     source:
                       type: Inline
                       spec:
-                        script: |
-                          set +e
+                        script: |-
+                          set -euo pipefail
+                          NAMESPACE="<+infra.namespace>"
+                          CANARY_POD_IP="$(kubectl get pods -n "${NAMESPACE}" -l harness.io/track=canary -o jsonpath='{.items[0].status.podIP}')"
 
-                          STABLE_URL="https://<+serviceVariables.ingressHost>/api/process"
-                          END_TIME=$(( $(date +%s) + 120 ))
-                          STABLE_SUCCESS=0
-                          STABLE_FAILURE=0
+                          if [ -z "${CANARY_POD_IP}" ]; then
+                            echo "Could not resolve a canary pod IP in ${NAMESPACE}"
+                            kubectl get pods -n "${NAMESPACE}" -l harness.io/track=canary -o wide
+                            exit 1
+                          fi
 
-                          echo "Warming stable control traffic for 120s before canary verification"
-                          echo "Stable URL: ${STABLE_URL}"
-
-                          while [ "$(date +%s)" -lt "$END_TIME" ]; do
-                            if curl -k -sS -o /dev/null -X POST "${STABLE_URL}" -H 'Content-Type: application/json' -d '{"source":"cv-warmup","target":"stable"}'; then
-                              STABLE_SUCCESS=$((STABLE_SUCCESS + 1))
-                            else
-                              STABLE_FAILURE=$((STABLE_FAILURE + 1))
-                            fi
-
-                            sleep 2
-                          done
-
-                          echo "Stable warm-up results: success=${STABLE_SUCCESS}, failure=${STABLE_FAILURE}"
+                          CHAOS_URL="http://${CANARY_POD_IP}:8080/api/chaos/degrade-canary?durationSeconds=180"
+                          echo "Triggering canary chaos via ${CHAOS_URL}"
+                          curl --silent --show-error --fail -X POST "${CHAOS_URL}"
                     environmentVariables: []
                     outputVariables: []
-              - step:
-                  type: Http
-                  name: Trigger Chaos for CV Demo
-                  identifier: trigger_cv_chaos
-                  spec:
-                    url: https://<+serviceVariables.ingressStageHost>/api/chaos/degrade-canary?durationSeconds=180
-                    method: POST
-                    headers: []
-                    requestBody: ""
-                    assertion: <+httpResponseCode> == 200
-                    timeout: 30s
-                    inputVariables: []
-                    outputVariables: []
-                  timeout: 5m
                   when:
                     stageStatus: Success
                     condition: <+pipeline.variables.trigger_cv_chaos> == "true"
@@ -1684,8 +1612,7 @@ pipeline:
                               #!/bin/bash
                               set +e
 
-                              STABLE_URL="https://<+serviceVariables.ingressHost>/api/process"
-                              CANARY_URL="https://<+serviceVariables.ingressStageHost>/api/process"
+                              PROD_URL="https://<+serviceVariables.ingressHost>/api/process"
                               CV_DURATION_RAW="<+pipeline.variables.cv_duration>"
                               case "$CV_DURATION_RAW" in
                                 *m)
@@ -1700,33 +1627,24 @@ pipeline:
                               esac
                               DURATION_SECONDS=$(( DURATION_SECONDS + 60 ))
                               END_TIME=$(( $(date +%s) + DURATION_SECONDS ))
-                              STABLE_SUCCESS=0
-                              STABLE_FAILURE=0
-                              CANARY_SUCCESS=0
-                              CANARY_FAILURE=0
+                              PROD_SUCCESS=0
+                              PROD_FAILURE=0
 
-                              echo "Driving baseline traffic for ${DURATION_SECONDS}s during canary verification"
-                              echo "Stable URL: ${STABLE_URL}"
-                              echo "Canary URL: ${CANARY_URL}"
+                              echo "Driving production traffic for ${DURATION_SECONDS}s during canary verification"
+                              echo "Prod URL: ${PROD_URL}"
+                              echo "Expected live pod mix during canary: 2 stable pods and 1 canary pod"
 
                               while [ "$(date +%s)" -lt "$END_TIME" ]; do
-                                if curl -k -sS -o /dev/null -X POST "${STABLE_URL}" -H 'Content-Type: application/json' -d '{"source":"cv-baseline","target":"stable"}'; then
-                                  STABLE_SUCCESS=$((STABLE_SUCCESS + 1))
+                                if curl -k -sS -o /dev/null -X POST "${PROD_URL}" -H 'Content-Type: application/json' -d '{"source":"cv-baseline","target":"prod"}'; then
+                                  PROD_SUCCESS=$((PROD_SUCCESS + 1))
                                 else
-                                  STABLE_FAILURE=$((STABLE_FAILURE + 1))
-                                fi
-
-                                if curl -sS -o /dev/null -X POST "${CANARY_URL}" -H 'Content-Type: application/json' -d '{"source":"cv-baseline","target":"canary"}'; then
-                                  CANARY_SUCCESS=$((CANARY_SUCCESS + 1))
-                                else
-                                  CANARY_FAILURE=$((CANARY_FAILURE + 1))
+                                  PROD_FAILURE=$((PROD_FAILURE + 1))
                                 fi
 
                                 sleep 2
                               done
 
-                              echo "Stable traffic results: success=${STABLE_SUCCESS}, failure=${STABLE_FAILURE}"
-                              echo "Canary traffic results: success=${CANARY_SUCCESS}, failure=${CANARY_FAILURE}"
+                              echo "Prod traffic results: success=${PROD_SUCCESS}, failure=${PROD_FAILURE}"
                         environmentVariables: []
                         outputVariables: []
                       timeout: 15m
