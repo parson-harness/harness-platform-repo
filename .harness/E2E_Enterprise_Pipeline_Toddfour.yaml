@@ -2099,6 +2099,7 @@ pipeline:
                                     - Branch: ${BRANCH_NAME}
                                     - Environment: <+env.name>
                                     - Application URL: https://<+serviceVariables.ingressHost>
+                                    - Change record: ${CHANGE_RECORD_URL}
                                     - Published image: ${PUBLISHED_IMAGE_URL}
                                     - Build execution: ${BUILD_EXECUTION_URL}
                                     - Pipeline execution: <+pipeline.executionUrl>
@@ -2128,6 +2129,9 @@ pipeline:
                                   type: String
                                 - name: BRANCH_NAME
                                   value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.BRANCH_NAME>
+                                  type: String
+                                - name: CHANGE_RECORD_URL
+                                  value: <+pipeline.stages.ITSM.spec.execution.steps.Open_Change_Request.ticket.ticketUrl>
                                   type: String
                                 - name: PUBLISHED_IMAGE_URL
                                   value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_artifact_links.output.outputVariables.PUBLISHED_IMAGE_URL>
