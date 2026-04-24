@@ -473,8 +473,8 @@ pipeline:
                               type: String
                               value: SIGNED_PAYLOAD_BASE64
               - stepGroup:
-                  name: Container Scans
-                  identifier: container_scans
+                  name: Container Security Scans
+                  identifier: container_security_scans
                   steps:
                     - parallel:
                         - step:
@@ -585,8 +585,8 @@ pipeline:
                       echo "Computed critical vulnerabilities: $CRITICAL_VULNERABILITIES"
                       echo "Computed high vulnerabilities: $HIGH_VULNERABILITIES"
                     envVariables:
-                      TRIVY_CRITICAL: <+pipeline.stages.build_test_scan_push.spec.execution.steps.container_scans.steps.aqua_trivy.output.outputVariables.CRITICAL>
-                      TRIVY_HIGH: <+pipeline.stages.build_test_scan_push.spec.execution.steps.container_scans.steps.aqua_trivy.output.outputVariables.HIGH>
+                      TRIVY_CRITICAL: <+pipeline.stages.build_test_scan_push.spec.execution.steps.container_security_scans.steps.aqua_trivy.output.outputVariables.CRITICAL>
+                      TRIVY_HIGH: <+pipeline.stages.build_test_scan_push.spec.execution.steps.container_security_scans.steps.aqua_trivy.output.outputVariables.HIGH>
                       CHANGE_BLAST_RADIUS_INPUT: <+pipeline.variables.change_blast_radius>
                       ROLLBACK_READY_INPUT: <+pipeline.variables.rollback_ready>
                       OPEN_CHANGE_FAILURES_INPUT: <+pipeline.variables.open_change_failures>
@@ -1010,8 +1010,8 @@ pipeline:
                     outputVariables: []
                   timeout: 10m
               - stepGroup:
-                  name: Supply Chain Governance
-                  identifier: supply_chain_governance
+                  name: Artifact Integrity Gates
+                  identifier: artifact_integrity_gates
                   steps:
                     - parallel:
                         - step:
@@ -1195,10 +1195,10 @@ pipeline:
                                       },
                                       "validation": {
                                         "signature_verification": {
-                                          "status": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_STATUS>",
-                                          "message": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_MESSAGE>",
-                                          "payload_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PAYLOAD_CHECKSUM>",
-                                          "public_key_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PUBLIC_KEY_CHECKSUM>"
+                                          "status": "<+execution.steps.artifact_integrity_gates.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_STATUS>",
+                                          "message": "<+execution.steps.artifact_integrity_gates.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_MESSAGE>",
+                                          "payload_checksum": "<+execution.steps.artifact_integrity_gates.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PAYLOAD_CHECKSUM>",
+                                          "public_key_checksum": "<+execution.steps.artifact_integrity_gates.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PUBLIC_KEY_CHECKSUM>"
                                         },
                                         "security": {
                                           "critical_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>,
@@ -1227,7 +1227,7 @@ pipeline:
                             - supply_chain_release_guardrails
                           type: Custom
                           policySpec:
-                            payload: <+execution.steps.supply_chain_governance.steps.assemble_supply_chain_context.output.outputVariables.supply_chain_context>
+                            payload: <+execution.steps.artifact_integrity_gates.steps.assemble_supply_chain_context.output.outputVariables.supply_chain_context>
               - step:
                   name: Stage Deployment
                   identifier: stage_deployment
@@ -1500,8 +1500,8 @@ pipeline:
                   timeout: 10m
                   spec: {}
               - stepGroup:
-                  name: Deployment Records
-                  identifier: Deployment_Records
+                  name: Release Records
+                  identifier: release_records
                   steps:
                     - parallel:
                         - step:
@@ -1636,8 +1636,8 @@ pipeline:
                         value: change_context
                   timeout: 10m
               - stepGroup:
-                  name: Governance
-                  identifier: governance
+                  name: Change Risk Evaluation
+                  identifier: change_risk_evaluation
                   steps:
                     - step:
                         type: Policy
@@ -1687,19 +1687,19 @@ pipeline:
 
                           Commit SHA: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>
 
-                          Change Risk Guard Rails: <+pipeline.stages.release_governance.spec.execution.steps.governance.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.status>
+                          Change Risk Guard Rails: <+pipeline.stages.release_governance.spec.execution.steps.change_risk_evaluation.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.status>
 
-                          Change Risk Score: <+pipeline.stages.release_governance.spec.execution.steps.governance.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.policyDetails.change_risk_score.status>
+                          Change Risk Score: <+pipeline.stages.release_governance.spec.execution.steps.change_risk_evaluation.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.policyDetails.change_risk_score.status>
 
-                          Change Readiness Guardrails: <+pipeline.stages.release_governance.spec.execution.steps.governance.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.policyDetails.change_readiness_guardrails.status>
+                          Change Readiness Guardrails: <+pipeline.stages.release_governance.spec.execution.steps.change_risk_evaluation.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.policyDetails.change_readiness_guardrails.status>
 
-                          Change Validation Quality: <+pipeline.stages.release_governance.spec.execution.steps.governance.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.policyDetails.change_validation_quality.status>
+                          Change Validation Quality: <+pipeline.stages.release_governance.spec.execution.steps.change_risk_evaluation.steps.evaluate_change_risk.output.policySetDetails.change_risk_guardrails.policyDetails.change_validation_quality.status>
                   timeout: 5m
                 contextType: Pipeline
               - parallel:
                   - stepGroup:
-                      name: Manual Approval Required
-                      identifier: manual_approval_required
+                      name: Manual Approval Path
+                      identifier: manual_approval_path
                       steps:
                         - step:
                             type: ServiceNowApproval
@@ -1732,7 +1732,7 @@ pipeline:
                                     type: MarkAsSuccess
                       when:
                         stageStatus: All
-                        condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> == "error"
+                        condition: <+execution.steps.change_risk_evaluation.steps.evaluate_change_risk.output.status> == "error"
                   - stepGroup:
                       name: Auto Approval Path
                       identifier: auto_approval_path
@@ -1752,7 +1752,7 @@ pipeline:
                             timeout: 5m
                       when:
                         stageStatus: All
-                        condition: <+execution.steps.governance.steps.evaluate_change_risk.output.status> != "error"
+                        condition: <+execution.steps.change_risk_evaluation.steps.evaluate_change_risk.output.status> != "error"
         tags: {}
         failureStrategies:
           - onFailure:
@@ -1876,8 +1876,8 @@ pipeline:
                         environmentVariables: []
                         outputVariables: []
               - stepGroup:
-                  name: Supply Chain Governance
-                  identifier: supply_chain_governance
+                  name: Artifact Integrity Gates
+                  identifier: artifact_integrity_gates
                   steps:
                     - parallel:
                         - step:
@@ -2061,10 +2061,10 @@ pipeline:
                                       },
                                       "validation": {
                                         "signature_verification": {
-                                          "status": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_STATUS>",
-                                          "message": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_MESSAGE>",
-                                          "payload_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PAYLOAD_CHECKSUM>",
-                                          "public_key_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PUBLIC_KEY_CHECKSUM>"
+                                          "status": "<+execution.steps.artifact_integrity_gates.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_STATUS>",
+                                          "message": "<+execution.steps.artifact_integrity_gates.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_MESSAGE>",
+                                          "payload_checksum": "<+execution.steps.artifact_integrity_gates.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PAYLOAD_CHECKSUM>",
+                                          "public_key_checksum": "<+execution.steps.artifact_integrity_gates.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PUBLIC_KEY_CHECKSUM>"
                                         },
                                         "security": {
                                           "critical_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>,
@@ -2093,7 +2093,7 @@ pipeline:
                             - supply_chain_release_guardrails
                           type: Custom
                           policySpec:
-                            payload: <+execution.steps.supply_chain_governance.steps.assemble_supply_chain_context.output.outputVariables.supply_chain_context>
+                            payload: <+execution.steps.artifact_integrity_gates.steps.assemble_supply_chain_context.output.outputVariables.supply_chain_context>
               - step:
                   name: Canary Deployment
                   identifier: canary_deploy
@@ -2106,8 +2106,8 @@ pipeline:
                         count: 1
                     skipDryRun: false
               - stepGroup:
-                  name: Canary Configs
-                  identifier: Canary_Configs
+                  name: Canary Validation Prep
+                  identifier: canary_validation_prep
                   steps:
                     - parallel:
                         - step:
@@ -2334,8 +2334,8 @@ pipeline:
                   spec:
                     skipDryRun: false
               - stepGroup:
-                  name: Deployment Records
-                  identifier: Deployment_Records
+                  name: Release Records
+                  identifier: release_records
                   steps:
                     - parallel:
                         - step:
