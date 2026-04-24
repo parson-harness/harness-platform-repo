@@ -180,6 +180,7 @@ public class AppConfig {
                 return "Amazon ECS";
             case "lambda":
                 return "AWS Lambda";
+            case "ec2-auto-scaling":
             case "asg":
                 return "EC2 Auto Scaling";
             default:
