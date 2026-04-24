@@ -160,7 +160,14 @@ public class AppConfig {
         if (secretProvider == null || secretProvider.isBlank()) {
             return "Harness Secret Variable";
         }
-        return secretProvider.trim();
+
+        String normalizedSecretProvider = secretProvider.trim();
+        switch (normalizedSecretProvider.toLowerCase()) {
+            case "aws-sm":
+                return "AWS Secrets Manager";
+            default:
+                return normalizedSecretProvider;
+        }
     }
 
     public boolean isDynamicSecretConfigured() {
