@@ -387,7 +387,7 @@ pipeline:
                         spec:
                           registryRef: har-docker-shared
                           image: gradle:8.5-jdk17
-                          shell: Sh
+                          shell: Bash
                           command: |-
                             set -euo pipefail
                             IMAGE_NAME="toddfourdemoapp"
