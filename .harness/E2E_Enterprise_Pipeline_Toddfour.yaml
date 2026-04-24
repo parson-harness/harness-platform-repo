@@ -437,6 +437,23 @@ pipeline:
                             - name: SIGNED_PAYLOAD_BASE64
                               type: String
                               value: SIGNED_PAYLOAD_BASE64
+                    - step:
+                        type: SscaArtifactSigning
+                        name: Native Artifact Signing
+                        identifier: native_artifact_signing
+                        spec:
+                          source:
+                            type: har
+                            spec:
+                              registry: har-docker-shared
+                              image: toddfourdemoapp:1.0.<+pipeline.sequenceId>
+                          signing:
+                            type: cosign
+                            spec:
+                              private_key: toddfour_cosign_private_key
+                              password: toddfour_cosign_password
+                          uploadSignature:
+                            upload: true
               - stepGroup:
                   name: Container Security Scans
                   identifier: container_security_scans
@@ -974,6 +991,30 @@ pipeline:
                     environmentVariables: []
                     outputVariables: []
                   timeout: 10m
+              - stepGroup:
+                  name: Native Artifact Verification
+                  identifier: native_artifact_verification
+                  steps:
+                    - step:
+                        type: SscaArtifactVerification
+                        name: Native Artifact Verification
+                        identifier: native_artifact_verification_step
+                        timeout: 10m
+                        spec:
+                          source:
+                            type: har
+                            spec:
+                              registry: har-docker-shared
+                              image: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>
+                          verifySign:
+                            type: cosign
+                            spec:
+                              public_key: toddfour_cosign_public_key
+                  stepGroupInfra:
+                    type: KubernetesDirect
+                    spec:
+                      connectorRef: <+infra.connectorRef>
+                      namespace: <+infra.namespace>
               - stepGroup:
                   name: Artifact Integrity Gates
                   identifier: artifact_integrity_gates
@@ -1840,6 +1881,30 @@ pipeline:
                               kubectl get service "${PRIMARY_SERVICE}" "${STAGE_SERVICE}" -n "${NAMESPACE}" -o wide
                         environmentVariables: []
                         outputVariables: []
+              - stepGroup:
+                  name: Native Artifact Verification
+                  identifier: native_artifact_verification
+                  steps:
+                    - step:
+                        type: SscaArtifactVerification
+                        name: Native Artifact Verification
+                        identifier: native_artifact_verification_step
+                        timeout: 10m
+                        spec:
+                          source:
+                            type: har
+                            spec:
+                              registry: har-docker-shared
+                              image: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>
+                          verifySign:
+                            type: cosign
+                            spec:
+                              public_key: toddfour_cosign_public_key
+                  stepGroupInfra:
+                    type: KubernetesDirect
+                    spec:
+                      connectorRef: <+infra.connectorRef>
+                      namespace: <+infra.namespace>
               - stepGroup:
                   name: Artifact Integrity Gates
                   identifier: artifact_integrity_gates
