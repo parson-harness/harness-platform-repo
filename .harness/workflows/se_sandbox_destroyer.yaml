@@ -101,7 +101,7 @@ spec:
       name: Destroying SE Sandbox
       action: trigger:harness-custom-pipeline
       input:
-        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/idp_pov_destroyer_v2/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
+        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/idp_pov_destroyer_v2/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-platform-repo&branch=main"
         inputset:
           owner: ${{ parameters.owner }}
           harness_account_id: <+account.identifier>

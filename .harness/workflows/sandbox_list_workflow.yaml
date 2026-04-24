@@ -69,7 +69,7 @@ spec:
       name: Managing Sandbox
       action: trigger:harness-custom-pipeline
       input:
-        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/sandbox_manager/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-demo-app&branch=main"
+        url: "https://app.harness.io/ng/account/EeRjnXTnS4GrLG5VNNJZUw/all/orgs/sandbox/projects/parson/pipelines/sandbox_manager/pipeline-studio/?storeType=REMOTE&connectorRef=parsongh&repoName=harness-platform-repo&branch=main"
         inputset:
           action: ${{ parameters.action }}
           owner: ${{ parameters.owner }}

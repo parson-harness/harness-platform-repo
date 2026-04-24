@@ -36,7 +36,7 @@ template:
     repository:
       isHarnessCode: false
       connector: parsongh
-      name: harness-demo-app
+      name: harness-platform-repo
       branch: main
       gitFetchType: branch
       path: tofu/stacks/project-governance
