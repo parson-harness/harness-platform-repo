@@ -770,17 +770,34 @@ pipeline:
                       ACCOUNT_SLUG=$(echo "$ACCOUNT_ID" | tr '[:upper:]' '[:lower:]')
 
                       PUBLISHED_IMAGE_URL="https://pkg.harness.io/$ACCOUNT_SLUG/$HAR_REGISTRY_REF/$HAR_IMAGE_NAME:$IMAGE_TAG"
+                      ARTIFACT_SUBJECT_URL="$PUBLISHED_IMAGE_URL"
                       BUILD_EXECUTION_URL="$HARNESS_UI_BASE/ng/account/$ACCOUNT_ID/all/orgs/$ORG_ID/projects/$PROJECT_ID/pipelines/$PIPELINE_ID/executions/$PIPELINE_EXECUTION_ID/pipeline?storeType=INLINE"
+                      SOURCE_REPOSITORY_URL="${REPO_URL%.git}"
+                      SOURCE_COMMIT_URL="$BUILD_EXECUTION_URL"
 
+                      case "$SOURCE_REPOSITORY_URL" in
+                        http://*|https://*)
+                          SOURCE_COMMIT_URL="${SOURCE_REPOSITORY_URL%/}/commit/$COMMIT_SHA"
+                          ;;
+                      esac
+
+                      export ARTIFACT_SUBJECT_URL
                       export PUBLISHED_IMAGE_URL
                       export BUILD_EXECUTION_URL
+                      export SOURCE_REPOSITORY_URL
+                      export SOURCE_COMMIT_URL
 
+                      echo "Artifact subject URL: $ARTIFACT_SUBJECT_URL"
                       echo "Published image URL: $PUBLISHED_IMAGE_URL"
+                      echo "Source repository URL: $SOURCE_REPOSITORY_URL"
+                      echo "Source commit URL: $SOURCE_COMMIT_URL"
                       echo "Build execution URL: $BUILD_EXECUTION_URL"
                     envVariables:
                       HAR_IMAGE_NAME: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_NAME>
                       HAR_REGISTRY_REF: har-toddfour
                       IMAGE_TAG: <+execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                      COMMIT_SHA: <+execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>
+                      REPO_URL: <+execution.steps.prepare_governance_inputs.output.outputVariables.REPO_URL>
                       HARNESS_ENDPOINT: <+pipeline.variables.harness_endpoint>
                       ACCOUNT_ID: <+account.identifier>
                       ORG_ID: <+org.identifier>
@@ -788,12 +805,21 @@ pipeline:
                       PIPELINE_ID: <+pipeline.identifier>
                       PIPELINE_EXECUTION_ID: <+pipeline.executionId>
                     outputVariables:
+                      - name: ARTIFACT_SUBJECT_URL
+                        type: String
+                        value: ARTIFACT_SUBJECT_URL
                       - name: PUBLISHED_IMAGE_URL
                         type: String
                         value: PUBLISHED_IMAGE_URL
                       - name: BUILD_EXECUTION_URL
                         type: String
                         value: BUILD_EXECUTION_URL
+                      - name: SOURCE_REPOSITORY_URL
+                        type: String
+                        value: SOURCE_REPOSITORY_URL
+                      - name: SOURCE_COMMIT_URL
+                        type: String
+                        value: SOURCE_COMMIT_URL
               - step:
                   type: Plugin
                   name: Publish Artifact Links
@@ -804,7 +830,10 @@ pipeline:
                     settings:
                       artifact_file: artifact-links.txt
                       file_urls:
+                        - Artifact Subject:::<+execution.steps.prepare_artifact_links.output.outputVariables.ARTIFACT_SUBJECT_URL>
                         - Published Image:::<+execution.steps.prepare_artifact_links.output.outputVariables.PUBLISHED_IMAGE_URL>
+                        - Source Repository:::<+execution.steps.prepare_artifact_links.output.outputVariables.SOURCE_REPOSITORY_URL>
+                        - Source Commit:::<+execution.steps.prepare_artifact_links.output.outputVariables.SOURCE_COMMIT_URL>
                         - Build Execution:::<+execution.steps.prepare_artifact_links.output.outputVariables.BUILD_EXECUTION_URL>
               - step:
                   type: Run
@@ -2292,6 +2321,72 @@ pipeline:
                   timeout: 10m
                   spec:
                     skipDryRun: false
+              - step:
+                  type: ShellScript
+                  name: Annotate Production Artifact Subject
+                  identifier: annotate_production_artifact_subject
+                  spec:
+                    shell: Bash
+                    executionTarget: {}
+                    source:
+                      type: Inline
+                      spec:
+                        script: |-
+                          set -euo pipefail
+
+                          SIGNING_SUBJECT="$IMAGE_REFERENCE"
+                          cat <<EOF > artifact_signing_subject_summary.md
+                          ## Production Artifact Subject
+
+                          - Subject: ${SIGNING_SUBJECT}
+                          - Service: ${SERVICE_NAME}
+                          - Image: ${IMAGE_NAME}
+                          - Tag: ${IMAGE_TAG}
+                          - Commit: ${COMMIT_SHA}
+                          - Branch: ${BRANCH_NAME}
+                          - Environment: <+env.name>
+                          - Application URL: https://<+serviceVariables.ingressHost>
+                          - Published image: ${PUBLISHED_IMAGE_URL}
+                          - Build execution: ${BUILD_EXECUTION_URL}
+                          - Pipeline execution: <+pipeline.executionUrl>
+                          EOF
+
+                          if command -v hcli >/dev/null 2>&1; then
+                            hcli annotate --context "artifact-signing-subject" --style "SUCCESS" --summary-file artifact_signing_subject_summary.md || true
+                          fi
+
+                          export SIGNING_SUBJECT
+                          echo "Production artifact subject: ${SIGNING_SUBJECT}"
+                    environmentVariables:
+                      - name: SERVICE_NAME
+                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME>
+                        type: String
+                      - name: IMAGE_NAME
+                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_NAME>
+                        type: String
+                      - name: IMAGE_TAG
+                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                        type: String
+                      - name: IMAGE_REFERENCE
+                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>
+                        type: String
+                      - name: COMMIT_SHA
+                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>
+                        type: String
+                      - name: BRANCH_NAME
+                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.BRANCH_NAME>
+                        type: String
+                      - name: PUBLISHED_IMAGE_URL
+                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_artifact_links.output.outputVariables.PUBLISHED_IMAGE_URL>
+                        type: String
+                      - name: BUILD_EXECUTION_URL
+                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_artifact_links.output.outputVariables.BUILD_EXECUTION_URL>
+                        type: String
+                    outputVariables:
+                      - name: SIGNING_SUBJECT
+                        type: String
+                        value: SIGNING_SUBJECT
+                  timeout: 5m
               - step:
                   type: ServiceNowUpdate
                   name: Close ServiceNow
