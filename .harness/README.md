@@ -163,6 +163,106 @@ The `POV_Provisioner` template should already exist in the `sandbox/parson` proj
    - Plan/Apply: `pov_provisioning`
    - Destroy: `pov_destroy`
 
+## Repeatable Test Intelligence demo guidance
+
+The Toddfour live pipeline now has a validated Test Intelligence flow in the `sandbox/parson` project using Harness Code pull requests.
+
+Validated success signals from the working run:
+
+- Total tests known by Harness: `88`
+- Selected tests: `41`
+- Time saved: `5s`
+- Correlated with code changes: `26`
+- Updated tests: `15`
+- New tests: `0`
+
+Use the following approach to keep future demos consistent and easy to explain.
+
+### Recommended demo flow
+
+1. Use Harness Code as the end-to-end system of record for the demo.
+2. Create the demo branch in the Harness Code repo, not only in the GitHub source repo.
+3. Open a Harness Code PR that targets `main`.
+4. Make a narrow production-code-only change in a class with existing focused tests.
+5. Avoid editing test files if the goal is to show code-to-test correlation as clearly as possible.
+6. Let the PR pipeline finish and use the **Tests** tab as the primary demo artifact.
+7. Merge the PR so Test Intelligence can update the `main` baseline before the next demo PR.
+
+### Best type of change for a TI demo
+
+Choose a small implementation-only change with an obvious test surface area:
+
+- small constant extraction
+- tag normalization change
+- narrow conditional branch change
+- local method refactor with unchanged public behavior
+
+Avoid broad changes that touch shared frameworks, dependency versions, or common utility code used by most of the application. Those changes can legitimately select a much larger portion of the test suite and weaken the demo.
+
+### What to show during the demo
+
+In the **Tests** tab, focus on these fields:
+
+- **Selected Tests**
+- **Time Saved**
+- **Correlated with Code Changes**
+- **Updated Tests**
+- **New Tests**
+
+The cleanest success pattern is:
+
+- selected tests is less than total known tests
+- correlated-with-code-changes is non-zero
+- new tests is zero or very low
+
+### Important baseline behavior
+
+After a significant TI configuration change, a new step identifier, or a report ingestion fix, the next run may behave like a baseline or relearning run. In that case Harness may run the full suite and classify tests as `New Tests`.
+
+That does not necessarily mean TI is broken. The next fresh PR after that successful baseline run is usually the run that demonstrates real test selection.
+
+### Keep this stable between demo runs
+
+Do not change these items between demo PRs unless you are intentionally re-validating TI configuration:
+
+- Test step identifier
+- repository used by the PR trigger
+- target branch for the PR flow
+- report paths and report format
+- clone strategy for the codebase
+
+For the Toddfour live pipeline, selective test execution depends on the same basic shape remaining intact across runs.
+
+### Mirror-pipeline guidance
+
+If GitHub changes are being mirrored into Harness Code, do not rely on the mirror for the live TI demo itself.
+
+The safest demo pattern is:
+
+1. branch in Harness Code
+2. open PR in Harness Code
+3. run PR pipeline in Harness Code
+4. merge in Harness Code
+
+This keeps the PR event stream, branch lineage, and `main` baseline in one system. If the GitHub mirror is active, avoid landing unrelated mirrored `main` updates in the middle of a TI demo sequence.
+
+### Common ways to get a noisy TI demo
+
+- editing both production code and many tests in the same PR
+- using a broad refactor that touches shared code paths everywhere
+- changing TI step configuration immediately before the demo
+- relying on a first post-config-change run as the proof point
+- re-running tests in a later coverage or packaging step, which can hide the effect of TI
+
+### Recommended talk track
+
+For a reliable live demo, use a two-PR story:
+
+1. baseline-establishing PR if TI config was just changed
+2. a second narrow PR that shows selected tests and time saved
+
+If TI is already warm and stable, a single narrow production-code-only PR is usually enough.
+
 ### Step 2: Add Variables to Template (EKS Stack)
 
 The template needs these tfvars (add via Template Studio → Variables tab):
@@ -301,6 +401,35 @@ spec:
           owner: ${{ parameters.owner }}
           # ... map other variables
 ```
+
+## QA Playwright custom runner lifecycle
+
+The QA Playwright gate can run from a custom container image that already contains the Playwright smoke suite. In that baked-runner model, the CD stage should not clone the repository or install Node dependencies at runtime. Instead, rebuild the runner image whenever the contents of the baked test harness change.
+
+### Rebuild the runner image when these files change
+
+| File or path | Why it changes | Why rebuild is required |
+|-------------|----------------|-------------------------|
+| `package.json` | Playwright version changes, new helper libraries are added, or npm scripts are updated | The image needs the updated dependency manifest baked in |
+| `package-lock.json` | The resolved dependency tree changes after an npm install or version bump | The image should keep deterministic dependency versions |
+| `playwright.config.js` | Timeouts, retries, workers, reporters, browser projects, or base URL behavior change | The image should run the updated Playwright execution policy |
+| `playwright-tests/**` | UI selectors, API assertions, smoke coverage, or environment-aware test logic changes | The image should contain the current smoke suite |
+
+### Usually does not require a runner rebuild
+
+These changes are typically pipeline concerns, not image-content concerns:
+
+- Harness annotation formatting
+- approval message text
+- connector references
+- runtime base URL wiring in the pipeline
+- PR comment behavior in the pipeline shell step
+
+### Operational guidance
+
+- Rebuild the runner image after any change to the baked Playwright harness files listed above
+- Rebuild periodically to pick up base-image security updates even if the tests did not change
+- Prefer versioned image tags over relying only on `latest` so the validated runner can be tied to a specific change set
 
 ## Troubleshooting
 
