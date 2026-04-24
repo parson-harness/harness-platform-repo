@@ -194,6 +194,27 @@ class AppConfigTest {
     }
 
     @Nested
+    @DisplayName("Deployment Target Display Tests")
+    class DeploymentTargetDisplayTests {
+
+        @Test
+        @DisplayName("Should return EC2 Auto Scaling for ec2-auto-scaling deployment target alias")
+        void getDisplayDeploymentTarget_shouldReturnAutoScalingForEc2AutoScalingAlias() {
+            appConfig.setDeploymentTarget("ec2-auto-scaling");
+
+            assertEquals("EC2 Auto Scaling", appConfig.getDisplayDeploymentTarget());
+        }
+
+        @Test
+        @DisplayName("Should trim ec2-auto-scaling deployment target alias before mapping")
+        void getDisplayDeploymentTarget_shouldTrimEc2AutoScalingAliasBeforeMapping() {
+            appConfig.setDeploymentTarget("  ec2-auto-scaling  ");
+
+            assertEquals("EC2 Auto Scaling", appConfig.getDisplayDeploymentTarget());
+        }
+    }
+
+    @Nested
     @DisplayName("Variant Color Tests")
     class VariantColorTests {
 
