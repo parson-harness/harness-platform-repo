@@ -1794,237 +1794,290 @@ pipeline:
               - identifier: toddfour_k8s_prod
           execution:
             steps:
-              - step:
-                  type: ShellScript
-                  name: Pipeline Context
-                  identifier: pipeline_context
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
+              - parallel:
+                  - step:
+                      type: ShellScript
+                      name: Pipeline Context
+                      identifier: pipeline_context
                       spec:
-                        script: |
-                          echo "========================================"
-                          echo "  HARNESS PIPELINE CONTEXT"
-                          echo "========================================"
-                          echo "Pipeline: <+pipeline.name> | Execution: <+pipeline.executionId>"
-                          echo "Stage: <+stage.name> | Service: <+service.name>"
-                          echo "Environment: <+env.name> (<+env.type>)"
-                          echo "Infrastructure: <+infra.name> | Namespace: <+infra.namespace>"
-                          echo "Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>"
-                          echo "App URL: https://<+serviceVariables.ingressHost>"
-                          echo "========================================"
-                    environmentVariables: []
-                    outputVariables: []
-                  timeout: 10m
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |
+                              echo "========================================"
+                              echo "  HARNESS PIPELINE CONTEXT"
+                              echo "========================================"
+                              echo "Pipeline: <+pipeline.name> | Execution: <+pipeline.executionId>"
+                              echo "Stage: <+stage.name> | Service: <+service.name>"
+                              echo "Environment: <+env.name> (<+env.type>)"
+                              echo "Infrastructure: <+infra.name> | Namespace: <+infra.namespace>"
+                              echo "Artifact: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.ARTIFACT>"
+                              echo "App URL: https://<+serviceVariables.ingressHost>"
+                              echo "========================================"
+                        environmentVariables: []
+                        outputVariables: []
+                      timeout: 10m
+                  - step:
+                      type: ShellScript
+                      name: Reset Prod Service Selectors
+                      identifier: reset_prod_service_selectors
+                      timeout: 5m
+                      spec:
+                        shell: Bash
+                        executionTarget: {}
+                        source:
+                          type: Inline
+                          spec:
+                            script: |-
+                              set -euo pipefail
+                              NAMESPACE="<+infra.namespace>"
+                              PRIMARY_HOST="<+serviceVariables.ingressHost>"
+                              STAGE_HOST="<+serviceVariables.ingressStageHost>"
+
+                              resolve_service_for_host() {
+                                local host="$1"
+                                kubectl get ingress -n "${NAMESPACE}" -o jsonpath='{range .items[*]}{range .spec.rules[*]}{.host}{"\t"}{.http.paths[0].backend.service.name}{"\n"}{end}{end}' | awk -v target_host="${host}" '$1 == target_host { print $2; exit }'
+                              }
+
+                              PRIMARY_SERVICE="$(resolve_service_for_host "${PRIMARY_HOST}")"
+                              STAGE_SERVICE="$(resolve_service_for_host "${STAGE_HOST}")"
+
+                              if [ -z "${PRIMARY_SERVICE}" ] || [ -z "${STAGE_SERVICE}" ]; then
+                                echo "Failed to resolve backend services from ingress hosts"
+                                echo "Primary host: ${PRIMARY_HOST} -> ${PRIMARY_SERVICE:-<none>}"
+                                echo "Stage host: ${STAGE_HOST} -> ${STAGE_SERVICE:-<none>}"
+                                kubectl get ingress -n "${NAMESPACE}" -o wide
+                                exit 1
+                              fi
+
+                              APP_SELECTOR="$(kubectl get service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" -o jsonpath='{.spec.selector.app}')"
+                              if [ -z "${APP_SELECTOR}" ]; then
+                                APP_SELECTOR="$(kubectl get service "${STAGE_SERVICE}" -n "${NAMESPACE}" -o jsonpath='{.spec.selector.app}')"
+                              fi
+
+                              if [ -z "${APP_SELECTOR}" ]; then
+                                echo "Could not determine app selector from ${PRIMARY_SERVICE} or ${STAGE_SERVICE}"
+                                exit 1
+                              fi
+
+                              echo "Resetting ${PRIMARY_SERVICE} and ${STAGE_SERVICE} selectors to app=${APP_SELECTOR} in ${NAMESPACE}"
+                              kubectl patch service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" --type json -p '[{"op":"remove","path":"/spec/selector/harness.io~1track"}]' >/dev/null 2>&1 || true
+                              kubectl patch service "${STAGE_SERVICE}" -n "${NAMESPACE}" --type json -p '[{"op":"remove","path":"/spec/selector/harness.io~1track"}]' >/dev/null 2>&1 || true
+                              kubectl patch service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" --type merge -p '{"spec":{"selector":{"app":"'"${APP_SELECTOR}"'"}}}'
+                              kubectl patch service "${STAGE_SERVICE}" -n "${NAMESPACE}" --type merge -p '{"spec":{"selector":{"app":"'"${APP_SELECTOR}"'"}}}'
+                              kubectl get service "${PRIMARY_SERVICE}" "${STAGE_SERVICE}" -n "${NAMESPACE}" -o wide
+                        environmentVariables: []
+                        outputVariables: []
               - stepGroup:
                   name: Supply Chain Governance
                   identifier: supply_chain_governance
                   steps:
-                    - step:
-                        type: ShellScript
-                        name: Verify Artifact Signature
-                        identifier: verify_artifact_signature
-                        timeout: 10m
-                        spec:
-                          shell: Bash
-                          executionTarget: {}
-                          source:
-                            type: Inline
+                    - parallel:
+                        - step:
+                            type: ShellScript
+                            name: Verify Artifact Signature
+                            identifier: verify_artifact_signature
+                            timeout: 10m
                             spec:
-                              script: |
-                                set -euo pipefail
+                              shell: Bash
+                              executionTarget: {}
+                              source:
+                                type: Inline
+                                spec:
+                                  script: |
+                                    set -euo pipefail
 
-                                COSIGN_VERSION="v2.2.4"
-                                TOOLS_DIR="$(pwd)/.supply-chain-tools"
-                                COSIGN_BIN="${TOOLS_DIR}/cosign"
-                                SIGNATURE_VERIFICATION_STATUS="verified"
-                                SIGNATURE_VERIFICATION_MESSAGE="Artifact signature verified successfully."
-                                VERIFIED_PAYLOAD_CHECKSUM=""
-                                VERIFIED_PUBLIC_KEY_CHECKSUM=""
+                                    COSIGN_VERSION="v2.2.4"
+                                    TOOLS_DIR="$(pwd)/.supply-chain-tools"
+                                    COSIGN_BIN="${TOOLS_DIR}/cosign"
+                                    SIGNATURE_VERIFICATION_STATUS="verified"
+                                    SIGNATURE_VERIFICATION_MESSAGE="Artifact signature verified successfully."
+                                    VERIFIED_PAYLOAD_CHECKSUM=""
+                                    VERIFIED_PUBLIC_KEY_CHECKSUM=""
 
-                                mkdir -p "$TOOLS_DIR"
+                                    mkdir -p "$TOOLS_DIR"
 
-                                if [ "$SIGNING_STATUS" != "signed" ]; then
-                                  SIGNATURE_VERIFICATION_STATUS="error"
-                                  SIGNATURE_VERIFICATION_MESSAGE="Artifact signing status is ${SIGNING_STATUS}."
-                                fi
+                                    if [ "$SIGNING_STATUS" != "signed" ]; then
+                                      SIGNATURE_VERIFICATION_STATUS="error"
+                                      SIGNATURE_VERIFICATION_MESSAGE="Artifact signing status is ${SIGNING_STATUS}."
+                                    fi
 
-                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && [ "$SIGNING_MODE" != "cosign-blob" ]; then
-                                  SIGNATURE_VERIFICATION_STATUS="error"
-                                  SIGNATURE_VERIFICATION_MESSAGE="Expected signing mode cosign-blob but found ${SIGNING_MODE}."
-                                fi
+                                    if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && [ "$SIGNING_MODE" != "cosign-blob" ]; then
+                                      SIGNATURE_VERIFICATION_STATUS="error"
+                                      SIGNATURE_VERIFICATION_MESSAGE="Expected signing mode cosign-blob but found ${SIGNING_MODE}."
+                                    fi
 
-                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
-                                  if command -v cosign >/dev/null 2>&1; then
-                                    COSIGN_BIN="$(command -v cosign)"
-                                  elif command -v curl >/dev/null 2>&1; then
-                                    curl -fsSL "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" -o "$COSIGN_BIN"
-                                    chmod +x "$COSIGN_BIN"
-                                  elif command -v wget >/dev/null 2>&1; then
-                                    wget -qO "$COSIGN_BIN" "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
-                                    chmod +x "$COSIGN_BIN"
-                                  else
-                                    SIGNATURE_VERIFICATION_STATUS="error"
-                                    SIGNATURE_VERIFICATION_MESSAGE="Unable to acquire cosign because neither curl, wget, nor a preinstalled cosign binary is available."
-                                  fi
-                                fi
+                                    if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                      if command -v cosign >/dev/null 2>&1; then
+                                        COSIGN_BIN="$(command -v cosign)"
+                                      elif command -v curl >/dev/null 2>&1; then
+                                        curl -fsSL "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64" -o "$COSIGN_BIN"
+                                        chmod +x "$COSIGN_BIN"
+                                      elif command -v wget >/dev/null 2>&1; then
+                                        wget -qO "$COSIGN_BIN" "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+                                        chmod +x "$COSIGN_BIN"
+                                      else
+                                        SIGNATURE_VERIFICATION_STATUS="error"
+                                        SIGNATURE_VERIFICATION_MESSAGE="Unable to acquire cosign because neither curl, wget, nor a preinstalled cosign binary is available."
+                                      fi
+                                    fi
 
-                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
-                                  if ! printf '%s' "$SIGNED_PAYLOAD_BASE64" | base64 -d > artifact-payload.json 2>/dev/null; then
-                                    SIGNATURE_VERIFICATION_STATUS="error"
-                                    SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the signed payload from release evidence."
-                                  fi
-                                fi
+                                    if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                      if ! printf '%s' "$SIGNED_PAYLOAD_BASE64" | base64 -d > artifact-payload.json 2>/dev/null; then
+                                        SIGNATURE_VERIFICATION_STATUS="error"
+                                        SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the signed payload from release evidence."
+                                      fi
+                                    fi
 
-                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
-                                  if ! printf '%s' "$PUBLIC_KEY_BASE64" | base64 -d > cosign.pub 2>/dev/null; then
-                                    SIGNATURE_VERIFICATION_STATUS="error"
-                                    SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the signing public key from release evidence."
-                                  fi
-                                fi
+                                    if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                      if ! printf '%s' "$PUBLIC_KEY_BASE64" | base64 -d > cosign.pub 2>/dev/null; then
+                                        SIGNATURE_VERIFICATION_STATUS="error"
+                                        SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the signing public key from release evidence."
+                                      fi
+                                    fi
 
-                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
-                                  if ! printf '%s' "$SIGNATURE_BASE64" | base64 -d > artifact.sig 2>/dev/null; then
-                                    SIGNATURE_VERIFICATION_STATUS="error"
-                                    SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the artifact signature from release evidence."
-                                  fi
-                                fi
+                                    if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                      if ! printf '%s' "$SIGNATURE_BASE64" | base64 -d > artifact.sig 2>/dev/null; then
+                                        SIGNATURE_VERIFICATION_STATUS="error"
+                                        SIGNATURE_VERIFICATION_MESSAGE="Failed to decode the artifact signature from release evidence."
+                                      fi
+                                    fi
 
-                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
-                                  VERIFIED_PAYLOAD_CHECKSUM="$(sha256sum artifact-payload.json | awk '{print $1}')"
-                                  VERIFIED_PUBLIC_KEY_CHECKSUM="$(sha256sum cosign.pub | awk '{print $1}')"
+                                    if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                      VERIFIED_PAYLOAD_CHECKSUM="$(sha256sum artifact-payload.json | awk '{print $1}')"
+                                      VERIFIED_PUBLIC_KEY_CHECKSUM="$(sha256sum cosign.pub | awk '{print $1}')"
 
-                                  if [ "$VERIFIED_PAYLOAD_CHECKSUM" != "$EXPECTED_PAYLOAD_CHECKSUM" ]; then
-                                    SIGNATURE_VERIFICATION_STATUS="error"
-                                    SIGNATURE_VERIFICATION_MESSAGE="Signed payload checksum mismatch. Expected ${EXPECTED_PAYLOAD_CHECKSUM}, got ${VERIFIED_PAYLOAD_CHECKSUM}."
-                                  fi
-                                fi
+                                      if [ "$VERIFIED_PAYLOAD_CHECKSUM" != "$EXPECTED_PAYLOAD_CHECKSUM" ]; then
+                                        SIGNATURE_VERIFICATION_STATUS="error"
+                                        SIGNATURE_VERIFICATION_MESSAGE="Signed payload checksum mismatch. Expected ${EXPECTED_PAYLOAD_CHECKSUM}, got ${VERIFIED_PAYLOAD_CHECKSUM}."
+                                      fi
+                                    fi
 
-                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && [ "$VERIFIED_PUBLIC_KEY_CHECKSUM" != "$EXPECTED_PUBLIC_KEY_CHECKSUM" ]; then
-                                  SIGNATURE_VERIFICATION_STATUS="error"
-                                  SIGNATURE_VERIFICATION_MESSAGE="Signing public key checksum mismatch. Expected ${EXPECTED_PUBLIC_KEY_CHECKSUM}, got ${VERIFIED_PUBLIC_KEY_CHECKSUM}."
-                                fi
+                                    if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && [ "$VERIFIED_PUBLIC_KEY_CHECKSUM" != "$EXPECTED_PUBLIC_KEY_CHECKSUM" ]; then
+                                      SIGNATURE_VERIFICATION_STATUS="error"
+                                      SIGNATURE_VERIFICATION_MESSAGE="Signing public key checksum mismatch. Expected ${EXPECTED_PUBLIC_KEY_CHECKSUM}, got ${VERIFIED_PUBLIC_KEY_CHECKSUM}."
+                                    fi
 
-                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && ! grep -q '"service":"'"$EXPECTED_SERVICE"'"' artifact-payload.json; then
-                                  SIGNATURE_VERIFICATION_STATUS="error"
-                                  SIGNATURE_VERIFICATION_MESSAGE="Signed payload service does not match ${EXPECTED_SERVICE}."
-                                fi
+                                    if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && ! grep -q '"service":"'"$EXPECTED_SERVICE"'"' artifact-payload.json; then
+                                      SIGNATURE_VERIFICATION_STATUS="error"
+                                      SIGNATURE_VERIFICATION_MESSAGE="Signed payload service does not match ${EXPECTED_SERVICE}."
+                                    fi
 
-                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && ! grep -q '"tag":"'"$EXPECTED_TAG"'"' artifact-payload.json; then
-                                  SIGNATURE_VERIFICATION_STATUS="error"
-                                  SIGNATURE_VERIFICATION_MESSAGE="Signed payload tag does not match ${EXPECTED_TAG}."
-                                fi
+                                    if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ] && ! grep -q '"tag":"'"$EXPECTED_TAG"'"' artifact-payload.json; then
+                                      SIGNATURE_VERIFICATION_STATUS="error"
+                                      SIGNATURE_VERIFICATION_MESSAGE="Signed payload tag does not match ${EXPECTED_TAG}."
+                                    fi
 
-                                if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
-                                  VERIFY_OUTPUT="$($COSIGN_BIN verify-blob --key cosign.pub --signature artifact.sig artifact-payload.json 2>&1)" || true
-                                  if ! printf '%s' "$VERIFY_OUTPUT" | grep -q 'Verified OK'; then
-                                    SIGNATURE_VERIFICATION_STATUS="error"
-                                    SIGNATURE_VERIFICATION_MESSAGE="Cosign verification failed: $(printf '%s' "$VERIFY_OUTPUT" | tr '\n' ' ' | cut -c1-500)"
-                                  fi
-                                fi
+                                    if [ "$SIGNATURE_VERIFICATION_STATUS" = "verified" ]; then
+                                      VERIFY_OUTPUT="$($COSIGN_BIN verify-blob --key cosign.pub --signature artifact.sig artifact-payload.json 2>&1)" || true
+                                      if ! printf '%s' "$VERIFY_OUTPUT" | grep -q 'Verified OK'; then
+                                        SIGNATURE_VERIFICATION_STATUS="error"
+                                        SIGNATURE_VERIFICATION_MESSAGE="Cosign verification failed: $(printf '%s' "$VERIFY_OUTPUT" | tr '\n' ' ' | cut -c1-500)"
+                                      fi
+                                    fi
 
-                                export SIGNATURE_VERIFICATION_STATUS
-                                export SIGNATURE_VERIFICATION_MESSAGE
-                                export VERIFIED_PAYLOAD_CHECKSUM
-                                export VERIFIED_PUBLIC_KEY_CHECKSUM
+                                    export SIGNATURE_VERIFICATION_STATUS
+                                    export SIGNATURE_VERIFICATION_MESSAGE
+                                    export VERIFIED_PAYLOAD_CHECKSUM
+                                    export VERIFIED_PUBLIC_KEY_CHECKSUM
 
-                                echo "Signature verification status: ${SIGNATURE_VERIFICATION_STATUS}"
-                                echo "Signature verification message: ${SIGNATURE_VERIFICATION_MESSAGE}"
-                          environmentVariables:
-                            - name: SIGNING_STATUS
-                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_STATUS>
-                              type: String
-                            - name: SIGNING_MODE
-                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_MODE>
-                              type: String
-                            - name: EXPECTED_SERVICE
-                              value: toddfour_demo_app
-                              type: String
-                            - name: EXPECTED_TAG
-                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
-                              type: String
-                            - name: EXPECTED_PAYLOAD_CHECKSUM
-                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_CHECKSUM>
-                              type: String
-                            - name: EXPECTED_PUBLIC_KEY_CHECKSUM
-                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_CHECKSUM>
-                              type: String
-                            - name: SIGNATURE_BASE64
-                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_BASE64>
-                              type: String
-                            - name: PUBLIC_KEY_BASE64
-                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_BASE64>
-                              type: String
-                            - name: SIGNED_PAYLOAD_BASE64
-                              value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNED_PAYLOAD_BASE64>
-                              type: String
-                          outputVariables:
-                            - name: SIGNATURE_VERIFICATION_STATUS
-                              type: String
-                              value: SIGNATURE_VERIFICATION_STATUS
-                            - name: SIGNATURE_VERIFICATION_MESSAGE
-                              type: String
-                              value: SIGNATURE_VERIFICATION_MESSAGE
-                            - name: VERIFIED_PAYLOAD_CHECKSUM
-                              type: String
-                              value: VERIFIED_PAYLOAD_CHECKSUM
-                            - name: VERIFIED_PUBLIC_KEY_CHECKSUM
-                              type: String
-                              value: VERIFIED_PUBLIC_KEY_CHECKSUM
-                    - step:
-                        type: ShellScript
-                        name: Assemble Supply Chain Context
-                        identifier: assemble_supply_chain_context
-                        timeout: 10m
-                        spec:
-                          shell: Bash
-                          executionTarget: {}
-                          source:
-                            type: Inline
+                                    echo "Signature verification status: ${SIGNATURE_VERIFICATION_STATUS}"
+                                    echo "Signature verification message: ${SIGNATURE_VERIFICATION_MESSAGE}"
+                              environmentVariables:
+                                - name: SIGNING_STATUS
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_STATUS>
+                                  type: String
+                                - name: SIGNING_MODE
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNING_MODE>
+                                  type: String
+                                - name: EXPECTED_SERVICE
+                                  value: toddfour_demo_app
+                                  type: String
+                                - name: EXPECTED_TAG
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                                  type: String
+                                - name: EXPECTED_PAYLOAD_CHECKSUM
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_CHECKSUM>
+                                  type: String
+                                - name: EXPECTED_PUBLIC_KEY_CHECKSUM
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_CHECKSUM>
+                                  type: String
+                                - name: SIGNATURE_BASE64
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNATURE_BASE64>
+                                  type: String
+                                - name: PUBLIC_KEY_BASE64
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.PUBLIC_KEY_BASE64>
+                                  type: String
+                                - name: SIGNED_PAYLOAD_BASE64
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.supply_chain_security.steps.artifact_signing_evidence.output.outputVariables.SIGNED_PAYLOAD_BASE64>
+                                  type: String
+                              outputVariables:
+                                - name: SIGNATURE_VERIFICATION_STATUS
+                                  type: String
+                                  value: SIGNATURE_VERIFICATION_STATUS
+                                - name: SIGNATURE_VERIFICATION_MESSAGE
+                                  type: String
+                                  value: SIGNATURE_VERIFICATION_MESSAGE
+                                - name: VERIFIED_PAYLOAD_CHECKSUM
+                                  type: String
+                                  value: VERIFIED_PAYLOAD_CHECKSUM
+                                - name: VERIFIED_PUBLIC_KEY_CHECKSUM
+                                  type: String
+                                  value: VERIFIED_PUBLIC_KEY_CHECKSUM
+                        - step:
+                            type: ShellScript
+                            name: Assemble Supply Chain Context
+                            identifier: assemble_supply_chain_context
+                            timeout: 10m
                             spec:
-                              script: |
-                                cat <<'EOF' > supply_chain_context.json
-                                {
-                                  "pipeline": {
-                                    "identifier": "<+pipeline.identifier>",
-                                    "execution_id": "<+pipeline.executionId>",
-                                    "sequence_id": "<+pipeline.sequenceId>"
-                                  },
-                                  "stage": {
-                                    "identifier": "<+stage.identifier>",
-                                    "name": "<+stage.name>",
-                                    "deployment_strategy": "canary"
-                                  },
-                                  "change": {
-                                    "environment": "<+env.identifier>",
-                                    "environment_type": "<+env.type>"
-                                  },
-                                  "validation": {
-                                    "signature_verification": {
-                                      "status": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_STATUS>",
-                                      "message": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_MESSAGE>",
-                                      "payload_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PAYLOAD_CHECKSUM>",
-                                      "public_key_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PUBLIC_KEY_CHECKSUM>"
-                                    },
-                                    "security": {
-                                      "critical_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>,
-                                      "high_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>
+                              shell: Bash
+                              executionTarget: {}
+                              source:
+                                type: Inline
+                                spec:
+                                  script: |
+                                    cat <<'EOF' > supply_chain_context.json
+                                    {
+                                      "pipeline": {
+                                        "identifier": "<+pipeline.identifier>",
+                                        "execution_id": "<+pipeline.executionId>",
+                                        "sequence_id": "<+pipeline.sequenceId>"
+                                      },
+                                      "stage": {
+                                        "identifier": "<+stage.identifier>",
+                                        "name": "<+stage.name>",
+                                        "deployment_strategy": "canary"
+                                      },
+                                      "change": {
+                                        "environment": "<+env.identifier>",
+                                        "environment_type": "<+env.type>"
+                                      },
+                                      "validation": {
+                                        "signature_verification": {
+                                          "status": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_STATUS>",
+                                          "message": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.SIGNATURE_VERIFICATION_MESSAGE>",
+                                          "payload_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PAYLOAD_CHECKSUM>",
+                                          "public_key_checksum": "<+execution.steps.supply_chain_governance.steps.verify_artifact_signature.output.outputVariables.VERIFIED_PUBLIC_KEY_CHECKSUM>"
+                                        },
+                                        "security": {
+                                          "critical_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.CRITICAL_VULNERABILITIES>,
+                                          "high_vulns": <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.HIGH_VULNERABILITIES>
+                                        }
+                                      },
+                                      "release_candidate": <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>
                                     }
-                                  },
-                                  "release_candidate": <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.RELEASE_EVIDENCE_JSON>
-                                }
-                                EOF
+                                    EOF
 
-                                supply_chain_context="$(tr -d '\n' < supply_chain_context.json)"
-                                export supply_chain_context
-                                echo "$supply_chain_context"
-                          environmentVariables: []
-                          outputVariables:
-                            - name: supply_chain_context
-                              type: String
-                              value: supply_chain_context
+                                    supply_chain_context="$(tr -d '\n' < supply_chain_context.json)"
+                                    export supply_chain_context
+                                    echo "$supply_chain_context"
+                              environmentVariables: []
+                              outputVariables:
+                                - name: supply_chain_context
+                                  type: String
+                                  value: supply_chain_context
                     - step:
                         type: Policy
                         name: Evaluate Supply Chain Evidence
@@ -2037,57 +2090,6 @@ pipeline:
                           policySpec:
                             payload: <+execution.steps.supply_chain_governance.steps.assemble_supply_chain_context.output.outputVariables.supply_chain_context>
               - step:
-                  type: ShellScript
-                  name: Reset Prod Service Selectors
-                  identifier: reset_prod_service_selectors
-                  timeout: 5m
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |-
-                          set -euo pipefail
-                          NAMESPACE="<+infra.namespace>"
-                          PRIMARY_HOST="<+serviceVariables.ingressHost>"
-                          STAGE_HOST="<+serviceVariables.ingressStageHost>"
-
-                          resolve_service_for_host() {
-                            local host="$1"
-                            kubectl get ingress -n "${NAMESPACE}" -o jsonpath='{range .items[*]}{range .spec.rules[*]}{.host}{"\t"}{.http.paths[0].backend.service.name}{"\n"}{end}{end}' | awk -v target_host="${host}" '$1 == target_host { print $2; exit }'
-                          }
-
-                          PRIMARY_SERVICE="$(resolve_service_for_host "${PRIMARY_HOST}")"
-                          STAGE_SERVICE="$(resolve_service_for_host "${STAGE_HOST}")"
-
-                          if [ -z "${PRIMARY_SERVICE}" ] || [ -z "${STAGE_SERVICE}" ]; then
-                            echo "Failed to resolve backend services from ingress hosts"
-                            echo "Primary host: ${PRIMARY_HOST} -> ${PRIMARY_SERVICE:-<none>}"
-                            echo "Stage host: ${STAGE_HOST} -> ${STAGE_SERVICE:-<none>}"
-                            kubectl get ingress -n "${NAMESPACE}" -o wide
-                            exit 1
-                          fi
-
-                          APP_SELECTOR="$(kubectl get service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" -o jsonpath='{.spec.selector.app}')"
-                          if [ -z "${APP_SELECTOR}" ]; then
-                            APP_SELECTOR="$(kubectl get service "${STAGE_SERVICE}" -n "${NAMESPACE}" -o jsonpath='{.spec.selector.app}')"
-                          fi
-
-                          if [ -z "${APP_SELECTOR}" ]; then
-                            echo "Could not determine app selector from ${PRIMARY_SERVICE} or ${STAGE_SERVICE}"
-                            exit 1
-                          fi
-
-                          echo "Resetting ${PRIMARY_SERVICE} and ${STAGE_SERVICE} selectors to app=${APP_SELECTOR} in ${NAMESPACE}"
-                          kubectl patch service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" --type json -p '[{"op":"remove","path":"/spec/selector/harness.io~1track"}]' >/dev/null 2>&1 || true
-                          kubectl patch service "${STAGE_SERVICE}" -n "${NAMESPACE}" --type json -p '[{"op":"remove","path":"/spec/selector/harness.io~1track"}]' >/dev/null 2>&1 || true
-                          kubectl patch service "${PRIMARY_SERVICE}" -n "${NAMESPACE}" --type merge -p '{"spec":{"selector":{"app":"'"${APP_SELECTOR}"'"}}}'
-                          kubectl patch service "${STAGE_SERVICE}" -n "${NAMESPACE}" --type merge -p '{"spec":{"selector":{"app":"'"${APP_SELECTOR}"'"}}}'
-                          kubectl get service "${PRIMARY_SERVICE}" "${STAGE_SERVICE}" -n "${NAMESPACE}" -o wide
-                    environmentVariables: []
-                    outputVariables: []
-              - step:
                   name: Canary Deployment
                   identifier: canary_deploy
                   type: K8sCanaryDeploy
@@ -2098,114 +2100,119 @@ pipeline:
                       spec:
                         count: 1
                     skipDryRun: false
-              - step:
-                  type: ShellScript
-                  name: Inspect Dynamic Config
-                  identifier: inspect_dynamic_config
-                  timeout: 10m
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |-
-                          set -euo pipefail
-                          TARGET_URL="https://<+serviceVariables.ingressHost>/api/info"
-                          echo "Fetching dynamic config snapshot from ${TARGET_URL}"
-                          curl --silent --show-error --fail "${TARGET_URL}" > dynamic_config_snapshot.json
-                          echo "=== Dynamic Config Snapshot (raw /api/info response) ==="
-                          cat dynamic_config_snapshot.json
-                          echo
-                          if command -v python3 >/dev/null 2>&1; then
-                            python3 -c 'import json; info=json.load(open("dynamic_config_snapshot.json", "r", encoding="utf-8")); dynamic=info.get("dynamicConfig", {}); print("=== Dynamic Config Snapshot (parsed) ==="); print("Profile: {}".format(dynamic.get("profile"))); print("Banner: {}".format(dynamic.get("banner"))); print("Tenant: {}".format(dynamic.get("tenant"))); print("Release ring: {}".format(dynamic.get("releaseRing"))); print("Target: {}".format(dynamic.get("target"))); print("Support: {}".format(dynamic.get("supportContact"))); print("Version: {}".format(dynamic.get("version"))); print("Source: {}".format(dynamic.get("source"))); print("Secret provider: {}".format(dynamic.get("secretProvider"))); print("Secret configured: {}".format(dynamic.get("secretConfigured")))'
-                          elif command -v python >/dev/null 2>&1; then
-                            python -c 'import json; info=json.load(open("dynamic_config_snapshot.json", "r")); dynamic=info.get("dynamicConfig", {}); print("=== Dynamic Config Snapshot (parsed) ==="); print("Profile: {}".format(dynamic.get("profile"))); print("Banner: {}".format(dynamic.get("banner"))); print("Tenant: {}".format(dynamic.get("tenant"))); print("Release ring: {}".format(dynamic.get("releaseRing"))); print("Target: {}".format(dynamic.get("target"))); print("Support: {}".format(dynamic.get("supportContact"))); print("Version: {}".format(dynamic.get("version"))); print("Source: {}".format(dynamic.get("source"))); print("Secret provider: {}".format(dynamic.get("secretProvider"))); print("Secret configured: {}".format(dynamic.get("secretConfigured")))'
-                          elif command -v node >/dev/null 2>&1; then
-                            node -e 'const fs=require("fs"); const info=JSON.parse(fs.readFileSync("dynamic_config_snapshot.json","utf8")); const dynamic=info.dynamicConfig || {}; console.log("=== Dynamic Config Snapshot (parsed) ==="); console.log(`Profile: ${dynamic.profile}`); console.log(`Banner: ${dynamic.banner}`); console.log(`Tenant: ${dynamic.tenant}`); console.log(`Release ring: ${dynamic.releaseRing}`); console.log(`Target: ${dynamic.target}`); console.log(`Support: ${dynamic.supportContact}`); console.log(`Version: ${dynamic.version}`); console.log(`Source: ${dynamic.source}`); console.log(`Secret provider: ${dynamic.secretProvider}`); console.log(`Secret configured: ${dynamic.secretConfigured}`);'
-                          elif command -v jq >/dev/null 2>&1; then
-                            echo "=== Dynamic Config Snapshot (parsed) ==="
-                            jq -r '[
-                              "Profile: " + (.dynamicConfig.profile // "null"),
-                              "Banner: " + (.dynamicConfig.banner // "null"),
-                              "Tenant: " + (.dynamicConfig.tenant // "null"),
-                              "Release ring: " + (.dynamicConfig.releaseRing // "null"),
-                              "Target: " + (.dynamicConfig.target // "null"),
-                              "Support: " + (.dynamicConfig.supportContact // "null"),
-                              "Version: " + (.dynamicConfig.version // "null"),
-                              "Source: " + (.dynamicConfig.source // "null"),
-                              "Secret provider: " + (.dynamicConfig.secretProvider // "null"),
-                              "Secret configured: " + ((.dynamicConfig.secretConfigured // false) | tostring)
-                            ] | .[]' dynamic_config_snapshot.json
-                          else
-                            echo "No JSON parser available on execution target; raw /api/info response shown above."
-                          fi
-                    environmentVariables: []
-                    outputVariables: []
-              - step:
-                  type: ShellScript
-                  name: Get Canary Traffic Split
-                  identifier: get_validation_urls
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          #!/bin/bash
-                          NAMESPACE="<+infra.namespace>"
-                          CANARY_PODS=$(kubectl get pods -n $NAMESPACE -l harness.io/track=canary --no-headers 2>/dev/null | wc -l | tr -d ' ')
-                          STABLE_PODS=$(kubectl get pods -n $NAMESPACE -l harness.io/track=stable --no-headers 2>/dev/null | wc -l | tr -d ' ')
-                          TOTAL=$((CANARY_PODS + STABLE_PODS))
-                          if [ $TOTAL -gt 0 ]; then
-                            CANARY_PCT=$((CANARY_PODS * 100 / TOTAL))
-                            STABLE_PCT=$((STABLE_PODS * 100 / TOTAL))
-                          else
-                            CANARY_PCT=0
-                            STABLE_PCT=100
-                          fi
-                          echo "App URL: https://<+serviceVariables.ingressHost>"
-                          echo "Traffic: ~${CANARY_PCT}% canary (${CANARY_PODS} pods), ~${STABLE_PCT}% stable (${STABLE_PODS} pods)"
-                    environmentVariables: []
-                    outputVariables:
-                      - name: CANARY_PCT
-                        type: String
-                        value: CANARY_PCT
-                      - name: STABLE_PCT
-                        type: String
-                        value: STABLE_PCT
-                  timeout: 10m
-              - step:
-                  type: ShellScript
-                  name: Trigger Chaos for CV Demo
-                  identifier: trigger_cv_chaos
-                  timeout: 5m
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |-
-                          set -euo pipefail
-                          NAMESPACE="<+infra.namespace>"
-                          CANARY_POD_IP="$(kubectl get pods -n "${NAMESPACE}" -l harness.io/track=canary -o jsonpath='{.items[0].status.podIP}')"
+              - stepGroup:
+                  name: Canary Configs
+                  identifier: Canary_Configs
+                  steps:
+                    - parallel:
+                        - step:
+                            type: ShellScript
+                            name: Inspect Dynamic Config
+                            identifier: inspect_dynamic_config
+                            timeout: 10m
+                            spec:
+                              shell: Bash
+                              executionTarget: {}
+                              source:
+                                type: Inline
+                                spec:
+                                  script: |-
+                                    set -euo pipefail
+                                    TARGET_URL="https://<+serviceVariables.ingressHost>/api/info"
+                                    echo "Fetching dynamic config snapshot from ${TARGET_URL}"
+                                    curl --silent --show-error --fail "${TARGET_URL}" > dynamic_config_snapshot.json
+                                    echo "=== Dynamic Config Snapshot (raw /api/info response) ==="
+                                    cat dynamic_config_snapshot.json
+                                    echo
+                                    if command -v python3 >/dev/null 2>&1; then
+                                      python3 -c 'import json; info=json.load(open("dynamic_config_snapshot.json", "r", encoding="utf-8")); dynamic=info.get("dynamicConfig", {}); print("=== Dynamic Config Snapshot (parsed) ==="); print("Profile: {}".format(dynamic.get("profile"))); print("Banner: {}".format(dynamic.get("banner"))); print("Tenant: {}".format(dynamic.get("tenant"))); print("Release ring: {}".format(dynamic.get("releaseRing"))); print("Target: {}".format(dynamic.get("target"))); print("Support: {}".format(dynamic.get("supportContact"))); print("Version: {}".format(dynamic.get("version"))); print("Source: {}".format(dynamic.get("source"))); print("Secret provider: {}".format(dynamic.get("secretProvider"))); print("Secret configured: {}".format(dynamic.get("secretConfigured")))'
+                                    elif command -v python >/dev/null 2>&1; then
+                                      python -c 'import json; info=json.load(open("dynamic_config_snapshot.json", "r")); dynamic=info.get("dynamicConfig", {}); print("=== Dynamic Config Snapshot (parsed) ==="); print("Profile: {}".format(dynamic.get("profile"))); print("Banner: {}".format(dynamic.get("banner"))); print("Tenant: {}".format(dynamic.get("tenant"))); print("Release ring: {}".format(dynamic.get("releaseRing"))); print("Target: {}".format(dynamic.get("target"))); print("Support: {}".format(dynamic.get("supportContact"))); print("Version: {}".format(dynamic.get("version"))); print("Source: {}".format(dynamic.get("source"))); print("Secret provider: {}".format(dynamic.get("secretProvider"))); print("Secret configured: {}".format(dynamic.get("secretConfigured")))'
+                                    elif command -v node >/dev/null 2>&1; then
+                                      node -e 'const fs=require("fs"); const info=JSON.parse(fs.readFileSync("dynamic_config_snapshot.json","utf8")); const dynamic=info.dynamicConfig || {}; console.log("=== Dynamic Config Snapshot (parsed) ==="); console.log(`Profile: ${dynamic.profile}`); console.log(`Banner: ${dynamic.banner}`); console.log(`Tenant: ${dynamic.tenant}`); console.log(`Release ring: ${dynamic.releaseRing}`); console.log(`Target: ${dynamic.target}`); console.log(`Support: ${dynamic.supportContact}`); console.log(`Version: ${dynamic.version}`); console.log(`Source: ${dynamic.source}`); console.log(`Secret provider: ${dynamic.secretProvider}`); console.log(`Secret configured: ${dynamic.secretConfigured}`);'
+                                    elif command -v jq >/dev/null 2>&1; then
+                                      echo "=== Dynamic Config Snapshot (parsed) ==="
+                                      jq -r '[
+                                        "Profile: " + (.dynamicConfig.profile // "null"),
+                                        "Banner: " + (.dynamicConfig.banner // "null"),
+                                        "Tenant: " + (.dynamicConfig.tenant // "null"),
+                                        "Release ring: " + (.dynamicConfig.releaseRing // "null"),
+                                        "Target: " + (.dynamicConfig.target // "null"),
+                                        "Support: " + (.dynamicConfig.supportContact // "null"),
+                                        "Version: " + (.dynamicConfig.version // "null"),
+                                        "Source: " + (.dynamicConfig.source // "null"),
+                                        "Secret provider: " + (.dynamicConfig.secretProvider // "null"),
+                                        "Secret configured: " + ((.dynamicConfig.secretConfigured // false) | tostring)
+                                      ] | .[]' dynamic_config_snapshot.json
+                                    else
+                                      echo "No JSON parser available on execution target; raw /api/info response shown above."
+                                    fi
+                              environmentVariables: []
+                              outputVariables: []
+                        - step:
+                            type: ShellScript
+                            name: Get Canary Traffic Split
+                            identifier: get_validation_urls
+                            spec:
+                              shell: Bash
+                              executionTarget: {}
+                              source:
+                                type: Inline
+                                spec:
+                                  script: |
+                                    #!/bin/bash
+                                    NAMESPACE="<+infra.namespace>"
+                                    CANARY_PODS=$(kubectl get pods -n $NAMESPACE -l harness.io/track=canary --no-headers 2>/dev/null | wc -l | tr -d ' ')
+                                    STABLE_PODS=$(kubectl get pods -n $NAMESPACE -l harness.io/track=stable --no-headers 2>/dev/null | wc -l | tr -d ' ')
+                                    TOTAL=$((CANARY_PODS + STABLE_PODS))
+                                    if [ $TOTAL -gt 0 ]; then
+                                      CANARY_PCT=$((CANARY_PODS * 100 / TOTAL))
+                                      STABLE_PCT=$((STABLE_PODS * 100 / TOTAL))
+                                    else
+                                      CANARY_PCT=0
+                                      STABLE_PCT=100
+                                    fi
+                                    echo "App URL: https://<+serviceVariables.ingressHost>"
+                                    echo "Traffic: ~${CANARY_PCT}% canary (${CANARY_PODS} pods), ~${STABLE_PCT}% stable (${STABLE_PODS} pods)"
+                              environmentVariables: []
+                              outputVariables:
+                                - name: CANARY_PCT
+                                  type: String
+                                  value: CANARY_PCT
+                                - name: STABLE_PCT
+                                  type: String
+                                  value: STABLE_PCT
+                            timeout: 10m
+                        - step:
+                            type: ShellScript
+                            name: Trigger Chaos for CV Demo
+                            identifier: trigger_cv_chaos
+                            timeout: 5m
+                            spec:
+                              shell: Bash
+                              executionTarget: {}
+                              source:
+                                type: Inline
+                                spec:
+                                  script: |-
+                                    set -euo pipefail
+                                    NAMESPACE="<+infra.namespace>"
+                                    CANARY_POD_IP="$(kubectl get pods -n "${NAMESPACE}" -l harness.io/track=canary -o jsonpath='{.items[0].status.podIP}')"
 
-                          if [ -z "${CANARY_POD_IP}" ]; then
-                            echo "Could not resolve a canary pod IP in ${NAMESPACE}"
-                            kubectl get pods -n "${NAMESPACE}" -l harness.io/track=canary -o wide
-                            exit 1
-                          fi
+                                    if [ -z "${CANARY_POD_IP}" ]; then
+                                      echo "Could not resolve a canary pod IP in ${NAMESPACE}"
+                                      kubectl get pods -n "${NAMESPACE}" -l harness.io/track=canary -o wide
+                                      exit 1
+                                    fi
 
-                          CHAOS_URL="http://${CANARY_POD_IP}:8080/api/chaos/degrade-canary?durationSeconds=180"
-                          echo "Triggering canary chaos via ${CHAOS_URL}"
-                          curl --silent --show-error --fail -X POST "${CHAOS_URL}"
-                    environmentVariables: []
-                    outputVariables: []
-                  when:
-                    stageStatus: Success
-                    condition: <+pipeline.variables.trigger_cv_chaos> == "true"
+                                    CHAOS_URL="http://${CANARY_POD_IP}:8080/api/chaos/degrade-canary?durationSeconds=180"
+                                    echo "Triggering canary chaos via ${CHAOS_URL}"
+                                    curl --silent --show-error --fail -X POST "${CHAOS_URL}"
+                              environmentVariables: []
+                              outputVariables: []
+                            when:
+                              stageStatus: Success
+                              condition: <+pipeline.variables.trigger_cv_chaos> == "true"
               - parallel:
                   - step:
                       type: ShellScript
@@ -2321,114 +2328,119 @@ pipeline:
                   timeout: 10m
                   spec:
                     skipDryRun: false
-              - step:
-                  type: ShellScript
-                  name: Annotate Production Artifact Subject
-                  identifier: annotate_production_artifact_subject
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |-
-                          set -euo pipefail
+              - stepGroup:
+                  name: Deployment Records
+                  identifier: Deployment_Records
+                  steps:
+                    - parallel:
+                        - step:
+                            type: ShellScript
+                            name: Pipeline Documentation
+                            identifier: annotate_production_artifact_subject
+                            spec:
+                              shell: Bash
+                              executionTarget: {}
+                              source:
+                                type: Inline
+                                spec:
+                                  script: |-
+                                    set -euo pipefail
 
-                          SIGNING_SUBJECT="$IMAGE_REFERENCE"
-                          cat <<EOF > artifact_signing_subject_summary.md
-                          ## Production Artifact Subject
+                                    SIGNING_SUBJECT="$IMAGE_REFERENCE"
+                                    cat <<EOF > artifact_signing_subject_summary.md
+                                    ## Production Artifact Subject
 
-                          - Subject: ${SIGNING_SUBJECT}
-                          - Service: ${SERVICE_NAME}
-                          - Image: ${IMAGE_NAME}
-                          - Tag: ${IMAGE_TAG}
-                          - Commit: ${COMMIT_SHA}
-                          - Branch: ${BRANCH_NAME}
-                          - Environment: <+env.name>
-                          - Application URL: https://<+serviceVariables.ingressHost>
-                          - Published image: ${PUBLISHED_IMAGE_URL}
-                          - Build execution: ${BUILD_EXECUTION_URL}
-                          - Pipeline execution: <+pipeline.executionUrl>
-                          EOF
+                                    - Subject: ${SIGNING_SUBJECT}
+                                    - Service: ${SERVICE_NAME}
+                                    - Image: ${IMAGE_NAME}
+                                    - Tag: ${IMAGE_TAG}
+                                    - Commit: ${COMMIT_SHA}
+                                    - Branch: ${BRANCH_NAME}
+                                    - Environment: <+env.name>
+                                    - Application URL: https://<+serviceVariables.ingressHost>
+                                    - Published image: ${PUBLISHED_IMAGE_URL}
+                                    - Build execution: ${BUILD_EXECUTION_URL}
+                                    - Pipeline execution: <+pipeline.executionUrl>
+                                    EOF
 
-                          if command -v hcli >/dev/null 2>&1; then
-                            hcli annotate --context "artifact-signing-subject" --style "SUCCESS" --summary-file artifact_signing_subject_summary.md || true
-                          fi
+                                    if command -v hcli >/dev/null 2>&1; then
+                                      hcli annotate --context "artifact-signing-subject" --style "SUCCESS" --summary-file artifact_signing_subject_summary.md || true
+                                    fi
 
-                          export SIGNING_SUBJECT
-                          echo "Production artifact subject: ${SIGNING_SUBJECT}"
-                    environmentVariables:
-                      - name: SERVICE_NAME
-                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME>
-                        type: String
-                      - name: IMAGE_NAME
-                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_NAME>
-                        type: String
-                      - name: IMAGE_TAG
-                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
-                        type: String
-                      - name: IMAGE_REFERENCE
-                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>
-                        type: String
-                      - name: COMMIT_SHA
-                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>
-                        type: String
-                      - name: BRANCH_NAME
-                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.BRANCH_NAME>
-                        type: String
-                      - name: PUBLISHED_IMAGE_URL
-                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_artifact_links.output.outputVariables.PUBLISHED_IMAGE_URL>
-                        type: String
-                      - name: BUILD_EXECUTION_URL
-                        value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_artifact_links.output.outputVariables.BUILD_EXECUTION_URL>
-                        type: String
-                    outputVariables:
-                      - name: SIGNING_SUBJECT
-                        type: String
-                        value: SIGNING_SUBJECT
-                  timeout: 5m
-              - step:
-                  type: ServiceNowUpdate
-                  name: Close ServiceNow
-                  identifier: Close_ServiceNow
-                  spec:
-                    useServiceNowTemplate: false
-                    connectorRef: account.ServiceNow_Dev
-                    ticketType: change_request
-                    ticketNumber: <+pipeline.stages.ITSM.spec.execution.steps.Open_Change_Request.ticket.ticketNumber>
-                    fields:
-                      - name: state
-                        value: "3"
-                      - name: close_code
-                        value: successful
-                      - name: close_notes
-                        value: |-
-                          Deployment successful for <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE> to <+env.name> 
-                          Pipeline Execution: <+pipeline.executionUrl> 
-                  timeout: 5m
-              - step:
-                  type: ShellScript
-                  name: Deployment Complete
-                  identifier: deployment_complete
-                  spec:
-                    shell: Bash
-                    executionTarget: {}
-                    source:
-                      type: Inline
-                      spec:
-                        script: |
-                          echo "========================================"
-                          echo "  CANARY DEPLOYMENT COMPLETE"
-                          echo "========================================"
-                          echo ""
-                          echo "App URL: https://<+serviceVariables.ingressHost>"
-                          echo ""
-                          echo "Canary validated and promoted to 100%."
-                          echo "All pods now running the new version."
-                          echo "========================================"
-                    environmentVariables: []
-                    outputVariables: []
-                  timeout: 1m
+                                    export SIGNING_SUBJECT
+                                    echo "Production artifact subject: ${SIGNING_SUBJECT}"
+                              environmentVariables:
+                                - name: SERVICE_NAME
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.SERVICE_NAME>
+                                  type: String
+                                - name: IMAGE_NAME
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_NAME>
+                                  type: String
+                                - name: IMAGE_TAG
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_TAG>
+                                  type: String
+                                - name: IMAGE_REFERENCE
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE>
+                                  type: String
+                                - name: COMMIT_SHA
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.COMMIT_SHA>
+                                  type: String
+                                - name: BRANCH_NAME
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_governance_inputs.output.outputVariables.BRANCH_NAME>
+                                  type: String
+                                - name: PUBLISHED_IMAGE_URL
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_artifact_links.output.outputVariables.PUBLISHED_IMAGE_URL>
+                                  type: String
+                                - name: BUILD_EXECUTION_URL
+                                  value: <+pipeline.stages.build_test_scan_push.spec.execution.steps.prepare_artifact_links.output.outputVariables.BUILD_EXECUTION_URL>
+                                  type: String
+                              outputVariables:
+                                - name: SIGNING_SUBJECT
+                                  type: String
+                                  value: SIGNING_SUBJECT
+                            timeout: 5m
+                        - step:
+                            type: ServiceNowUpdate
+                            name: Close ServiceNow
+                            identifier: Close_ServiceNow
+                            spec:
+                              useServiceNowTemplate: false
+                              connectorRef: account.ServiceNow_Dev
+                              ticketType: change_request
+                              ticketNumber: <+pipeline.stages.ITSM.spec.execution.steps.Open_Change_Request.ticket.ticketNumber>
+                              fields:
+                                - name: state
+                                  value: "3"
+                                - name: close_code
+                                  value: successful
+                                - name: close_notes
+                                  value: |-
+                                    Deployment successful for <+pipeline.stages.build_test_scan_push.spec.execution.steps.assemble_release_candidate_evidence.output.outputVariables.IMAGE_REFERENCE> to <+env.name> 
+                                    Pipeline Execution: <+pipeline.executionUrl> 
+                            timeout: 5m
+                        - step:
+                            type: ShellScript
+                            name: Deployment Complete
+                            identifier: deployment_complete
+                            spec:
+                              shell: Bash
+                              executionTarget: {}
+                              source:
+                                type: Inline
+                                spec:
+                                  script: |
+                                    echo "========================================"
+                                    echo "  CANARY DEPLOYMENT COMPLETE"
+                                    echo "========================================"
+                                    echo ""
+                                    echo "App URL: https://<+serviceVariables.ingressHost>"
+                                    echo ""
+                                    echo "Canary validated and promoted to 100%."
+                                    echo "All pods now running the new version."
+                                    echo "========================================"
+                              environmentVariables: []
+                              outputVariables: []
+                            timeout: 1m
             rollbackSteps:
               - step:
                   name: Canary Delete
