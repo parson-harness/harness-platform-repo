@@ -194,6 +194,27 @@ class AppConfigTest {
     }
 
     @Nested
+    @DisplayName("Deployment Target Display Tests")
+    class DeploymentTargetDisplayTests {
+
+        @Test
+        @DisplayName("Should return Amazon EKS for k8s deployment target alias")
+        void getDisplayDeploymentTarget_shouldReturnEksForK8sAlias() {
+            appConfig.setDeploymentTarget("k8s");
+
+            assertEquals("Amazon EKS", appConfig.getDisplayDeploymentTarget());
+        }
+
+        @Test
+        @DisplayName("Should trim k8s deployment target alias before mapping")
+        void getDisplayDeploymentTarget_shouldTrimK8sAliasBeforeMapping() {
+            appConfig.setDeploymentTarget("  k8s  ");
+
+            assertEquals("Amazon EKS", appConfig.getDisplayDeploymentTarget());
+        }
+    }
+
+    @Nested
     @DisplayName("Variant Color Tests")
     class VariantColorTests {
 
