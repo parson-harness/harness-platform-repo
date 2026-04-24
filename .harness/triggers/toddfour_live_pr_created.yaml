@@ -2,7 +2,7 @@ trigger:
   name: Toddfour Live on PR Create
   identifier: toddfour_live_pr_created
   enabled: true
-  description: Runs the Toddfour live pipeline for newly opened pull requests in the shared Harness Code repo.
+  description: Runs the Toddfour live pipeline for pull request activity in the app GitHub repo.
   tags:
     automation: "true"
     repo: harness-demo-app
@@ -16,10 +16,11 @@ trigger:
   source:
     type: Webhook
     spec:
-      type: Harness
+      type: Github
       spec:
         type: PullRequest
         spec:
+          connectorRef: parsongh
           autoAbortPreviousExecutions: false
           payloadConditions:
             - key: targetBranch
@@ -28,6 +29,8 @@ trigger:
           headerConditions: []
           repoName: harness-demo-app
           actions:
-            - Create
-            - Update
+            - Open
+            - Reopen
+            - Edit
+            - Synchronize
             - Close

@@ -108,6 +108,7 @@ pipeline:
   properties:
     ci:
       codebase:
+        connectorRef: parsongh
         repoName: harness-demo-app
         build: <+input>
         sparseCheckout: []
