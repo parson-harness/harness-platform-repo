@@ -215,6 +215,27 @@ class AppConfigTest {
     }
 
     @Nested
+    @DisplayName("Secret Provider Display Tests")
+    class SecretProviderDisplayTests {
+
+        @Test
+        @DisplayName("Should return AWS Secrets Manager for aws-sm secret provider alias")
+        void getDisplaySecretProvider_shouldReturnAwsSecretsManagerForAwsSmAlias() {
+            appConfig.setSecretProvider("aws-sm");
+
+            assertEquals("AWS Secrets Manager", appConfig.getDisplaySecretProvider());
+        }
+
+        @Test
+        @DisplayName("Should trim aws-sm secret provider alias before mapping")
+        void getDisplaySecretProvider_shouldTrimAwsSmAliasBeforeMapping() {
+            appConfig.setSecretProvider("  aws-sm  ");
+
+            assertEquals("AWS Secrets Manager", appConfig.getDisplaySecretProvider());
+        }
+    }
+
+    @Nested
     @DisplayName("Variant Color Tests")
     class VariantColorTests {
 
