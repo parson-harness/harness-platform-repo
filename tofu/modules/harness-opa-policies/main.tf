@@ -650,6 +650,90 @@ resource "harness_platform_policy" "change_risk_score" {
   REGO
 }
 
+resource "harness_platform_policy" "supply_chain_release_evidence" {
+  count      = var.create_change_governance_policies ? 1 : 0
+  identifier = "supply_chain_release_evidence"
+  name       = "Supply Chain Release Evidence"
+  org_id     = var.org_id
+  project_id = var.project_id
+
+  rego = <<-REGO
+    package supply_chain_governance
+
+    release_candidate := object.get(input, "release_candidate", {})
+    artifact := object.get(release_candidate, "artifact", {})
+    attestations := object.get(release_candidate, "attestations", {})
+    artifact_signing := object.get(attestations, "artifact_signing", {})
+    validation := object.get(input, "validation", {})
+    signature_verification := object.get(validation, "signature_verification", {})
+
+    deny[msg] {
+      object.get(artifact, "service", "") == ""
+      msg := "Release candidate evidence must identify the service being deployed."
+    }
+
+    deny[msg] {
+      object.get(artifact, "tag", "") == ""
+      msg := "Release candidate evidence must include the artifact tag being promoted."
+    }
+
+    deny[msg] {
+      object.get(attestations, "sbom", "") != "spdx-json"
+      msg := sprintf("Expected SPDX SBOM attestation, found %v.", [object.get(attestations, "sbom", "missing")])
+    }
+
+    deny[msg] {
+      object.get(attestations, "slsa_provenance", "") != "generated"
+      msg := sprintf("Expected generated SLSA provenance attestation, found %v.", [object.get(attestations, "slsa_provenance", "missing")])
+    }
+
+    deny[msg] {
+      lower(object.get(artifact_signing, "status", "")) != "signed"
+      msg := sprintf("Artifact signing status must be signed, found %v.", [object.get(artifact_signing, "status", "missing")])
+    }
+
+    deny[msg] {
+      lower(object.get(artifact_signing, "mode", "")) != "cosign-blob"
+      msg := sprintf("Artifact signing mode must be cosign-blob, found %v.", [object.get(artifact_signing, "mode", "missing")])
+    }
+
+    deny[msg] {
+      object.get(artifact_signing, "signature_reference", "") == ""
+      msg := "Artifact signing evidence must include a signature reference."
+    }
+
+    deny[msg] {
+      object.get(artifact_signing, "payload_checksum", "") == ""
+      msg := "Artifact signing evidence must include a payload checksum."
+    }
+
+    deny[msg] {
+      object.get(artifact_signing, "public_key_checksum", "") == ""
+      msg := "Artifact signing evidence must include a public key checksum."
+    }
+
+    deny[msg] {
+      object.get(artifact_signing, "signature_base64", "") == ""
+      msg := "Artifact signing evidence must include the signature payload."
+    }
+
+    deny[msg] {
+      object.get(artifact_signing, "public_key_base64", "") == ""
+      msg := "Artifact signing evidence must include the signing public key."
+    }
+
+    deny[msg] {
+      object.get(artifact_signing, "signed_payload_base64", "") == ""
+      msg := "Artifact signing evidence must include the signed payload."
+    }
+
+    deny[msg] {
+      lower(object.get(signature_verification, "status", "")) != "verified"
+      msg := sprintf("Deploy stage must cryptographically verify the artifact signature before promotion. Current status: %v.", [object.get(signature_verification, "status", "missing")])
+    }
+  REGO
+}
+
 ################################################################################
 # Policy Sets
 ################################################################################
@@ -830,5 +914,25 @@ resource "harness_platform_policyset" "change_governance_on_step" {
     harness_platform_policy.change_validation_quality,
     harness_platform_policy.change_qa_playwright_gate,
     harness_platform_policy.change_risk_score
+  ]
+}
+
+resource "harness_platform_policyset" "supply_chain_release_on_step" {
+  count      = var.create_change_governance_policies && var.create_change_governance_policy_set ? 1 : 0
+  identifier = "supply_chain_release_guardrails"
+  name       = "Supply Chain Release Guardrails"
+  org_id     = var.org_id
+  project_id = var.project_id
+  action     = "onstep"
+  type       = "custom"
+  enabled    = var.enforce_change_governance_policies
+
+  policies {
+    identifier = harness_platform_policy.supply_chain_release_evidence[0].identifier
+    severity   = "error"
+  }
+
+  depends_on = [
+    harness_platform_policy.supply_chain_release_evidence
   ]
 }

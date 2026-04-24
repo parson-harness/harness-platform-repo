@@ -18,9 +18,9 @@ build_id: <+pipeline.executionId>
 region: <+stage.variables.dynamic_config_region>
 
 # Application branding
-appName: "Harness Demo Application"
+appName: <+pipeline.variables.application_display_name>
 appVersion: <+artifact.tag>
-customerName: "Harness Customer"
+customerName: <+pipeline.variables.customer_display_name>
 customerLogo: "https://developer.harness.io/img/logo_harness.svg"
 deploymentStrategy: ""
 servicePort: 80
