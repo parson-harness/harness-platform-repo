@@ -80,6 +80,21 @@ pipeline:
       description: Whether the release includes a database or data migration
       required: false
       value: <+input>.default(false).allowedValues(true,false)
+    - name: dynamic_config_profile
+      type: String
+      description: Shared application-level dynamic configuration profile injected into the deployed workload
+      required: false
+      value: <+input>.default(shared-base)
+    - name: dynamic_config_tenant
+      type: String
+      description: Shared tenant-level dynamic configuration value used across QA and Prod
+      required: false
+      value: <+input>.default(toddfour)
+    - name: dynamic_config_support_contact
+      type: String
+      description: Shared support contact exposed through the deployed workload configuration
+      required: false
+      value: <+input>.default(platform@harness.io)
   properties:
     ci:
       codebase:
