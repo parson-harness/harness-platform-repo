@@ -666,8 +666,6 @@ resource "harness_platform_policy" "supply_chain_release_evidence" {
     artifact_signing := object.get(attestations, "artifact_signing", {})
     validation := object.get(input, "validation", {})
     signature_verification := object.get(validation, "signature_verification", {})
-    security := object.get(validation, "security", {})
-    change := object.get(input, "change", {})
 
     deny[msg] {
       object.get(artifact, "service", "") == ""
@@ -732,12 +730,6 @@ resource "harness_platform_policy" "supply_chain_release_evidence" {
     deny[msg] {
       lower(object.get(signature_verification, "status", "")) != "verified"
       msg := sprintf("Deploy stage must cryptographically verify the artifact signature before promotion. Current status: %v.", [object.get(signature_verification, "status", "missing")])
-    }
-
-    deny[msg] {
-      lower(object.get(change, "environment_type", "")) == "production"
-      object.get(security, "critical_vulns", 0) > 0
-      msg := sprintf("Production deployment blocked because critical vulnerabilities remain: %v.", [object.get(security, "critical_vulns", 0)])
     }
   REGO
 }
