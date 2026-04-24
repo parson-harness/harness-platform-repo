@@ -1176,7 +1176,7 @@ pipeline:
                             fi
 
                             cat <<EOF > qa_playwright_summary.md
-                            ## QA Blue Playwright Smoke
+                            ## QA Playwright Results
 
                             - Status: ${GATE_STATUS}
                             - Stage URL: ${PLAYWRIGHT_BASE_URL}
