@@ -215,6 +215,27 @@ class AppConfigTest {
     }
 
     @Nested
+    @DisplayName("Config Source Display Tests")
+    class ConfigSourceDisplayTests {
+
+        @Test
+        @DisplayName("Should return GitHub Actions for gh-actions config source alias")
+        void getDisplayConfigSource_shouldReturnGitHubActionsForGhActionsAlias() {
+            appConfig.setConfigSource("gh-actions");
+
+            assertEquals("GitHub Actions", appConfig.getDisplayConfigSource());
+        }
+
+        @Test
+        @DisplayName("Should trim gh-actions config source alias before mapping")
+        void getDisplayConfigSource_shouldTrimGhActionsAliasBeforeMapping() {
+            appConfig.setConfigSource("  gh-actions  ");
+
+            assertEquals("GitHub Actions", appConfig.getDisplayConfigSource());
+        }
+    }
+
+    @Nested
     @DisplayName("Variant Color Tests")
     class VariantColorTests {
 

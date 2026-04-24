@@ -153,7 +153,14 @@ public class AppConfig {
         if (configSource == null || configSource.isBlank()) {
             return "Harness Pipeline";
         }
-        return configSource.trim();
+
+        String normalizedConfigSource = configSource.trim();
+        switch (normalizedConfigSource.toLowerCase()) {
+            case "gh-actions":
+                return "GitHub Actions";
+            default:
+                return normalizedConfigSource;
+        }
     }
 
     public String getDisplaySecretProvider() {
