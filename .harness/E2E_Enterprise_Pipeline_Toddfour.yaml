@@ -1019,8 +1019,7 @@ pipeline:
                   name: Artifact Integrity Gates
                   identifier: artifact_integrity_gates
                   steps:
-                    - parallel:
-                        - step:
+                    - step:
                             type: ShellScript
                             name: Verify Artifact Signature
                             identifier: verify_artifact_signature
@@ -1171,7 +1170,7 @@ pipeline:
                                 - name: VERIFIED_PUBLIC_KEY_CHECKSUM
                                   type: String
                                   value: VERIFIED_PUBLIC_KEY_CHECKSUM
-                        - step:
+                    - step:
                             type: ShellScript
                             name: Assemble Supply Chain Context
                             identifier: assemble_supply_chain_context
@@ -1909,8 +1908,7 @@ pipeline:
                   name: Artifact Integrity Gates
                   identifier: artifact_integrity_gates
                   steps:
-                    - parallel:
-                        - step:
+                    - step:
                             type: ShellScript
                             name: Verify Artifact Signature
                             identifier: verify_artifact_signature
@@ -2061,7 +2059,7 @@ pipeline:
                                 - name: VERIFIED_PUBLIC_KEY_CHECKSUM
                                   type: String
                                   value: VERIFIED_PUBLIC_KEY_CHECKSUM
-                        - step:
+                    - step:
                             type: ShellScript
                             name: Assemble Supply Chain Context
                             identifier: assemble_supply_chain_context
