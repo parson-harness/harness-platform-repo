@@ -173,6 +173,7 @@ public class AppConfig {
         }
 
         switch (deploymentTarget.trim().toLowerCase()) {
+            case "k8s":
             case "kubernetes":
             case "eks":
                 return "Amazon EKS";
