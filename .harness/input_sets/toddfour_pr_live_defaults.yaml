@@ -1,13 +1,65 @@
 inputSet:
   name: Toddfour PR Live Defaults
-  identifier: toddfour_pr_live_defaults
   tags:
     automation: "true"
     flow: pr-live
+  identifier: toddfour_pr_live_defaults
   orgIdentifier: sandbox
   projectIdentifier: parson
   pipeline:
     identifier: E2E_Enterprise_Pipeline_Toddfour
+    variables:
+      - name: auto_deploy
+        type: String
+        value: "true"
+      - name: application_display_name
+        type: String
+        value: Ameriprise Demo Application
+      - name: customer_display_name
+        type: String
+        value: Ameriprise Customer
+      - name: qa_playwright_image
+        type: String
+        value: har-docker-shared/custom-runner:latest
+      - name: qa_playwright_image_connector_ref
+        type: String
+        value: dockershared
+      - name: trigger_cv_chaos
+        type: String
+        value: "false"
+      - name: cv_duration
+        type: String
+        value: 5m
+      - name: cv_sensitivity
+        type: String
+        value: HIGH
+      - name: harness_endpoint
+        type: String
+        value: https://app.harness.io/gratis
+      - name: change_blast_radius
+        type: String
+        value: low
+      - name: rollback_ready
+        type: String
+        value: "true"
+      - name: open_change_failures
+        type: String
+        value: "0"
+      - name: change_freeze_active
+        type: String
+        value: "false"
+      - name: requires_data_migration
+        type: String
+        value: "false"
+      - name: dynamic_config_profile
+        type: String
+        value: shared-base
+      - name: dynamic_config_tenant
+        type: String
+        value: toddfour
+      - name: dynamic_config_support_contact
+        type: String
+        value: platform@harness.io
     properties:
       ci:
         codebase:
@@ -15,10 +67,3 @@ inputSet:
             type: PR
             spec:
               number: <+trigger.prNumber>
-    variables:
-      - name: auto_deploy
-        type: String
-        value: "true"
-      - name: trigger_cv_chaos
-        type: String
-        value: "false"
