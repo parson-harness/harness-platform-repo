@@ -20,6 +20,16 @@ pipeline:
       description: Automatically trigger CD pipeline after successful build
       required: false
       value: <+input>.default(true).allowedValues(true,false)
+    - name: application_display_name
+      type: String
+      description: Display name shown in the deployed application UI header and hero content
+      required: false
+      value: <+input>.default(Harness Demo Application)
+    - name: customer_display_name
+      type: String
+      description: Customer name shown in the deployed application UI header and hero content
+      required: false
+      value: <+input>.default(Harness Customer)
     - name: qa_playwright_image
       type: String
       description: Container image used for the QA Playwright smoke tests; point this at the dedicated runner image when it is published
