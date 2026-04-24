@@ -80,41 +80,6 @@ pipeline:
       description: Whether the release includes a database or data migration
       required: false
       value: <+input>.default(false).allowedValues(true,false)
-    - name: test_pass_rate
-      type: String
-      description: Aggregated automated test pass rate percentage; auto-populated from CI on webhook runs or entered manually for demo/manual runs
-      required: false
-      value: <+input>.default(100)
-    - name: critical_vulnerabilities
-      type: String
-      description: Critical vulnerability count; auto-populated from CI on webhook runs or entered manually for demo/manual runs
-      required: false
-      value: <+input>.default(0)
-    - name: high_vulnerabilities
-      type: String
-      description: High vulnerability count; auto-populated from CI on webhook runs or entered manually for demo/manual runs
-      required: false
-      value: <+input>.default(0)
-    - name: release_candidate_evidence
-      type: String
-      description: JSON release-candidate evidence bundle; auto-populated from CI on webhook runs or entered manually for demo/manual runs
-      required: false
-      value: <+input>.default({"artifact":{"image":"manual-demo","tag":"manual"},"attestations":{"sbom":"unknown","slsa_provenance":"unknown","artifact_signing":{"status":"unknown"}}})
-    - name: dynamic_config_profile
-      type: String
-      description: Shared application-level dynamic configuration profile injected into the deployed workload
-      required: false
-      value: <+input>.default(shared-base)
-    - name: dynamic_config_tenant
-      type: String
-      description: Shared tenant-level dynamic configuration value used across QA and Prod
-      required: false
-      value: <+input>.default(toddfour)
-    - name: dynamic_config_support_contact
-      type: String
-      description: Shared support contact exposed through the deployed workload configuration
-      required: false
-      value: <+input>.default(platform@harness.io)
   properties:
     ci:
       codebase:
